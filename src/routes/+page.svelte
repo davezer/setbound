@@ -1,433 +1,622 @@
 <script>
-  import SearchBox from '$lib/components/SearchBox.svelte';
+	import SearchBox from '$lib/components/SearchBox.svelte';
 
-  let { data } = $props();
+	let { data } = $props();
 
-  const featured = $derived(data.recent?.[0] ?? {
-    slug: '2026-topps-allen-ginter',
-    year: 2026,
-    name: 'Allen & Ginter',
-    manufacturer_name: 'Topps',
-    card_count: 300,
-    checklist_count: 8
-  });
-
-  const previewRows = [
-    { number:'17', player:'Shohei Ohtani', team:'Dodgers', status:'Collected' },
-    { number:'99', player:'Aaron Judge', team:'Yankees', status:'Missing' },
-    { number:'30', player:'Paul Skenes', team:'Pirates', status:'Collected' },
-    { number:'118', player:'Elly De La Cruz', team:'Reds', status:'Missing' }
-  ];
+	const visualSets = $derived((data.recent || []).filter((set) => set.image_key).slice(0, 3));
 </script>
 
 <svelte:head>
-  <title>Setbound — Sports card checklists, cleanly organized</title>
-  <meta name="description" content="Search clean, source-backed sports card checklists by set, player, team and card number." />
+	<title>Setbound — Sports card checklists</title>
+	<meta
+		name="description"
+		content="Search sports card checklists by set, player, team and card number."
+	/>
 </svelte:head>
 
 <section class="hero shell">
-  <div class="hero-copy">
-    <div class="eyebrow">Sports card checklists. Without the clutter.</div>
-    <h1>Find the card.<br/><span>Track the set.</span></h1>
-    <p class="lede">Clean, source-backed checklists across products, players and teams. Baseball first. Everything else next.</p>
+	<div class="hero-copy">
+		<div class="eyebrow">Sports card checklists</div>
+		<h1>Find the card.<br /><span>Track the set.</span></h1>
 
-    <div class="hero-search">
-      <SearchBox large placeholder="Search sets, players, teams, products…" />
-    </div>
+		<p class="lede">
+			Search sets, players, teams and card numbers.
+		</p>
 
-    <div class="stats" aria-label="Setbound database statistics">
-      <div><strong>{data.summary.products.toLocaleString()}</strong><span>products</span></div>
-      <div><strong>{data.summary.cards.toLocaleString()}</strong><span>cards indexed</span></div>
-      <div><strong>{data.summary.subjects.toLocaleString()}</strong><span>subjects</span></div>
-    </div>
-  </div>
+		<div class="hero-search">
+			<SearchBox large placeholder="Search sets, players, teams, products…" />
+		</div>
 
-  <div class="feature-wrap">
-    <div class="brand-bars" aria-hidden="true">
-      <i class="bar bar-black"></i>
-      <i class="bar bar-orange"></i>
-      <i class="bar bar-blue"></i>
-      <i class="bar bar-gray"></i>
-    </div>
+		<div class="hero-links">
+			<a href="/sets">Browse all sets <span>→</span></a>
+			<a href="/search">Search <span>→</span></a>
+		</div>
+	</div>
 
-    <div class="feature-panel">
-      <div class="feature-topline">
-        <div>
-          <span class="micro">Featured set</span>
-          <h2>{featured.year} {featured.name}</h2>
-          <p>{featured.manufacturer_name} <b>·</b> Baseball <b>·</b> {featured.card_count || 0} cards</p>
-        </div>
-        <a href={`/sets/${featured.slug}`}>View set <span>→</span></a>
-      </div>
+	<div class="visual">
+		<div class="visual-kicker">
+			<span>Recently added</span>
+			<strong>A few sets to start with.</strong>
+		</div>
 
-      <div class="feature-toolbar">
-        <div class="tabs">
-          <strong>Checklist</strong>
-          <span>Details</span>
-          <span>Variants</span>
-        </div>
-        <div class="progress">
-          <span>Progress <strong>42%</strong></span>
-          <div><i></i></div>
-        </div>
-      </div>
-
-      <div class="mini-filters">
-        <div class="mini-search">⌕ <span>Search within this set…</span></div>
-        <button>All types⌄</button>
-        <button>All teams⌄</button>
-      </div>
-
-      <div class="preview-table">
-        <div class="preview-head"><span>#</span><span>Player</span><span>Team</span><span>Status</span></div>
-        {#each previewRows as row}
-          <div class="preview-row">
-            <span class="num">{row.number}</span>
-            <strong>{row.player}</strong>
-            <span>{row.team}</span>
-            <span class:owned={row.status === 'Collected'} class="status">{row.status}</span>
-          </div>
-        {/each}
-      </div>
-    </div>
-  </div>
+		<div class="art-stack">
+			{#if visualSets.length}
+				{#each visualSets as set, index}
+					<a
+						class="art-panel"
+						class:primary={index === 0}
+						class:secondary={index === 1}
+						class:tertiary={index === 2}
+						href={`/sets/${set.slug}`}
+					>
+						<img src={`/media/set/${set.slug}`} alt={`${set.year} ${set.name}`} />
+						<div class="art-caption">
+							<span>{set.manufacturer_name} · {set.year}</span>
+							<strong>{set.name}</strong>
+						</div>
+					</a>
+				{/each}
+			{:else}
+				<div class="brand-art" aria-hidden="true">
+					<i></i><i></i><i></i><i></i>
+				</div>
+			{/if}
+		</div>
+	</div>
 </section>
 
-<section class="browse-section">
-  <div class="shell browse-grid">
-    <div class="recent-block">
-      <div class="section-head">
-        <div>
-          <div class="eyebrow">Browse</div>
-          <h2>Recently added</h2>
-        </div>
-        <a href="/sets">View all sets →</a>
-      </div>
+<section class="recent-section">
+	<div class="shell">
+		<div class="section-head">
+			<div>
+				<div class="eyebrow">Browse</div>
+				<h2>Recently added</h2>
+			</div>
 
-      <div class="set-list">
-        <div class="set-list-head">
-          <span>Set</span><span>Year</span><span>Brand</span><span>Cards</span><span></span>
-        </div>
-        {#each data.recent as set}
-          <a class="set-row" href={`/sets/${set.slug}`}>
-            <span class="set-name"><i></i><strong>{set.name}</strong></span>
-            <span>{set.year}</span>
-            <span>{set.manufacturer_name}</span>
-            <span>{set.card_count || 0}</span>
-            <span class="arrow">→</span>
-          </a>
-        {/each}
-        {#if !data.recent?.length}
-          <div class="empty-row">No published sets yet. Import your first checklist to get started.</div>
-        {/if}
-      </div>
+			<a href="/sets">View all sets <span>→</span></a>
+		</div>
 
-      {#if data.demo}
-        <p class="demo-note">Preview data shown until D1 is connected and seeded.</p>
-      {/if}
-    </div>
+		{#if data.recent?.length}
+			<div class="recent-grid">
+				{#each data.recent as set}
+					<a class="recent-item" href={`/sets/${set.slug}`}>
+						<div class="thumb" class:no-image={!set.image_key}>
+							{#if set.image_key}
+								<img src={`/media/set/${set.slug}`} alt={`${set.year} ${set.name}`} loading="lazy" />
+							{:else}
+								<div class="thumb-fallback" aria-hidden="true">
+									<i></i><i></i><i></i><i></i>
+								</div>
+							{/if}
+							<span class="sport-pill">{set.sport_name}</span>
+						</div>
 
-    <aside class="collector-block">
-      <div class="eyebrow">Built for collectors</div>
-      <h2>More than checklists.<br/>A cleaner way to collect.</h2>
-      <p>Search, explore and track sets with clean, organized data that keeps the original source attached.</p>
+						<div class="recent-copy">
+							<div class="recent-meta">
+								<span>{set.manufacturer_name}</span>
+								<span>{set.year}</span>
+							</div>
 
-      <div class="features">
-        <div>
-          <span class="feature-icon">⌕</span>
-          <strong>Powerful search</strong>
-          <p>Find any card, player, team or set in seconds.</p>
-        </div>
-        <div>
-          <span class="feature-icon list-icon">☷</span>
-          <strong>Organized checklists</strong>
-          <p>Clean sections and filters without the database clutter.</p>
-        </div>
-        <div>
-          <span class="feature-icon">▥</span>
-          <strong>Track progress</strong>
-          <p>See what you have and what you still need.</p>
-        </div>
-      </div>
-    </aside>
-  </div>
+							<h3>{set.name}</h3>
+
+							<div class="recent-foot">
+								<span>{Number(set.card_count || 0).toLocaleString()} cards</span>
+								<span>{set.checklist_count || 0} checklists</span>
+								<strong>→</strong>
+							</div>
+						</div>
+					</a>
+				{/each}
+			</div>
+		{:else}
+			<div class="empty">
+				No sets yet.
+			</div>
+		{/if}
+	</div>
+</section>
+
+<section class="browse-strip">
+	<div class="shell browse-strip-inner">
+		<div>
+			<div class="eyebrow">Browse by sport</div>
+			<h2>Pick a sport.</h2>
+		</div>
+
+		<div class="browse-links">
+			<a href="/sets">Baseball <span>→</span></a>
+			<a href="/sets">Football <span>→</span></a>
+			<a href="/sets">Basketball <span>→</span></a>
+			<a href="/sets">Hockey <span>→</span></a>
+		</div>
+	</div>
 </section>
 
 <style>
-  .hero {
-    display:grid;
-    grid-template-columns:minmax(0,.92fr) minmax(580px,1.08fr);
-    gap:4.75rem;
-    align-items:center;
-    padding-top:5.4rem;
-    padding-bottom:5.7rem;
-  }
+	.hero {
+		display: grid;
+		grid-template-columns: minmax(0,.9fr) minmax(520px,1.1fr);
+		gap: 5rem;
+		align-items: center;
+		padding-top: 5rem;
+		padding-bottom: 5.5rem;
+	}
 
-  .hero-copy { max-width:660px; }
+	.hero-copy {
+		max-width: 650px;
+	}
 
-  h1 {
-    margin:.65rem 0 0;
-    font-family:var(--display);
-    font-size:clamp(4rem,6.25vw,6.75rem);
-    line-height:.84;
-    letter-spacing:-.064em;
-    font-weight:800;
-  }
+	h1 {
+		margin: .7rem 0 0;
+		font-family: var(--display);
+		font-size: clamp(4rem,6.2vw,6.8rem);
+		line-height: .84;
+		letter-spacing: -.064em;
+		font-weight: 800;
+	}
 
-  h1 span { color:var(--blue); }
+	h1 span {
+		color: var(--blue);
+	}
 
-  .lede {
-    max-width:39rem;
-    margin:1.65rem 0 1.7rem;
-    color:var(--muted);
-    font-size:1.08rem;
-    line-height:1.62;
-  }
+	.lede {
+		max-width: 39rem;
+		margin: 1.7rem 0 1.8rem;
+		color: var(--muted);
+		font-size: 1.08rem;
+		line-height: 1.62;
+	}
 
-  .hero-search { max-width:640px; }
+	.hero-search {
+		max-width: 640px;
+	}
 
-  .stats {
-    max-width:640px;
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:2rem;
-    border-top:1px solid var(--line);
-    margin-top:1.65rem;
-    padding-top:1.45rem;
-  }
+	.hero-links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 1.35rem;
+		margin-top: 1.2rem;
+	}
 
-  .stats div { display:grid; gap:.2rem; }
-  .stats strong { font-size:1.55rem; letter-spacing:-.04em; }
-  .stats span { color:var(--muted); font-size:.78rem; }
+	.hero-links a {
+		display: inline-flex;
+		align-items: center;
+		gap: .45rem;
+		color: var(--ink);
+		text-decoration: none;
+		font-size: .76rem;
+		font-weight: 850;
+	}
 
-  .feature-wrap {
-    position:relative;
-    min-height:480px;
-    display:flex;
-    align-items:center;
-  }
+	.hero-links a span {
+		color: var(--blue);
+		transition: transform .16s ease;
+	}
 
-  .brand-bars {
-    position:absolute;
-    inset:0 0 auto 7%;
-    height:425px;
-    display:grid;
-    grid-template-columns:1.3fr .75fr .75fr .75fr;
-    gap:12px;
-    align-items:start;
-    pointer-events:none;
-  }
+	.hero-links a:hover span {
+		transform: translateX(3px);
+	}
 
-  .bar {
-    display:block;
-    height:88%;
-    border-radius:2.2rem 5.7rem 2.2rem 5.4rem;
-    border:1px solid rgba(18,16,14,.15);
-  }
-  .bar-black { background:var(--ink); height:75%; }
-  .bar-orange { background:var(--orange); height:100%; }
-  .bar-blue { background:var(--blue); height:94%; margin-top:1.1rem; }
-  .bar-gray { background:var(--granite); height:87%; margin-top:2.3rem; }
+	.visual {
+		position: relative;
+		min-height: 490px;
+	}
 
-  .feature-panel {
-    position:relative;
-    z-index:2;
-    width:calc(100% - 2.5rem);
-    margin-left:auto;
-    background:rgba(255,255,255,.97);
-    border:1px solid #dedbdd;
-    border-radius:1.2rem;
-    box-shadow:0 24px 70px rgba(18,16,14,.12);
-    padding:1.45rem 1.55rem 1.25rem;
-  }
+	.visual-kicker {
+		position: absolute;
+		z-index: 5;
+		top: 0;
+		right: 0;
+		width: 250px;
+		display: grid;
+		gap: .35rem;
+		text-align: right;
+	}
 
-  .feature-topline {
-    display:flex;
-    align-items:start;
-    justify-content:space-between;
-    gap:1rem;
-  }
+	.visual-kicker span {
+		color: var(--blue);
+		font-size: .64rem;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: .12em;
+	}
 
-  .micro {
-    color:var(--granite);
-    text-transform:uppercase;
-    letter-spacing:.12em;
-    font-size:.65rem;
-    font-weight:850;
-  }
+	.visual-kicker strong {
+		font-family: var(--display);
+		font-size: 1.5rem;
+		line-height: 1;
+		letter-spacing: -.04em;
+		font-weight: 500;
+	}
 
-  .feature-topline h2 {
-    font-family:var(--display);
-    font-size:2rem;
-    letter-spacing:-.045em;
-    margin:.18rem 0 .2rem;
-  }
+	.art-stack {
+		position: relative;
+		height: 455px;
+		margin-top: 1rem;
+	}
 
-  .feature-topline p { margin:0; color:var(--muted); font-size:.8rem; }
-  .feature-topline p b { margin:0 .35rem; color:#b6b2b5; }
+	.art-panel {
+		position: absolute;
+		display: block;
+		overflow: hidden;
+		border: 1px solid rgba(18,16,14,.12);
+		background: #f1efec;
+		text-decoration: none;
+		color: white;
+		box-shadow: 0 18px 55px rgba(18,16,14,.12);
+		transition: transform .2s ease, box-shadow .2s ease;
+	}
 
-  .feature-topline>a {
-    flex:0 0 auto;
-    text-decoration:none;
-    border:1px solid var(--line-strong);
-    border-radius:.65rem;
-    padding:.62rem .78rem;
-    font-size:.76rem;
-    font-weight:800;
-    background:white;
-  }
+	.art-panel:hover {
+		transform: translateY(-5px) rotate(0deg) !important;
+		box-shadow: 0 26px 70px rgba(18,16,14,.16);
+		z-index: 8;
+	}
 
-  .feature-toolbar {
-    margin-top:1.25rem;
-    display:grid;
-    grid-template-columns:1fr 220px;
-    gap:2rem;
-    align-items:end;
-    border-bottom:1px solid var(--line);
-  }
+	.art-panel img {
+		width: 100%;
+		height: 100%;
+		display: block;
+		object-fit: cover;
+	}
 
-  .tabs { display:flex; align-items:end; gap:1.6rem; color:var(--muted); font-size:.78rem; }
-  .tabs>* { padding-bottom:.75rem; }
-  .tabs strong { color:var(--ink); position:relative; }
-  .tabs strong:after { content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--orange); }
+	.art-panel::after {
+		content: '';
+		position: absolute;
+		inset: 45% 0 0;
+		background: linear-gradient(to bottom, transparent, rgba(18,16,14,.72));
+	}
 
-  .progress { padding-bottom:.72rem; }
-  .progress>span { display:flex; justify-content:space-between; color:var(--muted); font-size:.68rem; margin-bottom:.4rem; }
-  .progress strong { color:var(--ink); }
-  .progress>div { height:5px; background:#efedee; border-radius:999px; overflow:hidden; }
-  .progress i { display:block; width:42%; height:100%; background:var(--orange); border-radius:inherit; }
+	.art-panel.primary {
+		left: 0;
+		bottom: 0;
+		width: 58%;
+		height: 72%;
+		border-radius: 1.25rem;
+		transform: rotate(-2.2deg);
+		z-index: 3;
+	}
 
-  .mini-filters {
-    display:grid;
-    grid-template-columns:1fr auto auto;
-    gap:.55rem;
-    margin:.9rem 0 .55rem;
-  }
+	.art-panel.secondary {
+		right: 3%;
+		top: 70px;
+		width: 49%;
+		height: 64%;
+		border-radius: 1rem;
+		transform: rotate(2.6deg);
+		z-index: 2;
+	}
 
-  .mini-search, .mini-filters button {
-    min-height:2.2rem;
-    border:1px solid var(--line-strong);
-    border-radius:.58rem;
-    background:white;
-    color:#7b777b;
-    font-size:.72rem;
-  }
-  .mini-search { display:flex; gap:.5rem; align-items:center; padding:0 .7rem; }
-  .mini-filters button { padding:0 .75rem; color:#555154; }
+	.art-panel.tertiary {
+		left: 28%;
+		top: 0;
+		width: 42%;
+		height: 43%;
+		border-radius: .9rem;
+		transform: rotate(.8deg);
+		z-index: 1;
+	}
 
-  .preview-table { font-size:.74rem; }
-  .preview-head, .preview-row {
-    display:grid;
-    grid-template-columns:46px 1.45fr 1fr .9fr;
-    align-items:center;
-    min-height:2.35rem;
-    border-bottom:1px solid #efedee;
-  }
-  .preview-head { color:#777277; font-size:.65rem; font-weight:750; }
-  .preview-row strong { font-size:.74rem; }
-  .preview-row>span:not(.status) { color:#5f5a5e; }
-  .num { color:var(--ink)!important; }
-  .status { justify-self:start; padding:.27rem .5rem; background:#f0eff0; border-radius:.4rem; color:#5f5a5e; font-size:.64rem; }
-  .status.owned { background:rgba(64,121,140,.13); color:#286274; }
+	.art-caption {
+		position: absolute;
+		z-index: 2;
+		left: 1rem;
+		right: 1rem;
+		bottom: .95rem;
+		display: grid;
+		gap: .18rem;
+	}
 
-  .browse-section {
-    border-top:1px solid var(--line);
-    border-bottom:1px solid var(--line);
-    background:#fdfdfd;
-  }
+	.art-caption span {
+		font-size: .62rem;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: .1em;
+		opacity: .78;
+	}
 
-  .browse-grid {
-    display:grid;
-    grid-template-columns:1.65fr .85fr;
-    gap:4.25rem;
-    padding-top:3rem;
-    padding-bottom:3.3rem;
-  }
+	.art-caption strong {
+		font-size: 1rem;
+		line-height: 1.1;
+	}
 
-  .section-head {
-    display:flex;
-    align-items:end;
-    justify-content:space-between;
-    gap:2rem;
-    margin-bottom:1.25rem;
-  }
+	.brand-art {
+		position: absolute;
+		left: 12%;
+		right: 7%;
+		top: 20%;
+		bottom: 7%;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		gap: 18px;
+	}
 
-  .section-head h2, .collector-block h2 {
-    font-family:var(--display);
-    letter-spacing:-.045em;
-    line-height:.95;
-  }
+	.brand-art i {
+		display: block;
+		width: 21%;
+		border-radius: 0 2rem .5rem .5rem;
+		background: var(--ink);
+	}
 
-  .section-head h2 { margin:.35rem 0 0; font-size:2.65rem; }
-  .section-head a { text-decoration:none; color:var(--blue); font-size:.78rem; font-weight:800; }
+	.brand-art i:nth-child(1) { height: 92%; }
+	.brand-art i:nth-child(2) { height: 79%; background: var(--orange); }
+	.brand-art i:nth-child(3) { height: 66%; background: var(--blue); }
+	.brand-art i:nth-child(4) { height: 53%; background: var(--granite); }
 
-  .set-list { border-top:1px solid var(--line-strong); }
-  .set-list-head, .set-row {
-    display:grid;
-    grid-template-columns:2fr .55fr .8fr .55fr 26px;
-    gap:1rem;
-    align-items:center;
-  }
-  .set-list-head { min-height:2.1rem; color:#817c80; font-size:.62rem; text-transform:uppercase; letter-spacing:.1em; font-weight:850; }
-  .set-row { min-height:3.25rem; border-top:1px solid var(--line); text-decoration:none; font-size:.78rem; color:#575255; }
-  .set-row:hover { background:#faf9f9; }
-  .set-name { display:flex; align-items:center; gap:.8rem; color:var(--ink); }
-  .set-name i { width:2.1rem; height:1.55rem; border:1px solid #d7d3d5; border-radius:.32rem; background:linear-gradient(135deg,#eee7dc,#f8f4ee); }
-  .arrow { justify-self:end; color:var(--ink); font-size:1rem; }
-  .empty-row { padding:1.5rem 0; color:var(--muted); font-size:.82rem; }
-  .demo-note { margin:.8rem 0 0; color:var(--muted); font-size:.72rem; }
+	.recent-section {
+		border-top: 1px solid var(--line);
+		background: #fdfdfd;
+		padding: 3.4rem 0 4rem;
+	}
 
-  .collector-block {
-    border-left:1px solid var(--line);
-    padding-left:3.5rem;
-  }
-  .collector-block h2 { margin:.5rem 0 1rem; font-size:2rem; }
-  .collector-block>p { color:var(--muted); line-height:1.55; margin:0; font-size:.9rem; }
+	.section-head {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 2rem;
+		margin-bottom: 1.45rem;
+	}
 
-  .features { display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:2rem; }
-  .features>div { min-width:0; }
-  .feature-icon { width:2rem; height:2rem; display:grid; place-items:center; border-radius:.5rem; background:linear-gradient(145deg,#9b979d,#dedbdd); color:var(--ink); font-size:1.05rem; margin-bottom:.6rem; }
-  .features strong { display:block; font-size:.73rem; line-height:1.08; }
-  .features p { margin:.38rem 0 0; color:var(--muted); font-size:.65rem; line-height:1.35; }
+	.section-head h2,
+	.browse-strip h2 {
+		font-family: var(--display);
+		letter-spacing: -.05em;
+		line-height: .96;
+		font-weight: 500;
+	}
 
-  @media (max-width: 1050px) {
-    .hero { grid-template-columns:1fr; gap:3.5rem; }
-    .hero-copy { max-width:760px; }
-    .hero-search,.stats { max-width:720px; }
-    .feature-wrap { min-height:430px; }
-    .feature-panel { width:92%; margin-inline:auto; }
-    .browse-grid { grid-template-columns:1fr; }
-    .collector-block { border-left:0; border-top:1px solid var(--line); padding:2rem 0 0; }
-  }
+	.section-head h2 {
+		margin: .4rem 0 0;
+		font-size: 2.8rem;
+	}
 
-  @media (max-width: 700px) {
-    .hero { padding-top:3.5rem; padding-bottom:4rem; }
-    h1 { font-size:clamp(3.4rem,15vw,5rem); }
-    .feature-wrap { min-height:auto; padding-top:2rem; }
-    .brand-bars { display:none; }
-    .feature-panel { width:100%; }
-    .feature-toolbar { grid-template-columns:1fr; gap:.5rem; }
-    .progress { max-width:220px; }
-    .mini-filters { grid-template-columns:1fr 1fr; }
-    .mini-search { grid-column:1/-1; }
-    .preview-head,.preview-row { grid-template-columns:42px 1.35fr 1fr; }
-    .preview-head span:last-child,.preview-row .status { display:none; }
-    .set-list-head,.set-row { grid-template-columns:1.6fr .5fr .75fr 24px; }
-    .set-list-head span:nth-child(4),.set-row span:nth-child(4) { display:none; }
-    .features { grid-template-columns:1fr; }
-    .features>div { display:grid; grid-template-columns:auto 1fr; column-gap:.8rem; align-items:start; }
-    .features p { grid-column:2; }
-    .feature-icon { grid-row:1/3; }
-  }
+	.section-head a {
+		color: var(--blue);
+		text-decoration: none;
+		font-size: .76rem;
+		font-weight: 850;
+	}
 
-  @media (max-width: 520px) {
-    .stats { gap:1rem; }
-    .stats strong { font-size:1.25rem; }
-    .feature-panel { padding:1.1rem; }
-    .feature-topline { flex-direction:column; }
-    .feature-topline h2 { font-size:1.65rem; }
-    .tabs { gap:1rem; }
-    .set-list-head,.set-row { grid-template-columns:1fr .5fr 24px; }
-    .set-list-head span:nth-child(3),.set-row span:nth-child(3) { display:none; }
-  }
+	.recent-grid {
+		display: grid;
+		grid-template-columns: repeat(3,minmax(0,1fr));
+		gap: 1rem;
+	}
+
+	.recent-item {
+		overflow: hidden;
+		border: 1px solid var(--line);
+		border-radius: 1rem;
+		background: white;
+		text-decoration: none;
+		color: inherit;
+		transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+	}
+
+	.recent-item:hover {
+		transform: translateY(-3px);
+		border-color: #bbb8bd;
+		box-shadow: 0 16px 42px rgba(18,16,14,.07);
+	}
+
+	.thumb {
+		position: relative;
+		aspect-ratio: 16/8.3;
+		overflow: hidden;
+		background: #f2f1ef;
+	}
+
+	.thumb img {
+		width: 100%;
+		height: 100%;
+		display: block;
+		object-fit: cover;
+		transition: transform .25s ease;
+	}
+
+	.recent-item:hover .thumb img {
+		transform: scale(1.025);
+	}
+
+	.thumb.no-image {
+		display: grid;
+		place-items: center;
+	}
+
+	.thumb-fallback {
+		display: flex;
+		align-items: flex-end;
+		gap: 7px;
+		height: 55%;
+	}
+
+	.thumb-fallback i {
+		width: 22px;
+		border-radius: 0 12px 3px 3px;
+		background: var(--ink);
+	}
+
+	.thumb-fallback i:nth-child(1) { height: 100%; }
+	.thumb-fallback i:nth-child(2) { height: 82%; background: var(--orange); }
+	.thumb-fallback i:nth-child(3) { height: 65%; background: var(--blue); }
+	.thumb-fallback i:nth-child(4) { height: 49%; background: var(--granite); }
+
+	.sport-pill {
+		position: absolute;
+		top: .75rem;
+		left: .75rem;
+		background: rgba(252,252,252,.92);
+		backdrop-filter: blur(8px);
+		border: 1px solid rgba(18,16,14,.08);
+		border-radius: 999px;
+		padding: .32rem .5rem;
+		font-size: .61rem;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: .08em;
+	}
+
+	.recent-copy {
+		padding: 1rem 1.05rem .95rem;
+	}
+
+	.recent-meta {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		color: var(--blue);
+		font-size: .63rem;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: .1em;
+	}
+
+	.recent-copy h3 {
+		margin: .55rem 0 1.25rem;
+		font-size: 1.22rem;
+		line-height: 1.1;
+		letter-spacing: -.03em;
+	}
+
+	.recent-foot {
+		display: grid;
+		grid-template-columns: auto auto 1fr;
+		gap: .9rem;
+		align-items: center;
+		border-top: 1px solid var(--line);
+		padding-top: .8rem;
+		color: var(--muted);
+		font-size: .7rem;
+	}
+
+	.recent-foot strong {
+		justify-self: end;
+		color: var(--ink);
+		font-size: .95rem;
+	}
+
+	.empty {
+		border: 1px dashed var(--line-strong);
+		border-radius: 1rem;
+		padding: 4rem 1rem;
+		text-align: center;
+		color: var(--muted);
+	}
+
+	.browse-strip {
+		border-top: 1px solid var(--line);
+		border-bottom: 1px solid var(--line);
+		background: var(--ink);
+		color: #fff;
+	}
+
+	.browse-strip-inner {
+		display: grid;
+		grid-template-columns: 1.15fr .85fr;
+		gap: 4rem;
+		align-items: end;
+		padding-top: 3.5rem;
+		padding-bottom: 3.5rem;
+	}
+
+	.browse-strip .eyebrow {
+		color: var(--orange);
+	}
+
+	.browse-strip h2 {
+		margin: .45rem 0 0;
+		font-size: 2.7rem;
+	}
+
+	.browse-links {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		border-top: 1px solid rgba(255,255,255,.16);
+	}
+
+	.browse-links a {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-height: 3.2rem;
+		padding: 0 .2rem;
+		border-bottom: 1px solid rgba(255,255,255,.16);
+		color: white;
+		text-decoration: none;
+		font-size: .82rem;
+		font-weight: 800;
+	}
+
+	.browse-links a:nth-child(odd) {
+		margin-right: 1.2rem;
+	}
+
+	.browse-links span {
+		color: var(--orange);
+	}
+
+	@media (max-width: 1050px) {
+		.hero {
+			grid-template-columns: 1fr;
+			gap: 2rem;
+		}
+
+		.visual {
+			min-height: 420px;
+		}
+
+		.art-stack {
+			height: 390px;
+		}
+
+		.recent-grid {
+			grid-template-columns: repeat(2,minmax(0,1fr));
+		}
+	}
+
+	@media (max-width: 720px) {
+		.hero {
+			padding-top: 3.5rem;
+			padding-bottom: 3.5rem;
+		}
+
+		.visual {
+			min-height: 340px;
+		}
+
+		.visual-kicker {
+			position: static;
+			width: auto;
+			text-align: left;
+			margin-bottom: 1rem;
+		}
+
+		.art-stack {
+			height: 300px;
+		}
+
+		.art-panel.primary {
+			width: 65%;
+			height: 72%;
+		}
+
+		.art-panel.secondary {
+			width: 53%;
+			height: 62%;
+		}
+
+		.art-panel.tertiary {
+			display: none;
+		}
+
+		.recent-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.browse-strip-inner {
+			grid-template-columns: 1fr;
+			gap: 2rem;
+		}
+	}
 </style>

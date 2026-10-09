@@ -14,5 +14,9 @@ database_name = "setbound"
 database_id = "8bf3ee1a-aed4-45d1-8d30-0febbd04745d"
 migrations_dir = "migrations"
 
+[[r2_buckets]]
+binding = "SET_IMAGES"
+bucket_name = "setbound-images"
+
 [observability]
 enabled = true
