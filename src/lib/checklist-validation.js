@@ -37,6 +37,8 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
     else stats.lowConfidence += 1;
     if (!card.affiliation || card.affiliation === 'NIL') stats.nil += 1;
 
+    // A missing subject means we do not actually know what card we are importing.
+    // Keep this as a true blocker.
     if (!String(card.subject || '').trim()) {
       issues.push(makeIssue({
         severity: 'blocker',
@@ -47,12 +49,14 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
       }));
     }
 
+    // Some legitimate manufacturer checklists contain unnumbered cards/parallel lists,
+    // so a missing printed card number is review-worthy, not automatically invalid.
     if (!String(card.card_number || '').trim()) {
       issues.push(makeIssue({
-        severity: 'blocker',
+        severity: 'review',
         type: 'missing-number',
         checklist,
-        message: `${card.subject || 'A card'} has no card number.`,
+        message: `${card.subject || 'A card'} has no printed card number. Verify that this is intentional.`,
         cardIndexes: [index]
       }));
     }
@@ -62,7 +66,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
         severity: 'review',
         type: 'low-confidence',
         checklist,
-        message: `${card.card_number} ${card.subject} parsed at ${Math.round((card.confidence ?? 0) * 100)}% confidence.`,
+        message: `${card.card_number || '(no number)'} ${card.subject} parsed at ${Math.round((card.confidence ?? 0) * 100)}% confidence.`,
         cardIndexes: [index]
       }));
     }
@@ -82,21 +86,27 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
     }
   });
 
+  // IMPORTANT: card numbers are not globally unique, or even necessarily unique
+  // inside a manufacturer-defined checklist. Bowman/Chrome and other products can
+  // legitimately reuse the same printed number for different subjects. Flag it for
+  // review, but never block an otherwise valid import solely for this reason.
   for (const indexes of numberMap.values()) {
     if (indexes.length < 2) continue;
     const uniqueSubjects = new Set(indexes.map((i) => keyPart(cards[i]?.subject)));
     const sample = cards[indexes[0]];
     if (uniqueSubjects.size > 1) {
       issues.push(makeIssue({
-        severity: 'blocker',
-        type: 'duplicate-number-conflict',
+        severity: 'review',
+        type: 'shared-card-number',
         checklist: sample.checklist_name,
-        message: `Card number ${sample.card_number} is assigned to ${uniqueSubjects.size} different subjects in the same checklist.`,
+        message: `Card number ${sample.card_number || '(blank)'} is used by ${uniqueSubjects.size} different subjects in this checklist. This may be intentional.`,
         cardIndexes: indexes
       }));
     }
   }
 
+  // Same checklist + same number + same subject is suspicious, but still not a blocker.
+  // Some official products intentionally repeat subjects/identifiers in unusual ways.
   for (const indexes of exactMap.values()) {
     if (indexes.length < 2) continue;
     const sample = cards[indexes[0]];
@@ -104,7 +114,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
       severity: 'review',
       type: 'duplicate-card',
       checklist: sample.checklist_name,
-      message: `${sample.card_number} ${sample.subject} appears ${indexes.length} times in the same checklist.`,
+      message: `${sample.card_number || '(no number)'} ${sample.subject} appears ${indexes.length} times in the same checklist. Verify that the source really contains each entry.`,
       cardIndexes: indexes
     }));
   }
