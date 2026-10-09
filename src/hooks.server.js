@@ -30,7 +30,7 @@ export async function handle({ event, resolve }) {
 	const pathname = event.url.pathname;
 	const isAdminPage = pathname.startsWith('/admin');
 	const isAdminLogin = pathname === '/admin/login';
-	const isProtectedAdminApi = pathname.startsWith('/api/import');
+	const isProtectedAdminApi = pathname.startsWith('/api/import') || pathname.startsWith('/api/admin');
 
 	if (!isAdminPage && !isProtectedAdminApi) {
 		return resolve(event);
@@ -38,7 +38,6 @@ export async function handle({ event, resolve }) {
 
 	const password = getPrivateEnv(event.platform, 'ADMIN_PASSWORD');
 
-	// Fail closed if the production secret was never configured.
 	if (!password) {
 		if (isProtectedAdminApi) {
 			return json({ message: 'Admin authentication is not configured.' }, { status: 503 });
