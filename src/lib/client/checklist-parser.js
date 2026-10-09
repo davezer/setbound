@@ -2,8 +2,15 @@ const ROOKIE_MARKERS = /\b(rookie|rc)\b/i;
 const AUTO_MARKERS = /\b(auto|autos|autograph|autographs|autographed)\b/i;
 const MEM_MARKERS = /\b(relic|relics|memorabilia|mem|patch|patches|jersey|jerseys)\b/i;
 const CARD_START = /^\s*([A-Z0-9][A-Z0-9._\-/]{0,24})\s+(.+)$/i;
-const PAGE_NOISE = /^(checklists provided by|page\s+\d+|copyright|topps\b)/i;
-const HEADING_HINT = /\b(base|cards?|variations?|inserts?|autographs?|autos?|relics?|memorabilia|parallels?|chrome|mini|short prints?|sp|image variations?|signatures?|patches?|rookies?|stars?|set|checklist|breakout|prospects?|draft|debut|sapphire|diamond)\b/i;
+
+// IMPORTANT: do not treat every line beginning with "Topps" as page noise.
+// Legitimate checklist headings include names like "TOPPS CHROME EXPOSE".
+const PAGE_NOISE =
+  /^(checklists provided by|page\s+\d+\b|copyright\b|topps\s+(?:company|checklist\s+provided|all rights reserved)\b)/i;
+
+const HEADING_HINT =
+  /\b(base|cards?|variations?|inserts?|autographs?|autos?|relics?|memorabilia|parallels?|chrome|mini|short prints?|sp|image variations?|signatures?|patches?|rookies?|stars?|set|checklist|breakout|prospects?|draft|debut|sapphire|diamond|expose)\b/i;
+
 const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
 const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
@@ -22,6 +29,7 @@ export function normalizeText(value = '') {
 function uppercaseRatio(value) {
   const letters = value.replace(/[^A-Za-z]/g, '');
   if (!letters) return 0;
+
   return [...letters].filter((c) => c === c.toUpperCase()).length / letters.length;
 }
 
@@ -42,11 +50,6 @@ function looksLikeOrdinalHeading(line) {
   const rest = match[2].trim();
   if (!rest || rest.length > 90 || rest.split(/\s+/).length > 10) return false;
 
-  // Examples from official manufacturer PDFs:
-  // "75TH DIAMOND AUTOGRAPHS"
-  // "25TH ANNIVERSARY AUTOGRAPHS"
-  // These look like card rows because the ordinal can be parsed as a card number.
-  // A short, strongly-uppercase phrase after an ordinal is treated as a section header.
   return uppercaseRatio(rest) > 0.84;
 }
 
@@ -59,9 +62,12 @@ function looksLikeHeading(line) {
 
   const upperRatio = uppercaseRatio(line);
 
-  if (/\bchecklist\b/i.test(line) && line.split(' ').length <= 10) return true;
+  if (/\bchecklist\b/i.test(line) && line.split(/\s+/).length <= 10) return true;
 
-  return upperRatio > 0.84 && (HEADING_HINT.test(line) || line.split(' ').length <= 8);
+  return (
+    upperRatio > 0.84 &&
+    (HEADING_HINT.test(line) || line.split(/\s+/).length <= 8)
+  );
 }
 
 function affiliationMatch(text, affiliations) {
@@ -106,8 +112,16 @@ function parseCard(line, section, affiliations) {
   if (!/\d/.test(cardNumber) && !cardNumber.includes('-')) return null;
 
   // Safety nets for headings that superficially resemble numbered card rows.
-  if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) return null;
-  if (/^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) && uppercaseRatio(rest) > 0.84) return null;
+  if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) {
+    return null;
+  }
+
+  if (
+    /^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) &&
+    uppercaseRatio(rest) > 0.84
+  ) {
+    return null;
+  }
 
   const flags = {
     rookie: ROOKIE_MARKERS.test(rest),
