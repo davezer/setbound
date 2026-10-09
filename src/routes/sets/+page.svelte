@@ -1,0 +1,5 @@
+<script>import SetCard from '$lib/components/SetCard.svelte'; let { data } = $props();</script>
+<svelte:head><title>Sets — setbound</title></svelte:head>
+<section class="shell page"><div class="eyebrow">Browse</div><div class="top"><h1 class="h2">Card sets</h1><form><input class="input" name="q" value={data.q} placeholder="Filter sets…"/></form></div>
+{#if data.sets.length}<div class="grid">{#each data.sets as set}<SetCard {set}/>{/each}</div>{:else}<div class="empty">No sets found yet.</div>{/if}</section>
+<style>.page{padding-top:4rem}.top{display:flex;justify-content:space-between;align-items:end;gap:2rem;margin:.4rem 0 2rem}.top form{width:min(320px,100%)}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}.empty{border:1px dashed var(--line-strong);border-radius:1rem;padding:4rem;text-align:center;color:var(--muted)}@media(max-width:800px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.top{align-items:stretch;flex-direction:column}.grid{grid-template-columns:1fr}}</style>

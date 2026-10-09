@@ -1,0 +1,26 @@
+{
+  "name": "setbound",
+  "private": true,
+  "version": "0.1.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
+    "cf:migrate:local": "wrangler d1 migrations apply setbound --local",
+    "cf:migrate": "wrangler d1 migrations apply setbound --remote",
+    "cf:seed:local": "wrangler d1 execute setbound --local --file=./seed.sql",
+    "cf:seed": "wrangler d1 execute setbound --remote --file=./seed.sql"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-cloudflare": "7.2.9",
+    "@sveltejs/kit": "2.70.3",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "pdfjs-dist": "^5.4.296",
+    "svelte": "5.43.8",
+    "svelte-check": "4.3.3",
+    "vite": "8.0.0",
+    "wrangler": "4.46.0"
+  }
+}

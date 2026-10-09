@@ -1,0 +1,9 @@
+name = "setbound"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "setbound"
+database_id = "8bf3ee1a-aed4-45d1-8d30-0febbd04745d"
+migrations_dir = "migrations"
