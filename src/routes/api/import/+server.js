@@ -19,6 +19,15 @@ function sortKey(cardNumber) {
 		: String(cardNumber);
 }
 
+function resolvedSubject(card) {
+	const explicit = String(card.subject || '').trim();
+	if (explicit) return explicit;
+
+	// Some official checklists legitimately have no named subject.
+	// Use the checklist heading as the display subject rather than inventing a person.
+	return String(card.checklist_name || 'Unspecified subject').trim() || 'Unspecified subject';
+}
+
 export async function POST({ request, platform }) {
 	try {
 		const database = db(platform);
@@ -36,7 +45,6 @@ export async function POST({ request, platform }) {
 
 		const slug = `${body.year}-${slugify(body.name)}`;
 
-		// Never silently append another import onto an existing product.
 		const existingProduct = await database
 			.prepare('SELECT id, name, year FROM products WHERE slug = ?')
 			.bind(slug)
@@ -112,7 +120,8 @@ export async function POST({ request, platform }) {
 				checklistIds.set(card.checklist_name, row.id);
 			}
 
-			const subjectKey = card.subject.trim().toLowerCase();
+			const subjectName = resolvedSubject(card);
+			const subjectKey = subjectName.toLowerCase();
 
 			if (!subjectIds.has(subjectKey)) {
 				let row = await database
@@ -129,7 +138,7 @@ export async function POST({ request, platform }) {
 							 RETURNING id`
 						)
 						.bind(
-							card.subject.trim(),
+							subjectName,
 							subjectKey,
 							card.affiliation === 'NIL' ? 'personality' : 'athlete'
 						)

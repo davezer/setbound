@@ -12,6 +12,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 
   const ensureSection = (name) => {
     const section = name || 'Uncategorized';
+
     if (!byChecklist[section]) {
       byChecklist[section] = {
         cards: 0,
@@ -22,6 +23,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
         blockers: 0
       };
     }
+
     return byChecklist[section];
   };
 
@@ -32,25 +34,27 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
   cards.forEach((card, index) => {
     const checklist = card.checklist_name || 'Uncategorized';
     const stats = ensureSection(checklist);
+
     stats.cards += 1;
+
     if ((card.confidence ?? 0) >= 0.85) stats.highConfidence += 1;
     else stats.lowConfidence += 1;
+
     if (!card.affiliation || card.affiliation === 'NIL') stats.nil += 1;
 
-    // A missing subject means we do not actually know what card we are importing.
-    // Keep this as a true blocker.
+    // A blank subject can be legitimate. Some official checklists contain object,
+    // trophy, team, or concept cards without a named person/subject.
+    // Flag it for review, but never block the import solely for this reason.
     if (!String(card.subject || '').trim()) {
       issues.push(makeIssue({
-        severity: 'blocker',
+        severity: 'review',
         type: 'missing-subject',
         checklist,
-        message: `Card ${card.card_number || '(no number)'} has no subject.`,
+        message: `Card ${card.card_number || '(no number)'} has no subject. Setbound will use the checklist name as its display subject.`,
         cardIndexes: [index]
       }));
     }
 
-    // Some legitimate manufacturer checklists contain unnumbered cards/parallel lists,
-    // so a missing printed card number is review-worthy, not automatically invalid.
     if (!String(card.card_number || '').trim()) {
       issues.push(makeIssue({
         severity: 'review',
@@ -66,34 +70,35 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
         severity: 'review',
         type: 'low-confidence',
         checklist,
-        message: `${card.card_number || '(no number)'} ${card.subject} parsed at ${Math.round((card.confidence ?? 0) * 100)}% confidence.`,
+        message: `${card.card_number || '(no number)'} ${card.subject || ''} parsed at ${Math.round((card.confidence ?? 0) * 100)}% confidence.`.trim(),
         cardIndexes: [index]
       }));
     }
 
     const numberKey = `${keyPart(checklist)}|${keyPart(card.card_number)}`;
+
     if (!numberMap.has(numberKey)) numberMap.set(numberKey, []);
     numberMap.get(numberKey).push(index);
 
     const exactKey = `${numberKey}|${keyPart(card.subject)}`;
+
     if (!exactMap.has(exactKey)) exactMap.set(exactKey, []);
     exactMap.get(exactKey).push(index);
 
     const rawKey = `${keyPart(checklist)}|${keyPart(card.raw)}`;
+
     if (card.raw) {
       if (!rawMap.has(rawKey)) rawMap.set(rawKey, []);
       rawMap.get(rawKey).push(index);
     }
   });
 
-  // IMPORTANT: card numbers are not globally unique, or even necessarily unique
-  // inside a manufacturer-defined checklist. Bowman/Chrome and other products can
-  // legitimately reuse the same printed number for different subjects. Flag it for
-  // review, but never block an otherwise valid import solely for this reason.
   for (const indexes of numberMap.values()) {
     if (indexes.length < 2) continue;
+
     const uniqueSubjects = new Set(indexes.map((i) => keyPart(cards[i]?.subject)));
     const sample = cards[indexes[0]];
+
     if (uniqueSubjects.size > 1) {
       issues.push(makeIssue({
         severity: 'review',
@@ -105,23 +110,25 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
     }
   }
 
-  // Same checklist + same number + same subject is suspicious, but still not a blocker.
-  // Some official products intentionally repeat subjects/identifiers in unusual ways.
   for (const indexes of exactMap.values()) {
     if (indexes.length < 2) continue;
+
     const sample = cards[indexes[0]];
+
     issues.push(makeIssue({
       severity: 'review',
       type: 'duplicate-card',
       checklist: sample.checklist_name,
-      message: `${sample.card_number || '(no number)'} ${sample.subject} appears ${indexes.length} times in the same checklist. Verify that the source really contains each entry.`,
+      message: `${sample.card_number || '(no number)'} ${sample.subject || ''} appears ${indexes.length} times in the same checklist. Verify that the source really contains each entry.`.trim(),
       cardIndexes: indexes
     }));
   }
 
   for (const indexes of rawMap.values()) {
     if (indexes.length < 2) continue;
+
     const sample = cards[indexes[0]];
+
     issues.push(makeIssue({
       severity: 'review',
       type: 'duplicate-source-row',
@@ -153,6 +160,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 
     if (declared > 0 && declared !== stats.cards) {
       const delta = stats.cards - declared;
+
       issues.push(makeIssue({
         severity: 'review',
         type: 'count-mismatch',
@@ -164,13 +172,17 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 
   for (const issue of issues) {
     if (!issue.checklist) continue;
+
     const stats = ensureSection(issue.checklist);
     stats.issues += 1;
+
     if (issue.severity === 'blocker') stats.blockers += 1;
   }
 
-  const blockers = issues.filter((issue) => issue.severity === 'blocker');
-  const review = issues.filter((issue) => issue.severity === 'review');
+  // Validation is advisory. Manufacturer checklists are weird enough that
+  // content anomalies should not prevent an admin from importing a known-good source.
+  const blockers = [];
+  const review = issues;
   const nilCards = cards.filter((card) => !card.affiliation || card.affiliation === 'NIL').length;
 
   return {
@@ -181,11 +193,11 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
     totals: {
       cards: cards.length,
       sections: knownSections.size,
-      blockers: blockers.length,
+      blockers: 0,
       review: review.length,
       nilCards,
       lowConfidence: cards.filter((card) => (card.confidence ?? 0) < 0.85).length
     },
-    canImport: blockers.length === 0 && cards.length > 0
+    canImport: cards.length > 0
   };
 }
