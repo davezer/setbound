@@ -7,6 +7,7 @@ const HEADING_HINT = /\b(base|cards?|variation|insert|autograph|relic|memorabili
 const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
 const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
+const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
 
 export function normalizeText(value = '') {
   return value
@@ -31,25 +32,30 @@ function looksLikeYearHeading(line) {
   const rest = match[1].trim();
   if (!rest || rest.length > 90 || rest.split(/\s+/).length > 10) return false;
 
-  // Manufacturer PDFs sometimes prefix a subsection heading with the release year,
-  // e.g. "2026 MLB SPRING BREAKOUT". Treat a strongly-uppercase year-prefixed
-  // phrase as a heading rather than card #2026.
   return uppercaseRatio(rest) > 0.84;
+}
+
+function looksLikeOrdinalHeading(line) {
+  const match = line.match(ORDINAL_HEADING);
+  if (!match) return false;
+
+  const rest = match[2].trim();
+  if (!rest || rest.length > 90 || rest.split(/\s+/).length > 10) return false;
+
+  return uppercaseRatio(rest) > 0.84 && HEADING_HINT.test(rest);
 }
 
 function looksLikeHeading(line) {
   if (!line || line.length > 100) return false;
   if (PAGE_NOISE.test(line) || PARALLEL_LABEL.test(line)) return false;
 
-  // Normal card rows frequently begin with numbers, but release-year subsection
-  // headings can too. Handle those before rejecting numeric-leading lines.
-  if (looksLikeYearHeading(line)) return true;
+  // Some official PDFs use a year or anniversary label at the start of a section,
+  // e.g. "2026 MLB SPRING BREAKOUT" or "75TH DIAMOND AUTOGRAPHS".
+  if (looksLikeYearHeading(line) || looksLikeOrdinalHeading(line)) return true;
   if (/^\d/.test(line)) return false;
 
   const upperRatio = uppercaseRatio(line);
 
-  // Manufacturer PDFs are commonly all caps. Web/article text often uses title case,
-  // so allow explicit "... Checklist" headings even when they are not all caps.
   if (/\bchecklist\b/i.test(line) && line.split(' ').length <= 10) return true;
 
   return upperRatio > 0.84 && (HEADING_HINT.test(line) || line.split(' ').length <= 8);
@@ -82,10 +88,8 @@ function parseCard(line, section, affiliations) {
   let rest = normalizeText(m[2]);
   if (!/\d/.test(cardNumber) && !cardNumber.includes('-')) return null;
 
-  // Safety net for year-prefixed subsection headings that reach this function.
-  // A bare four-digit release year plus an all-caps phrase is almost certainly
-  // document structure, not a sports-card identifier.
   if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) return null;
+  if (/^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) && uppercaseRatio(rest) > 0.84 && HEADING_HINT.test(rest)) return null;
 
   const flags = {
     rookie: ROOKIE_MARKERS.test(rest),
@@ -175,8 +179,6 @@ export function parseChecklistText(text, affiliations = []) {
 
     if (captureParallels) {
       const meta = ensureMeta(checklist_meta, section);
-      // Keep source wording intact. The goal is display/provenance, not guessing
-      // at odds syntax that varies wildly by manufacturer and product.
       if (line.length <= 240 && !meta.parallels.includes(line)) meta.parallels.push(line);
     }
   }
