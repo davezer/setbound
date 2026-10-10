@@ -3,7 +3,7 @@
 
 	let query = $state('');
 	let deleting = $state(null);
-	let deletingChecklist = $state(null);
+	let deletingImport = $state(false);
 	let message = $state('');
 
 	const visible = $derived(data.cards.filter((card) => {
@@ -29,9 +29,7 @@
 		try {
 			const response = await fetch(`/api/admin/cards/${card.id}`, { method: 'DELETE' });
 			const result = await response.json();
-
 			if (!response.ok) throw new Error(result.message || 'Delete failed.');
-
 			location.reload();
 		} catch (error) {
 			message = error?.message || 'Delete failed.';
@@ -39,25 +37,27 @@
 		}
 	}
 
-	async function deleteChecklist(checklist) {
+	async function deleteEntireImport() {
+		if (!data.product) return;
+
+		const label = `${data.product.year} ${data.product.name}`;
 		if (!confirm(
-			`Delete the entire checklist "${checklist.name}"?\n\n` +
-			`This will permanently remove ${Number(checklist.card_count || 0).toLocaleString()} card rows and the checklist itself.`
+			`DELETE ENTIRE IMPORT?\n\n${label}\n\n` +
+			`This permanently removes the product, every checklist, every card row, checklist details, source record, and uploaded artwork for this set.\n\n` +
+			`This cannot be undone.`
 		)) return;
 
-		deletingChecklist = checklist.id;
+		deletingImport = true;
 		message = '';
 
 		try {
-			const response = await fetch(`/api/admin/checklists/${checklist.id}`, { method: 'DELETE' });
+			const response = await fetch(`/api/admin/products/${data.product.id}`, { method: 'DELETE' });
 			const result = await response.json();
-
-			if (!response.ok) throw new Error(result.message || 'Checklist delete failed.');
-
-			location.reload();
+			if (!response.ok) throw new Error(result.message || 'Could not delete import.');
+			location.href = '/admin/cleanup';
 		} catch (error) {
-			message = error?.message || 'Checklist delete failed.';
-			deletingChecklist = null;
+			message = error?.message || 'Could not delete import.';
+			deletingImport = false;
 		}
 	}
 </script>
@@ -69,9 +69,8 @@
 		<div>
 			<div class="eyebrow">Admin</div>
 			<h1>Clean imported rows</h1>
-			<p>Remove parser mistakes without re-importing the entire product.</p>
+			<p>Fix individual rows or remove an entire import.</p>
 		</div>
-
 		<a class="back" href="/admin">← Admin</a>
 	</div>
 
@@ -96,62 +95,37 @@
 		{/if}
 	</div>
 
-	{#if message}
-		<div class="error">{message}</div>
-	{/if}
+	{#if message}<div class="error">{message}</div>{/if}
 
 	{#if data.product}
-		<div class="checklists-block">
-			<div class="section-title">
-				<div>
-					<div class="eyebrow">Checklists</div>
-					<h2>Delete a whole checklist</h2>
-				</div>
-				<span>{data.checklists.length} total</span>
+		<section class="danger-zone">
+			<div>
+				<div class="eyebrow danger-label">Danger zone</div>
+				<h2>Delete entire import</h2>
+				<p>
+					Remove <strong>{data.product.year} {data.product.name}</strong> and everything imported with it.
+					You can import the product again afterward.
+				</p>
 			</div>
 
-			<div class="checklist-list">
-				{#each data.checklists as checklist}
-					<div class="checklist-row">
-						<div>
-							<strong>{checklist.name}</strong>
-							<span>{Number(checklist.card_count || 0).toLocaleString()} cards</span>
-						</div>
-
-						<button
-							class="danger"
-							disabled={deletingChecklist === checklist.id}
-							onclick={() => deleteChecklist(checklist)}
-						>
-							{deletingChecklist === checklist.id ? 'Deleting…' : 'Delete checklist'}
-						</button>
-					</div>
-				{/each}
-			</div>
-		</div>
+			<button class="delete-import" disabled={deletingImport} onclick={deleteEntireImport}>
+				{deletingImport ? 'Deleting import…' : 'Delete entire import'}
+			</button>
+		</section>
 
 		<div class="result-head">
 			<div>
 				<strong>{data.product.year} {data.product.name}</strong>
 				<span>{visible.length.toLocaleString()} of {data.cards.length.toLocaleString()} rows</span>
 			</div>
-
 			<a href={`/sets/${data.product.slug}`} target="_blank" rel="noreferrer">View public set ↗</a>
 		</div>
 
 		<div class="table-wrap">
 			<table>
 				<thead>
-					<tr>
-						<th>#</th>
-						<th>Subject</th>
-						<th>Affiliation</th>
-						<th>Checklist</th>
-						<th>Tags</th>
-						<th></th>
-					</tr>
+					<tr><th>#</th><th>Subject</th><th>Affiliation</th><th>Checklist</th><th>Tags</th><th></th></tr>
 				</thead>
-
 				<tbody>
 					{#each visible as card}
 						<tr>
@@ -172,11 +146,8 @@
 							</td>
 						</tr>
 					{/each}
-
 					{#if visible.length === 0}
-						<tr>
-							<td colspan="6" class="empty">No rows match “{query}”.</td>
-						</tr>
+						<tr><td colspan="6" class="empty">No rows match “{query}”.</td></tr>
 					{/if}
 				</tbody>
 			</table>
@@ -195,18 +166,13 @@
 	.controls{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;padding:1rem 0 1.2rem;border-bottom:1px solid var(--line)}
 	.controls label{display:grid;gap:.35rem}
 	.controls label span{font-size:.67rem;text-transform:uppercase;letter-spacing:.1em;font-weight:900;color:var(--muted)}
-	.checklists-block{padding:1.4rem 0 1.6rem;border-bottom:1px solid var(--line)}
-	.section-title{display:flex;align-items:end;justify-content:space-between;gap:1rem;margin-bottom:.8rem}
-	.section-title h2{margin:.3rem 0 0;font-size:1.35rem;letter-spacing:-.03em}
-	.section-title>span{color:var(--muted);font-size:.72rem}
-	.checklist-list{border-top:1px solid var(--line)}
-	.checklist-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem 0;border-bottom:1px solid var(--line)}
-	.checklist-row>div{display:grid;gap:.2rem}
-	.checklist-row strong{font-size:.85rem}
-	.checklist-row span{color:var(--muted);font-size:.7rem}
-	.danger{border:1px solid #e5b7b1;background:#fff8f7;color:#8c3028;border-radius:.55rem;padding:.45rem .7rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
-	.danger:hover{border-color:#b95c52}
-	.danger:disabled{opacity:.5;cursor:not-allowed}
+	.danger-zone{display:flex;align-items:center;justify-content:space-between;gap:2rem;margin:1.4rem 0 .2rem;padding:1.15rem 1.2rem;border:1px solid #e6b2ab;border-radius:.9rem;background:#fff9f8}
+	.danger-label{color:#a13b32}
+	.danger-zone h2{margin:.3rem 0 .35rem;font-size:1.2rem;letter-spacing:-.03em}
+	.danger-zone p{margin:0;color:var(--muted);font-size:.8rem;line-height:1.5}
+	.delete-import{flex:0 0 auto;border:1px solid #c75d53;background:#a53b32;color:white;border-radius:.6rem;padding:.65rem .85rem;font:inherit;font-size:.75rem;font-weight:850;cursor:pointer}
+	.delete-import:hover{background:#8d3028}
+	.delete-import:disabled{opacity:.55;cursor:not-allowed}
 	.result-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1.2rem 0}
 	.result-head div{display:flex;gap:.7rem;align-items:baseline}
 	.result-head span{color:var(--muted);font-size:.76rem}
@@ -226,10 +192,5 @@
 	.empty,.empty-state{text-align:center;color:var(--muted);padding:3rem 1rem}
 	.empty-state{border:1px dashed var(--line-strong);border-radius:.9rem;margin-top:1.4rem}
 	.error{margin-top:1rem;padding:.8rem 1rem;background:#fff4ea;border:1px solid #f4c89f;border-radius:.7rem}
-	@media(max-width:760px){
-		.topline{display:block}
-		.controls{grid-template-columns:1fr}
-		.back{display:inline-block;margin-top:1rem}
-		.checklist-row{align-items:flex-start;flex-direction:column}
-	}
+	@media(max-width:760px){.topline{display:block}.controls{grid-template-columns:1fr}.back{display:inline-block;margin-top:1rem}.danger-zone{align-items:flex-start;flex-direction:column}}
 </style>
