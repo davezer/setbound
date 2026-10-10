@@ -99,9 +99,19 @@ function isCardNumber(value) {
 	const v = text(value);
 	if (!v || v.length > 28 || /\s/.test(v)) return false;
 
-	// Card IDs are messy: 1, TTN-1, 75D-AB, AU-CODY, etc.
-	// Require at least one digit so normal headings are not mistaken for cards.
-	return /\d/.test(v) && /^[A-Z0-9._/-]+$/i.test(v);
+	// Card IDs are messy:
+	//   1
+	//   TTN-1
+	//   75D-AB
+	//   NLA-AA
+	//   AR-JC
+	//
+	// Inserts/autographs/relics often use letter-only prefixes/suffixes with a
+	// hyphen and no digit at all, so requiring a digit drops perfectly valid rows.
+	// A plain word such as "AUTOGRAPHS" still fails because it has no separator.
+	if (/\d/.test(v) && /^[A-Z0-9._/-]+$/i.test(v)) return true;
+
+	return /^[A-Z0-9]{1,12}(?:[-/.][A-Z0-9]{1,12})+$/i.test(v);
 }
 
 function looksLikeSection(row) {
@@ -311,6 +321,16 @@ function parseSheetRows(rows, sheetName) {
 
 	// If a workbook sheet itself has a useful name and everything was otherwise
 	// uncategorized, use the sheet name rather than exposing "Uncategorized".
+	const uncategorizedHasCards = cards.some(
+		(card) => card.checklist_name === 'Uncategorized'
+	);
+
+	if (!uncategorizedHasCards) {
+		const index = sections.indexOf('Uncategorized');
+		if (index >= 0) sections.splice(index, 1);
+		delete checklist_meta.Uncategorized;
+	}
+
 	const meaningfulSections = sections.filter((name) => name !== 'Uncategorized');
 	if (!meaningfulSections.length && cards.length) {
 		const fallback = text(sheetName) || 'Checklist';
