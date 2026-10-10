@@ -13,6 +13,9 @@
     "cf:seed:local": "wrangler d1 execute setbound --local --file=./seed.sql",
     "cf:seed": "wrangler d1 execute setbound --remote --file=./seed.sql"
   },
+  "dependencies": {
+    "xlsx": "0.18.5"
+  },
   "devDependencies": {
     "@sveltejs/adapter-cloudflare": "7.2.9",
     "@sveltejs/kit": "2.70.3",

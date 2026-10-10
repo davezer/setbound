@@ -1,5 +1,5 @@
 INSERT OR IGNORE INTO sports (id,name,slug,sort_order) VALUES
-(1,'Baseball','baseball',1),(2,'Football','football',2),(3,'Basketball','basketball',3),(4,'Hockey','hockey',4);
+(1,'Baseball','baseball',1),(2,'Football','football',2),(3,'Basketball','basketball',3),(4,'Hockey','hockey',4),(5,'Wrestling','wrestling',5);
 INSERT OR IGNORE INTO manufacturers (id,name,slug) VALUES
 (1,'Topps','topps'),(2,'Bowman','bowman'),(3,'Panini','panini'),(4,'Upper Deck','upper-deck'),(5,'Donruss','donruss'),(6,'Fleer','fleer'),(7,'Score','score'),(8,'Leaf','leaf');
 INSERT OR IGNORE INTO affiliations (name,normalized_name,sport_id,league,type,aliases_json) VALUES
