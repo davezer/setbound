@@ -319,42 +319,28 @@ function parseSheetRows(rows, sheetName) {
 		if (card) cards.push(card);
 	}
 
-	// If a workbook sheet itself has a useful name and everything was otherwise
-	// uncategorized, use the sheet name rather than exposing "Uncategorized".
-	const uncategorizedHasCards = cards.some(
-		(card) => card.checklist_name === 'Uncategorized'
-	);
+	// Only expose sections that actually contain card rows. Spreadsheet files often
+	// include category/title rows that are visually useful but are not real checklists.
+	let usedSections = [...new Set(cards.map((card) => card.checklist_name).filter(Boolean))];
 
-	if (!uncategorizedHasCards) {
-		const index = sections.indexOf('Uncategorized');
-		if (index >= 0) sections.splice(index, 1);
-		delete checklist_meta.Uncategorized;
+	if (usedSections.length === 1 && usedSections[0] === 'Uncategorized' && cards.length) {
+		const fallback = text(sheetName) || 'Checklist';
+		for (const card of cards) card.checklist_name = fallback;
+		usedSections = [fallback];
 	}
 
-	const meaningfulSections = sections.filter((name) => name !== 'Uncategorized');
-	if (!meaningfulSections.length && cards.length) {
-		const fallback = text(sheetName) || 'Checklist';
-
-		for (const card of cards) card.checklist_name = fallback;
-
-		delete checklist_meta.Uncategorized;
-		checklist_meta[fallback] = {
-			card_count_declared: null,
-			parallels: [],
-			notes: []
-		};
-
-		return {
-			cards,
-			sections: [fallback],
-			checklist_meta
-		};
+	const filteredMeta = {};
+	for (const name of usedSections) {
+		if (checklist_meta[name]) filteredMeta[name] = checklist_meta[name];
+		else {
+			filteredMeta[name] = { card_count_declared: null, parallels: [], notes: [] };
+		}
 	}
 
 	return {
 		cards,
-		sections: meaningfulSections.length ? meaningfulSections : sections,
-		checklist_meta
+		sections: usedSections,
+		checklist_meta: filteredMeta
 	};
 }
 
@@ -404,6 +390,21 @@ export async function extractSpreadsheetChecklist(file) {
 		});
 	}
 
+	// Final safety pass across the whole workbook. Only sections that actually
+	// own at least one parsed card are allowed out of the spreadsheet parser.
+	const usedSections = [...new Set(
+		allCards.map((card) => card.checklist_name || 'Uncategorized').filter(Boolean)
+	)];
+
+	const prunedMeta = {};
+	for (const section of usedSections) {
+		prunedMeta[section] = checklist_meta[section] || {
+			card_count_declared: null,
+			parallels: [],
+			notes: []
+		};
+	}
+
 	const high = allCards.filter((card) => card.confidence >= 0.85).length;
 	const review = allCards.length - high;
 
@@ -414,9 +415,9 @@ export async function extractSpreadsheetChecklist(file) {
 	}
 
 	return {
-		sections: allSections,
+		sections: usedSections,
 		cards: allCards,
-		checklist_meta,
+		checklist_meta: prunedMeta,
 		metaSections: 0,
 		high,
 		review,

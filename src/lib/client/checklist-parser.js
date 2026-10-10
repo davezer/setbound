@@ -244,16 +244,27 @@ export function parseChecklistText(text, affiliations = []) {
     }
   }
 
+  // Only return sections that actually own card rows. Official PDFs often contain
+  // structural labels such as BASE, INSERT, AUTOGRAPH, product titles, etc. Those
+  // are useful document headings but they are not checklists and should not appear
+  // as empty review sections in the importer.
+  const usedSections = [...new Set(cards.map((card) => card.checklist_name).filter(Boolean))];
+  const filteredMeta = {};
+
+  for (const name of usedSections) {
+    if (checklist_meta[name]) filteredMeta[name] = checklist_meta[name];
+  }
+
   const high = cards.filter((c) => c.confidence >= .85).length;
   const review = cards.filter((c) => c.confidence < .85).length;
-  const metaSections = Object.values(checklist_meta)
+  const metaSections = Object.values(filteredMeta)
     .filter((m) => m.parallels.length || m.card_count_declared)
     .length;
 
   return {
-    sections,
+    sections: usedSections,
     cards,
-    checklist_meta,
+    checklist_meta: filteredMeta,
     metaSections,
     high,
     review,
