@@ -3,6 +3,13 @@ const AUTO_MARKERS = /\b(auto|autos|autograph|autographs|autographed)\b/i;
 const MEM_MARKERS = /\b(relic|relics|memorabilia|mem|patch|patches|jersey|jerseys)\b/i;
 const CARD_START = /^\s*([A-Z0-9][A-Z0-9._\-/]{0,24})\s+(.+)$/i;
 
+// Some official Topps historical checklists use a bare city/club label that is
+// intentionally not the current franchise name. Keep these source labels exact
+// instead of folding them into the subject or guessing a modern team.
+const SOURCE_AFFILIATION_SUFFIXES = [
+  'Cleveland'
+];
+
 // IMPORTANT: do not treat every line beginning with "Topps" as page noise.
 // Legitimate checklist headings include names like "TOPPS CHROME EXPOSE".
 const PAGE_NOISE =
@@ -97,6 +104,29 @@ function affiliationMatch(text, affiliations) {
   return best;
 }
 
+function sourceAffiliationMatch(text) {
+  const normalized = normalizeText(text);
+
+  for (const sourceName of SOURCE_AFFILIATION_SUFFIXES) {
+    const escaped = sourceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = normalized.match(new RegExp(`(?:^|\\s)(${escaped})$`, 'i'));
+
+    if (!match) continue;
+
+    const before = normalized.slice(0, normalized.length - match[1].length).trim();
+
+    // A real card row must still have a subject before the source affiliation.
+    if (!before) continue;
+
+    return {
+      name: sourceName,
+      source: match[1]
+    };
+  }
+
+  return null;
+}
+
 function parseSerial(text) {
   const match = text.match(/(?:#?\s*\/\s*|numbered\s+to\s+)(\d{1,6})\b/i);
   return match ? Number(match[1]) : null;
@@ -111,7 +141,6 @@ function parseCard(line, section, affiliations) {
 
   if (!/\d/.test(cardNumber) && !cardNumber.includes('-')) return null;
 
-  // Safety nets for headings that superficially resemble numbered card rows.
   if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) {
     return null;
   }
@@ -136,6 +165,7 @@ function parseCard(line, section, affiliations) {
     .trim();
 
   const affiliation = affiliationMatch(rest, affiliations);
+  const sourceAffiliation = affiliation ? null : sourceAffiliationMatch(rest);
 
   let subject = rest;
   let affiliationValue = 'NIL';
@@ -151,6 +181,16 @@ function parseCard(line, section, affiliations) {
     affiliationValue = affiliation.item.name;
     affiliationId = affiliation.item.id ?? null;
     confidence += 0.14;
+  } else if (sourceAffiliation) {
+    subject = rest
+      .slice(0, rest.length - sourceAffiliation.source.length)
+      .replace(/\s+-\s*$/, '')
+      .trim();
+
+    // Preserve the exact wording from the official checklist.
+    // The import API will create this affiliation if it does not already exist.
+    affiliationValue = sourceAffiliation.name;
+    confidence += 0.12;
   } else {
     confidence -= 0.04;
   }
@@ -244,10 +284,6 @@ export function parseChecklistText(text, affiliations = []) {
     }
   }
 
-  // Only return sections that actually own card rows. Official PDFs often contain
-  // structural labels such as BASE, INSERT, AUTOGRAPH, product titles, etc. Those
-  // are useful document headings but they are not checklists and should not appear
-  // as empty review sections in the importer.
   const usedSections = [...new Set(cards.map((card) => card.checklist_name).filter(Boolean))];
   const filteredMeta = {};
 
