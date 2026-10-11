@@ -2,11 +2,14 @@ import { db } from '$lib/server/db';
 
 export async function load({ platform, url }) {
 	const q = url.searchParams.get('q')?.trim() || '';
+	const requestedSport = url.searchParams.get('sport')?.trim() || 'All sports';
+	const requestedYear = url.searchParams.get('year')?.trim() || 'All years';
+	const requestedBrand = url.searchParams.get('brand')?.trim() || 'All brands';
 
 	try {
 		const database = db(platform);
 
-		let stmt = database.prepare(`
+		const result = await database.prepare(`
 			SELECT
 				p.slug,
 				p.year,
@@ -23,19 +26,24 @@ export async function load({ platform, url }) {
 			LEFT JOIN cards c ON c.product_id = p.id
 			LEFT JOIN checklists cl ON cl.product_id = p.id
 			WHERE p.published = 1
-			${q ? 'AND (p.name LIKE ? OR m.name LIKE ? OR s.name LIKE ? OR CAST(p.year AS TEXT) LIKE ?)' : ''}
 			GROUP BY p.id
 			ORDER BY p.year DESC, p.name
-		`);
+		`).all();
 
-		if (q) {
-			const like = `%${q}%`;
-			stmt = stmt.bind(like, like, like, like);
-		}
-
-		const result = await stmt.all();
-		return { sets: result.results || [], q };
+		return {
+			sets: result.results || [],
+			q,
+			requestedSport,
+			requestedYear,
+			requestedBrand
+		};
 	} catch {
-		return { sets: [], q };
+		return {
+			sets: [],
+			q,
+			requestedSport,
+			requestedYear,
+			requestedBrand
+		};
 	}
 }

@@ -22,6 +22,16 @@
 			<span class="arrow">→</span>
 		</a>
 
+		<a class="admin-link" href="/admin/odds">
+			<div class="icon">1:</div>
+			<div>
+				<span class="kicker">Odds</span>
+				<h2>Import product odds</h2>
+				<p>Parse official odds PDFs and connect pack odds to checklist data.</p>
+			</div>
+			<span class="arrow">→</span>
+		</a>
+
 		<a class="admin-link" href="/admin/cleanup">
 			<div class="icon">×</div>
 			<div>
@@ -47,7 +57,7 @@
 			<div>
 				<span class="kicker">Products</span>
 				<h2>Manage sets</h2>
-				<p>Artwork, release dates, and collector-facing notes.</p>
+				<p>Artwork, release dates, product details, and collector-facing notes.</p>
 			</div>
 			<span class="arrow">→</span>
 		</a>
