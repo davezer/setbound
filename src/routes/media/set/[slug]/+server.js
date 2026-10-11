@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 
-export async function GET({ platform, params }) {
+export async function GET({ platform, params, request }) {
 	const database = db(platform);
 
 	const product = await database
@@ -16,24 +16,18 @@ export async function GET({ platform, params }) {
 
 	const headers = new Headers();
 
-	if (object.httpMetadata?.contentType) {
-		headers.set('content-type', object.httpMetadata.contentType);
-	}
-
-	if (object.httpMetadata?.contentLanguage) {
-		headers.set('content-language', object.httpMetadata.contentLanguage);
-	}
-
-	if (object.httpMetadata?.contentDisposition) {
-		headers.set('content-disposition', object.httpMetadata.contentDisposition);
-	}
-
-	if (object.httpMetadata?.contentEncoding) {
-		headers.set('content-encoding', object.httpMetadata.contentEncoding);
-	}
+	if (object.httpMetadata?.contentType) headers.set('content-type', object.httpMetadata.contentType);
+	if (object.httpMetadata?.contentLanguage) headers.set('content-language', object.httpMetadata.contentLanguage);
+	if (object.httpMetadata?.contentDisposition) headers.set('content-disposition', object.httpMetadata.contentDisposition);
+	if (object.httpMetadata?.contentEncoding) headers.set('content-encoding', object.httpMetadata.contentEncoding);
 
 	headers.set('etag', object.httpEtag);
-	headers.set('cache-control', 'public, max-age=86400, stale-while-revalidate=604800');
+	headers.set('cache-control', 'public, max-age=0, must-revalidate');
+
+	const ifNoneMatch = request.headers.get('if-none-match');
+	if (ifNoneMatch && ifNoneMatch === object.httpEtag) {
+		return new Response(null, { status: 304, headers });
+	}
 
 	return new Response(object.body, { headers });
 }
