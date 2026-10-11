@@ -80,14 +80,23 @@ export async function getSessionUser(event) {
   try {
     const tokenHash = await sha256(rawToken);
     const user = await db(event.platform).prepare(`
-      SELECT u.id, u.email, u.display_name, u.created_at
+      SELECT
+        u.id,
+        u.email,
+        u.display_name,
+        u.created_at,
+        COALESCE(u.is_admin, 0) AS is_admin
       FROM user_sessions s
       JOIN users u ON u.id = s.user_id
-      WHERE s.token_hash = ? AND s.expires_at > datetime('now')
+      WHERE s.token_hash = ?
+        AND s.expires_at > datetime('now')
     `).bind(tokenHash).first();
 
     if (!user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
-    return user || null;
+
+    return user
+      ? { ...user, is_admin: Boolean(user.is_admin) }
+      : null;
   } catch {
     return null;
   }

@@ -23,22 +23,42 @@ export async function handle({ event, resolve }) {
   const isAdminLogin = pathname === '/admin/login';
   const isProtectedAdminApi = pathname.startsWith('/api/import') || pathname.startsWith('/api/admin');
 
-  if (!isAdminPage && !isProtectedAdminApi) return resolve(event);
-
-  const password = getPrivateEnv(event.platform, 'ADMIN_PASSWORD');
-
-  if (!password) {
-    if (isProtectedAdminApi) return json({ message: 'Admin authentication is not configured.' }, { status: 503 });
-    if (!isAdminLogin) throw redirect(303, '/admin/login?error=not-configured');
+  if (!isAdminPage && !isProtectedAdminApi) {
+    event.locals.isAdmin = Boolean(event.locals.user?.is_admin);
     return resolve(event);
   }
 
-  const expectedToken = await makeAdminSessionToken(password);
-  const suppliedToken = event.cookies.get(ADMIN_COOKIE) || '';
-  const isAdmin = suppliedToken === expectedToken;
+  const password = getPrivateEnv(event.platform, 'ADMIN_PASSWORD');
+
+  let passwordAdmin = false;
+
+  if (password) {
+    const expectedToken = await makeAdminSessionToken(password);
+    const suppliedToken = event.cookies.get(ADMIN_COOKIE) || '';
+    passwordAdmin = suppliedToken === expectedToken;
+  }
+
+  const accountAdmin = Boolean(event.locals.user?.is_admin);
+  const isAdmin = accountAdmin || passwordAdmin;
+
   event.locals.isAdmin = isAdmin;
 
-  if (isProtectedAdminApi && !isAdmin) return json({ message: 'Unauthorized.' }, { status: 401 });
+  // Keep the old password route as a backup even after account-admin access is enabled.
+  if (!password && !accountAdmin) {
+    if (isProtectedAdminApi) {
+      return json({ message: 'Admin authentication is not configured.' }, { status: 503 });
+    }
+
+    if (!isAdminLogin) {
+      throw redirect(303, '/admin/login?error=not-configured');
+    }
+
+    return resolve(event);
+  }
+
+  if (isProtectedAdminApi && !isAdmin) {
+    return json({ message: 'Unauthorized.' }, { status: 401 });
+  }
 
   if (isAdminPage && !isAdminLogin && !isAdmin) {
     const next = `${pathname}${event.url.search}`;
