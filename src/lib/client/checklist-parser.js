@@ -13,7 +13,9 @@ const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
 const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
 const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
+const NUMERIC_HEADING = /^(\d{1,4})\s+(.+)$/;
 const UNRESOLVED = 'UNRESOLVED';
+const SOURCE_NIL = '__SOURCE_NIL__';
 
 function normalizeChunk(value = '') {
   return String(value)
@@ -54,10 +56,27 @@ function looksLikeOrdinalHeading(line) {
   return Boolean(rest && rest.length <= 90 && rest.split(/\s+/).length <= 10 && uppercaseRatio(rest) > 0.84);
 }
 
+function looksLikeNumericHeading(line) {
+  const match = line.match(NUMERIC_HEADING);
+  if (!match) return false;
+  const rest = match[2].trim();
+  return Boolean(
+    rest &&
+    rest.length <= 90 &&
+    rest.split(/\s+/).length <= 10 &&
+    uppercaseRatio(rest) > 0.84 &&
+    HEADING_HINT.test(rest)
+  );
+}
+
 function looksLikeHeading(line) {
   if (!line || line.length > 100) return false;
   if (PAGE_NOISE.test(line) || PARALLEL_LABEL.test(line)) return false;
-  if (looksLikeYearHeading(line) || looksLikeOrdinalHeading(line)) return true;
+
+  if (looksLikeYearHeading(line) || looksLikeOrdinalHeading(line) || looksLikeNumericHeading(line)) {
+    return true;
+  }
+
   if (/^\d/.test(line)) return false;
 
   const upperRatio = uppercaseRatio(line);
@@ -94,9 +113,6 @@ function structuredColumns(rest) {
   if (!rest.includes('\t')) return null;
 
   const parts = rest.split('\t').map(normalizeChunk);
-
-  // With the column-aware PDF extractor:
-  // [subject, affiliation, flags/notes...]
   if (parts.length < 2) return null;
 
   const subject = parts[0];
@@ -104,16 +120,15 @@ function structuredColumns(rest) {
 
   if (!subject) return null;
 
-  // If column 2 is a flag, there was no affiliation column populated.
-  if (!affiliation || /^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(affiliation)) {
-    return { subject, affiliation: null, trailing: parts.slice(1) };
+  if (affiliation === SOURCE_NIL) {
+    return { subject, affiliation: null, sourceNil: true, trailing: parts.slice(2) };
   }
 
-  return {
-    subject,
-    affiliation,
-    trailing: parts.slice(2)
-  };
+  if (!affiliation || /^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(affiliation)) {
+    return { subject, affiliation: null, sourceNil: true, trailing: parts.slice(1) };
+  }
+
+  return { subject, affiliation, sourceNil: false, trailing: parts.slice(2) };
 }
 
 function parseCard(line, section, affiliations) {
@@ -124,7 +139,6 @@ function parseCard(line, section, affiliations) {
   let rest = normalizeText(m[2]);
 
   if (!/\d/.test(cardNumber) && !cardNumber.includes('-')) return null;
-
   if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) return null;
 
   if (/^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) && uppercaseRatio(rest) > 0.84) {
@@ -153,7 +167,11 @@ function parseCard(line, section, affiliations) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    if (columns.affiliation) {
+    if (columns.sourceNil) {
+      affiliationValue = 'NIL';
+      affiliationStatus = 'source-nil';
+      confidence = 0.98;
+    } else if (columns.affiliation) {
       affiliationValue = columns.affiliation;
       affiliationStatus = 'source';
       confidence = 0.98;
