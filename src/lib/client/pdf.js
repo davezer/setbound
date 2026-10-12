@@ -1,6 +1,6 @@
 import { browser } from '$app/environment';
 
-const CARD_TOKEN = /^[A-Z0-9][A-Z0-9._\\-/]{0,24}$/i;
+const CARD_TOKEN = /^[A-Z0-9][A-Z0-9._\/-]{0,24}$/i;
 const SOURCE_NIL = '__SOURCE_NIL__';
 
 export async function extractPdfText(file) {
