@@ -3,13 +3,6 @@ const AUTO_MARKERS = /\b(auto|autos|autograph|autographs|autographed)\b/i;
 const MEM_MARKERS = /\b(relic|relics|memorabilia|mem|patch|patches|jersey|jerseys)\b/i;
 const CARD_START = /^\s*([A-Z0-9][A-Z0-9._\-/]{0,24})\s+(.+)$/i;
 
-// Some official Topps historical checklists use a bare city/club label that is
-// intentionally not the current franchise name. Keep these source labels exact
-// instead of folding them into the subject or guessing a modern team.
-const SOURCE_AFFILIATION_SUFFIXES = [
-  'Cleveland'
-];
-
 // IMPORTANT: do not treat every line beginning with "Topps" as page noise.
 // Legitimate checklist headings include names like "TOPPS CHROME EXPOSE".
 const PAGE_NOISE =
@@ -23,14 +16,25 @@ const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
 const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
 
-export function normalizeText(value = '') {
-  return value
+function normalizeChunk(value = '') {
+  return String(value)
     .replace(/[®™©]/g, '')
     .replace(/[“”]/g, '"')
     .replace(/[’]/g, "'")
     .replace(/\u00a0/g, ' ')
-    .replace(/[ \t]+/g, ' ')
+    .replace(/ +/g, ' ')
     .trim();
+}
+
+export function normalizeText(value = '') {
+  // Preserve tabs inserted by pdf.js. They represent real visual columns in
+  // official checklist PDFs and are much more trustworthy than guessing team
+  // names from a global affiliation dictionary.
+  return String(value)
+    .split(/\t+/)
+    .map(normalizeChunk)
+    .filter(Boolean)
+    .join('\t');
 }
 
 function uppercaseRatio(value) {
@@ -78,14 +82,14 @@ function looksLikeHeading(line) {
 }
 
 function affiliationMatch(text, affiliations) {
-  const haystack = normalizeText(text).toLowerCase();
+  const haystack = normalizeChunk(text).toLowerCase();
   let best = null;
 
   for (const item of affiliations) {
     const candidates = [item.name, ...(item.aliases || [])].filter(Boolean);
 
     for (const candidate of candidates) {
-      const needle = normalizeText(candidate).toLowerCase();
+      const needle = normalizeChunk(candidate).toLowerCase();
 
       if (
         needle &&
@@ -104,32 +108,34 @@ function affiliationMatch(text, affiliations) {
   return best;
 }
 
-function sourceAffiliationMatch(text) {
-  const normalized = normalizeText(text);
-
-  for (const sourceName of SOURCE_AFFILIATION_SUFFIXES) {
-    const escaped = sourceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = normalized.match(new RegExp(`(?:^|\\s)(${escaped})$`, 'i'));
-
-    if (!match) continue;
-
-    const before = normalized.slice(0, normalized.length - match[1].length).trim();
-
-    // A real card row must still have a subject before the source affiliation.
-    if (!before) continue;
-
-    return {
-      name: sourceName,
-      source: match[1]
-    };
-  }
-
-  return null;
-}
-
 function parseSerial(text) {
   const match = text.match(/(?:#?\s*\/\s*|numbered\s+to\s+)(\d{1,6})\b/i);
   return match ? Number(match[1]) : null;
+}
+
+function structuredColumns(rest) {
+  if (!rest.includes('\t')) return null;
+
+  const parts = rest
+    .split(/\t+/)
+    .map(normalizeChunk)
+    .filter(Boolean);
+
+  if (parts.length < 2) return null;
+
+  const subject = parts[0];
+  const second = parts[1];
+
+  // Do not mistake a flags-only column for an affiliation.
+  if (/^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(second)) {
+    return null;
+  }
+
+  return {
+    subject,
+    affiliation: second,
+    trailing: parts.slice(2)
+  };
 }
 
 function parseCard(line, section, affiliations) {
@@ -152,47 +158,61 @@ function parseCard(line, section, affiliations) {
     return null;
   }
 
+  const rawRest = rest;
+  const columns = structuredColumns(rawRest);
+
   const flags = {
-    rookie: ROOKIE_MARKERS.test(rest),
-    autograph: AUTO_MARKERS.test(`${section} ${rest}`),
-    memorabilia: MEM_MARKERS.test(`${section} ${rest}`)
+    rookie: ROOKIE_MARKERS.test(rawRest),
+    autograph: AUTO_MARKERS.test(`${section} ${rawRest}`),
+    memorabilia: MEM_MARKERS.test(`${section} ${rawRest}`)
   };
 
-  rest = rest
-    .replace(/\bRookie\b/gi, '')
-    .replace(/\bRC\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const affiliation = affiliationMatch(rest, affiliations);
-  const sourceAffiliation = affiliation ? null : sourceAffiliationMatch(rest);
-
-  let subject = rest;
+  let subject;
   let affiliationValue = 'NIL';
   let affiliationId = null;
   let confidence = 0.78;
 
-  if (affiliation) {
-    subject = rest
-      .slice(0, rest.length - affiliation.source.length)
-      .replace(/\s+-\s*$/, '')
+  if (columns) {
+    subject = columns.subject
+      .replace(/\bRookie\b/gi, '')
+      .replace(/\bRC\b/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
 
-    affiliationValue = affiliation.item.name;
-    affiliationId = affiliation.item.id ?? null;
-    confidence += 0.14;
-  } else if (sourceAffiliation) {
-    subject = rest
-      .slice(0, rest.length - sourceAffiliation.source.length)
-      .replace(/\s+-\s*$/, '')
-      .trim();
+    // This is taken directly from the affiliation column of the official PDF.
+    // Keep the source wording exact rather than trying to translate it through
+    // baseball/NFL/NCAA aliases.
+    affiliationValue = columns.affiliation;
+    confidence = 0.98;
 
-    // Preserve the exact wording from the official checklist.
-    // The import API will create this affiliation if it does not already exist.
-    affiliationValue = sourceAffiliation.name;
-    confidence += 0.12;
+    const known = affiliationMatch(affiliationValue, affiliations);
+    if (known && normalizeChunk(known.source).toLowerCase() === normalizeChunk(affiliationValue).toLowerCase()) {
+      affiliationId = known.item.id ?? null;
+      affiliationValue = known.item.name;
+    }
   } else {
-    confidence -= 0.04;
+    rest = rest
+      .replace(/\bRookie\b/gi, '')
+      .replace(/\bRC\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const affiliation = affiliationMatch(rest, affiliations);
+
+    subject = rest;
+
+    if (affiliation) {
+      subject = rest
+        .slice(0, rest.length - affiliation.source.length)
+        .replace(/\s+-\s*$/, '')
+        .trim();
+
+      affiliationValue = affiliation.item.name;
+      affiliationId = affiliation.item.id ?? null;
+      confidence += 0.14;
+    } else {
+      confidence -= 0.04;
+    }
   }
 
   if (/^[A-Z0-9][A-Z0-9-]*$/i.test(cardNumber)) confidence += 0.04;

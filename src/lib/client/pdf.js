@@ -21,7 +21,7 @@ export async function extractPdfText(file) {
 		const rows = new Map();
 
 		for (const item of content.items) {
-			if (!('str' in item)) continue;
+			if (!('str' in item) || !item.str) continue;
 
 			const x = item.transform[4];
 			const y = Math.round(item.transform[5]);
@@ -30,20 +30,42 @@ export async function extractPdfText(file) {
 
 			rows.get(y).push({
 				x,
+				width: Number(item.width || 0),
 				text: item.str
 			});
 		}
 
 		const lines = [...rows.entries()]
 			.sort((a, b) => b[0] - a[0])
-			.map(([, row]) =>
-				row
-					.sort((a, b) => a.x - b.x)
-					.map((item) => item.text)
-					.join(' ')
-					.replace(/\s+/g, ' ')
-					.trim()
-			)
+			.map(([, row]) => {
+				const items = row.sort((a, b) => a.x - b.x);
+				let line = '';
+
+				for (let i = 0; i < items.length; i++) {
+					const item = items[i];
+					const text = String(item.text || '').trim();
+					if (!text) continue;
+
+					if (!line) {
+						line = text;
+						continue;
+					}
+
+					const previous = items[i - 1];
+					const previousRight = previous.x + Number(previous.width || 0);
+					const gap = item.x - previousRight;
+
+					// Official Topps PDFs are laid out as real columns. Preserve large
+					// horizontal gaps as tabs so the checklist parser can distinguish:
+					// card number | subject | affiliation | flags/notes.
+					line += gap >= 18 ? `\t${text}` : ` ${text}`;
+				}
+
+				return line
+					.replace(/ +/g, ' ')
+					.replace(/ *\t */g, '\t')
+					.trim();
+			})
 			.filter(Boolean);
 
 		pages.push(lines.join('\n'));
