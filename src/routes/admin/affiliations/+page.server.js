@@ -9,13 +9,10 @@ function normalized(value) {
 	return clean(value).toLowerCase();
 }
 
-function slug(value) {
-	return normalized(value)
-		.normalize('NFKD')
-		.replace(/[\u0300-\u036f]/g, '')
-		.replace(/&/g, ' and ')
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-|-$/g, '');
+function parseIds(form) {
+	return form.getAll('affiliation_id')
+		.map((value) => Number(value))
+		.filter((value) => Number.isInteger(value) && value > 0);
 }
 
 export async function load({ platform, url }) {
@@ -69,6 +66,68 @@ export async function load({ platform, url }) {
 }
 
 export const actions = {
+	bulk: async ({ platform, request, url }) => {
+		const database = db(platform);
+		const form = await request.formData();
+		const ids = parseIds(form);
+
+		if (!ids.length) {
+			return fail(400, { message: 'Select at least one affiliation.' });
+		}
+
+		const sportMode = String(form.get('bulk_sport') || 'unchanged');
+		const leagueMode = String(form.get('league_mode') || 'unchanged');
+		const leagueValue = clean(form.get('bulk_league'));
+		const typeMode = String(form.get('bulk_type') || 'unchanged');
+
+		const assignments = [];
+		const bindings = [];
+
+		if (sportMode === 'clear') {
+			assignments.push('sport_id = NULL');
+		} else if (/^\d+$/.test(sportMode)) {
+			assignments.push('sport_id = ?');
+			bindings.push(Number(sportMode));
+		}
+
+		if (leagueMode === 'clear') {
+			assignments.push('league = NULL');
+		} else if (leagueMode === 'set') {
+			if (!leagueValue) {
+				return fail(400, { message: 'Enter a league value, or choose Clear league.' });
+			}
+			assignments.push('league = ?');
+			bindings.push(leagueValue);
+		}
+
+		if (typeMode !== 'unchanged') {
+			const allowed = new Set(['team', 'school', 'country', 'organization', 'other']);
+			if (!allowed.has(typeMode)) {
+				return fail(400, { message: 'Invalid affiliation type.' });
+			}
+
+			assignments.push('type = ?');
+			bindings.push(typeMode);
+		}
+
+		if (!assignments.length) {
+			return fail(400, { message: 'Choose at least one field to change.' });
+		}
+
+		const placeholders = ids.map(() => '?').join(', ');
+
+		await database.prepare(`
+			UPDATE affiliations
+			SET ${assignments.join(', ')}
+			WHERE id IN (${placeholders})
+		`).bind(...bindings, ...ids).run();
+
+		const params = new URLSearchParams(url.searchParams);
+		params.set('bulk_saved', String(ids.length));
+
+		throw redirect(303, `/admin/affiliations?${params.toString()}`);
+	},
+
 	save: async ({ platform, request, url }) => {
 		const database = db(platform);
 		const form = await request.formData();
