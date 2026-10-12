@@ -22,10 +22,12 @@ function sortKey(cardNumber) {
 function resolvedSubject(card) {
 	const explicit = String(card.subject || '').trim();
 	if (explicit) return explicit;
-
-	// Some official checklists legitimately have no named subject.
-	// Use the checklist heading as the display subject rather than inventing a person.
 	return String(card.checklist_name || 'Unspecified subject').trim() || 'Unspecified subject';
+}
+
+function hasVerifiedAffiliation(card) {
+	const value = String(card.affiliation || '').trim();
+	return Boolean(value && value !== 'NIL' && value !== 'UNRESOLVED');
 }
 
 export async function POST({ request, platform }) {
@@ -33,14 +35,19 @@ export async function POST({ request, platform }) {
 		const database = db(platform);
 		const body = await request.json();
 
-		if (
-			!body.name ||
-			!body.year ||
-			!body.sportId ||
-			!body.manufacturerId ||
-			!Array.isArray(body.cards)
-		) {
+		if (!body.name || !body.year || !body.sportId || !body.manufacturerId || !Array.isArray(body.cards)) {
 			return json({ message: 'Missing import fields.' }, { status: 400 });
+		}
+
+		const unresolved = body.cards.filter(
+			(card) => card.affiliation === 'UNRESOLVED' || card.affiliation_status === 'unresolved'
+		);
+
+		if (unresolved.length) {
+			return json({
+				message: `${unresolved.length} selected card${unresolved.length === 1 ? '' : 's'} still have unresolved affiliations. Deselect or fix them before importing.`,
+				code: 'UNRESOLVED_AFFILIATIONS'
+			}, { status: 400 });
 		}
 
 		const slug = `${body.year}-${slugify(body.name)}`;
@@ -51,41 +58,32 @@ export async function POST({ request, platform }) {
 			.first();
 
 		if (existingProduct) {
-			return json(
-				{
-					message: `${existingProduct.year} ${existingProduct.name} is already in Setbound. Delete or replace the existing product before importing it again.`,
-					code: 'PRODUCT_ALREADY_EXISTS'
-				},
-				{ status: 409 }
-			);
+			return json({
+				message: `${existingProduct.year} ${existingProduct.name} is already in Setbound. Delete or replace the existing product before importing it again.`,
+				code: 'PRODUCT_ALREADY_EXISTS'
+			}, { status: 409 });
 		}
 
-		const source = await database
-			.prepare(
-				`INSERT INTO sources
-					(source_type, source_url, original_filename, imported_at)
-				 VALUES ('official', ?, ?, datetime('now'))
-				 RETURNING id`
-			)
-			.bind(body.sourceUrl || null, body.sourceFilename || null)
-			.first();
+		const source = await database.prepare(
+			`INSERT INTO sources
+				(source_type, source_url, original_filename, imported_at)
+			 VALUES ('official', ?, ?, datetime('now'))
+			 RETURNING id`
+		).bind(body.sourceUrl || null, body.sourceFilename || null).first();
 
-		const product = await database
-			.prepare(
-				`INSERT INTO products
-					(sport_id, manufacturer_id, year, name, slug, primary_source_id, published)
-				 VALUES (?, ?, ?, ?, ?, ?, 1)
-				 RETURNING id`
-			)
-			.bind(
-				body.sportId,
-				body.manufacturerId,
-				body.year,
-				body.name,
-				slug,
-				source.id
-			)
-			.first();
+		const product = await database.prepare(
+			`INSERT INTO products
+				(sport_id, manufacturer_id, year, name, slug, primary_source_id, published)
+			 VALUES (?, ?, ?, ?, ?, ?, 1)
+			 RETURNING id`
+		).bind(
+			body.sportId,
+			body.manufacturerId,
+			body.year,
+			body.name,
+			slug,
+			source.id
+		).first();
 
 		const checklistIds = new Map();
 		const subjectIds = new Map();
@@ -101,21 +99,18 @@ export async function POST({ request, platform }) {
 
 		for (const card of body.cards) {
 			if (!checklistIds.has(card.checklist_name)) {
-				const row = await database
-					.prepare(
-						`INSERT INTO checklists
-							(product_id, name, slug, kind, sort_order)
-						 VALUES (?, ?, ?, ?, ?)
-						 RETURNING id`
-					)
-					.bind(
-						product.id,
-						card.checklist_name,
-						slugify(card.checklist_name),
-						'checklist',
-						sort++
-					)
-					.first();
+				const row = await database.prepare(
+					`INSERT INTO checklists
+						(product_id, name, slug, kind, sort_order)
+					 VALUES (?, ?, ?, ?, ?)
+					 RETURNING id`
+				).bind(
+					product.id,
+					card.checklist_name,
+					slugify(card.checklist_name),
+					'checklist',
+					sort++
+				).first();
 
 				checklistIds.set(card.checklist_name, row.id);
 			}
@@ -130,19 +125,16 @@ export async function POST({ request, platform }) {
 					.first();
 
 				if (!row) {
-					row = await database
-						.prepare(
-							`INSERT INTO subjects
-								(name, normalized_name, subject_type)
-							 VALUES (?, ?, ?)
-							 RETURNING id`
-						)
-						.bind(
-							subjectName,
-							subjectKey,
-							card.affiliation === 'NIL' ? 'personality' : 'athlete'
-						)
-						.first();
+					row = await database.prepare(
+						`INSERT INTO subjects
+							(name, normalized_name, subject_type)
+						 VALUES (?, ?, ?)
+						 RETURNING id`
+					).bind(
+						subjectName,
+						subjectKey,
+						hasVerifiedAffiliation(card) ? 'athlete' : 'personality'
+					).first();
 				}
 
 				subjectIds.set(subjectKey, row.id);
@@ -150,52 +142,42 @@ export async function POST({ request, platform }) {
 
 			let affiliationId = null;
 
-			if (card.affiliation && card.affiliation !== 'NIL') {
-				affiliationId =
-					affiliationIds.get(card.affiliation.toLowerCase()) || null;
+			if (hasVerifiedAffiliation(card)) {
+				affiliationId = affiliationIds.get(card.affiliation.toLowerCase()) || null;
 
 				if (!affiliationId) {
-					const row = await database
-						.prepare(
-							`INSERT INTO affiliations
-								(name, normalized_name, type, aliases_json)
-							 VALUES (?, ?, 'team', '[]')
-							 RETURNING id`
-						)
-						.bind(card.affiliation, card.affiliation.toLowerCase())
-						.first();
+					const row = await database.prepare(
+						`INSERT INTO affiliations
+							(name, normalized_name, type, aliases_json)
+						 VALUES (?, ?, 'team', '[]')
+						 RETURNING id`
+					).bind(card.affiliation, card.affiliation.toLowerCase()).first();
 
 					affiliationId = row.id;
-					affiliationIds.set(
-						card.affiliation.toLowerCase(),
-						affiliationId
-					);
+					affiliationIds.set(card.affiliation.toLowerCase(), affiliationId);
 				}
 			}
 
-			await database
-				.prepare(
-					`INSERT INTO cards
-						(product_id, checklist_id, subject_id, affiliation_id, card_number,
-						 sort_key, rookie, autograph, memorabilia, serial_number,
-						 confidence, raw_source)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-				)
-				.bind(
-					product.id,
-					checklistIds.get(card.checklist_name),
-					subjectIds.get(subjectKey),
-					affiliationId,
-					String(card.card_number),
-					sortKey(card.card_number),
-					card.rookie ? 1 : 0,
-					card.autograph ? 1 : 0,
-					card.memorabilia ? 1 : 0,
-					card.serial_number || null,
-					card.confidence || null,
-					card.raw || null
-				)
-				.run();
+			await database.prepare(
+				`INSERT INTO cards
+					(product_id, checklist_id, subject_id, affiliation_id, card_number,
+					 sort_key, rookie, autograph, memorabilia, serial_number,
+					 confidence, raw_source)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			).bind(
+				product.id,
+				checklistIds.get(card.checklist_name),
+				subjectIds.get(subjectKey),
+				affiliationId,
+				String(card.card_number),
+				sortKey(card.card_number),
+				card.rookie ? 1 : 0,
+				card.autograph ? 1 : 0,
+				card.memorabilia ? 1 : 0,
+				card.serial_number || null,
+				card.confidence || null,
+				card.raw || null
+			).run();
 		}
 
 		const checklistMeta = body.checklistMeta || {};
@@ -204,35 +186,25 @@ export async function POST({ request, platform }) {
 			const checklistId = checklistIds.get(name);
 			if (!checklistId) continue;
 
-			await database
-				.prepare(
-					`INSERT INTO checklist_details
-						(checklist_id, card_count_declared, parallels_json, notes_json, updated_at)
-					 VALUES (?, ?, ?, ?, datetime('now'))
-					 ON CONFLICT(checklist_id) DO UPDATE SET
-						card_count_declared = excluded.card_count_declared,
-						parallels_json = excluded.parallels_json,
-						notes_json = excluded.notes_json,
-						updated_at = datetime('now')`
-				)
-				.bind(
-					checklistId,
-					meta?.card_count_declared || null,
-					JSON.stringify(meta?.parallels || []),
-					JSON.stringify(meta?.notes || [])
-				)
-				.run();
+			await database.prepare(
+				`INSERT INTO checklist_details
+					(checklist_id, card_count_declared, parallels_json, notes_json, updated_at)
+				 VALUES (?, ?, ?, ?, datetime('now'))
+				 ON CONFLICT(checklist_id) DO UPDATE SET
+					card_count_declared = excluded.card_count_declared,
+					parallels_json = excluded.parallels_json,
+					notes_json = excluded.notes_json,
+					updated_at = datetime('now')`
+			).bind(
+				checklistId,
+				meta?.card_count_declared || null,
+				JSON.stringify(meta?.parallels || []),
+				JSON.stringify(meta?.notes || [])
+			).run();
 		}
 
-		return json({
-			ok: true,
-			slug,
-			imported: body.cards.length
-		});
+		return json({ ok: true, slug, imported: body.cards.length });
 	} catch (e) {
-		return json(
-			{ message: e?.message || 'Import failed.' },
-			{ status: 500 }
-		);
+		return json({ message: e?.message || 'Import failed.' }, { status: 500 });
 	}
 }

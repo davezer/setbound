@@ -3,13 +3,7 @@ function keyPart(value) {
 }
 
 function makeIssue({ type, checklist = null, message, cardIndexes = [] }) {
-	return {
-		severity: 'review',
-		type,
-		checklist,
-		message,
-		cardIndexes
-	};
+	return { severity: 'review', type, checklist, message, cardIndexes };
 }
 
 export function validateChecklistImport(cards = [], checklistMeta = {}, sections = []) {
@@ -27,6 +21,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 				highConfidence: 0,
 				lowConfidence: 0,
 				nil: 0,
+				unresolved: 0,
 				issues: 0,
 				blockers: 0
 			};
@@ -46,6 +41,16 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 
 		if (!card.affiliation || card.affiliation === 'NIL') stats.nil += 1;
 
+		if (card.affiliation === 'UNRESOLVED' || card.affiliation_status === 'unresolved') {
+			stats.unresolved += 1;
+			issues.push(makeIssue({
+				type: 'unresolved-affiliation',
+				checklist,
+				message: `${card.card_number || '(no number)'} ${card.subject || ''} has no verified affiliation. Check the source row before importing.`.trim(),
+				cardIndexes: [index]
+			}));
+		}
+
 		if (!String(card.subject || '').trim()) {
 			issues.push(makeIssue({
 				type: 'missing-subject',
@@ -64,7 +69,7 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 			}));
 		}
 
-		if ((card.confidence ?? 0) < 0.85) {
+		if ((card.confidence ?? 0) < 0.85 && card.affiliation_status !== 'unresolved') {
 			issues.push(makeIssue({
 				type: 'low-confidence',
 				checklist,
@@ -90,12 +95,8 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 		}
 	});
 
-	// Same printed card number with different subjects is common in official
-	// products (tag-team cards, multi-subject cards, manufacturer numbering quirks).
-	// Do not flag that by itself. Only flag truly repeated logical rows.
 	for (const indexes of exactMap.values()) {
 		if (indexes.length < 2) continue;
-
 		const sample = cards[indexes[0]];
 
 		issues.push(makeIssue({
@@ -108,7 +109,6 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 
 	for (const indexes of rawMap.values()) {
 		if (indexes.length < 2) continue;
-
 		const sample = cards[indexes[0]];
 
 		issues.push(makeIssue({
@@ -119,10 +119,6 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 		}));
 	}
 
-	// IMPORTANT:
-	// Never create "empty section" validation issues. Source files frequently contain
-	// structural headings such as BASE, INSERT, AUTOGRAPH RELIC, or title rows.
-	// If no parsed card belongs to a heading, it is not an importable checklist.
 	const knownSections = new Set(
 		cards.map((card) => card.checklist_name || 'Uncategorized').filter(Boolean)
 	);
@@ -148,23 +144,22 @@ export function validateChecklistImport(cards = [], checklistMeta = {}, sections
 		ensureSection(issue.checklist).issues += 1;
 	}
 
-	const review = issues;
-	const blockers = [];
-	const nilCards = cards.filter(
-		(card) => !card.affiliation || card.affiliation === 'NIL'
+	const unresolvedCards = cards.filter(
+		(card) => card.affiliation === 'UNRESOLVED' || card.affiliation_status === 'unresolved'
 	).length;
 
 	return {
 		issues,
-		blockers,
-		review,
+		blockers: [],
+		review: issues,
 		byChecklist,
 		totals: {
 			cards: cards.length,
 			sections: knownSections.size,
 			blockers: 0,
-			review: review.length,
-			nilCards,
+			review: issues.length,
+			nilCards: cards.filter((card) => !card.affiliation || card.affiliation === 'NIL').length,
+			unresolvedCards,
 			lowConfidence: cards.filter((card) => (card.confidence ?? 0) < 0.85).length
 		},
 		canImport: cards.length > 0

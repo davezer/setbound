@@ -3,8 +3,6 @@ const AUTO_MARKERS = /\b(auto|autos|autograph|autographs|autographed)\b/i;
 const MEM_MARKERS = /\b(relic|relics|memorabilia|mem|patch|patches|jersey|jerseys)\b/i;
 const CARD_START = /^\s*([A-Z0-9][A-Z0-9._\-/]{0,24})\s+(.+)$/i;
 
-// IMPORTANT: do not treat every line beginning with "Topps" as page noise.
-// Legitimate checklist headings include names like "TOPPS CHROME EXPOSE".
 const PAGE_NOISE =
   /^(checklists provided by|page\s+\d+\b|copyright\b|topps\s+(?:company|checklist\s+provided|all rights reserved)\b)/i;
 
@@ -15,6 +13,7 @@ const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
 const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
 const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
+const UNRESOLVED = 'UNRESOLVED';
 
 function normalizeChunk(value = '') {
   return String(value)
@@ -27,58 +26,44 @@ function normalizeChunk(value = '') {
 }
 
 export function normalizeText(value = '') {
-  // Preserve tabs inserted by pdf.js. They represent real visual columns in
-  // official checklist PDFs and are much more trustworthy than guessing team
-  // names from a global affiliation dictionary.
   return String(value)
-    .split(/\t+/)
+    .split(/\t/)
     .map(normalizeChunk)
-    .filter(Boolean)
-    .join('\t');
+    .join('\t')
+    .replace(/\t{3,}/g, '\t\t')
+    .trim();
 }
 
 function uppercaseRatio(value) {
   const letters = value.replace(/[^A-Za-z]/g, '');
   if (!letters) return 0;
-
   return [...letters].filter((c) => c === c.toUpperCase()).length / letters.length;
 }
 
 function looksLikeYearHeading(line) {
   const match = line.match(YEAR_HEADING);
   if (!match) return false;
-
   const rest = match[1].trim();
-  if (!rest || rest.length > 90 || rest.split(/\s+/).length > 10) return false;
-
-  return uppercaseRatio(rest) > 0.84;
+  return Boolean(rest && rest.length <= 90 && rest.split(/\s+/).length <= 10 && uppercaseRatio(rest) > 0.84);
 }
 
 function looksLikeOrdinalHeading(line) {
   const match = line.match(ORDINAL_HEADING);
   if (!match) return false;
-
   const rest = match[2].trim();
-  if (!rest || rest.length > 90 || rest.split(/\s+/).length > 10) return false;
-
-  return uppercaseRatio(rest) > 0.84;
+  return Boolean(rest && rest.length <= 90 && rest.split(/\s+/).length <= 10 && uppercaseRatio(rest) > 0.84);
 }
 
 function looksLikeHeading(line) {
   if (!line || line.length > 100) return false;
   if (PAGE_NOISE.test(line) || PARALLEL_LABEL.test(line)) return false;
-
   if (looksLikeYearHeading(line) || looksLikeOrdinalHeading(line)) return true;
   if (/^\d/.test(line)) return false;
 
   const upperRatio = uppercaseRatio(line);
-
   if (/\bchecklist\b/i.test(line) && line.split(/\s+/).length <= 10) return true;
 
-  return (
-    upperRatio > 0.84 &&
-    (HEADING_HINT.test(line) || line.split(/\s+/).length <= 8)
-  );
+  return upperRatio > 0.84 && (HEADING_HINT.test(line) || line.split(/\s+/).length <= 8);
 }
 
 function affiliationMatch(text, affiliations) {
@@ -91,16 +76,8 @@ function affiliationMatch(text, affiliations) {
     for (const candidate of candidates) {
       const needle = normalizeChunk(candidate).toLowerCase();
 
-      if (
-        needle &&
-        haystack.endsWith(needle) &&
-        (!best || needle.length > best.needle.length)
-      ) {
-        best = {
-          item,
-          needle,
-          source: text.slice(text.length - candidate.length)
-        };
+      if (needle && haystack.endsWith(needle) && (!best || needle.length > best.needle.length)) {
+        best = { item, needle, source: text.slice(text.length - candidate.length) };
       }
     }
   }
@@ -116,24 +93,25 @@ function parseSerial(text) {
 function structuredColumns(rest) {
   if (!rest.includes('\t')) return null;
 
-  const parts = rest
-    .split(/\t+/)
-    .map(normalizeChunk)
-    .filter(Boolean);
+  const parts = rest.split('\t').map(normalizeChunk);
 
+  // With the column-aware PDF extractor:
+  // [subject, affiliation, flags/notes...]
   if (parts.length < 2) return null;
 
   const subject = parts[0];
-  const second = parts[1];
+  const affiliation = parts[1];
 
-  // Do not mistake a flags-only column for an affiliation.
-  if (/^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(second)) {
-    return null;
+  if (!subject) return null;
+
+  // If column 2 is a flag, there was no affiliation column populated.
+  if (!affiliation || /^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(affiliation)) {
+    return { subject, affiliation: null, trailing: parts.slice(1) };
   }
 
   return {
     subject,
-    affiliation: second,
+    affiliation,
     trailing: parts.slice(2)
   };
 }
@@ -147,14 +125,9 @@ function parseCard(line, section, affiliations) {
 
   if (!/\d/.test(cardNumber) && !cardNumber.includes('-')) return null;
 
-  if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) {
-    return null;
-  }
+  if (/^(?:19|20)\d{2}$/.test(cardNumber) && uppercaseRatio(rest) > 0.84) return null;
 
-  if (
-    /^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) &&
-    uppercaseRatio(rest) > 0.84
-  ) {
+  if (/^\d{1,4}(?:ST|ND|RD|TH)$/i.test(cardNumber) && uppercaseRatio(rest) > 0.84) {
     return null;
   }
 
@@ -168,9 +141,10 @@ function parseCard(line, section, affiliations) {
   };
 
   let subject;
-  let affiliationValue = 'NIL';
+  let affiliationValue = UNRESOLVED;
   let affiliationId = null;
-  let confidence = 0.78;
+  let affiliationStatus = 'unresolved';
+  let confidence = 0.76;
 
   if (columns) {
     subject = columns.subject
@@ -179,16 +153,20 @@ function parseCard(line, section, affiliations) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    // This is taken directly from the affiliation column of the official PDF.
-    // Keep the source wording exact rather than trying to translate it through
-    // baseball/NFL/NCAA aliases.
-    affiliationValue = columns.affiliation;
-    confidence = 0.98;
+    if (columns.affiliation) {
+      affiliationValue = columns.affiliation;
+      affiliationStatus = 'source';
+      confidence = 0.98;
 
-    const known = affiliationMatch(affiliationValue, affiliations);
-    if (known && normalizeChunk(known.source).toLowerCase() === normalizeChunk(affiliationValue).toLowerCase()) {
-      affiliationId = known.item.id ?? null;
-      affiliationValue = known.item.name;
+      const known = affiliationMatch(affiliationValue, affiliations);
+
+      if (
+        known &&
+        normalizeChunk(known.source).toLowerCase() === normalizeChunk(affiliationValue).toLowerCase()
+      ) {
+        affiliationId = known.item.id ?? null;
+        affiliationValue = known.item.name;
+      }
     }
   } else {
     rest = rest
@@ -198,7 +176,6 @@ function parseCard(line, section, affiliations) {
       .trim();
 
     const affiliation = affiliationMatch(rest, affiliations);
-
     subject = rest;
 
     if (affiliation) {
@@ -209,14 +186,12 @@ function parseCard(line, section, affiliations) {
 
       affiliationValue = affiliation.item.name;
       affiliationId = affiliation.item.id ?? null;
-      confidence += 0.14;
-    } else {
-      confidence -= 0.04;
+      affiliationStatus = 'dictionary';
+      confidence = 0.90;
     }
   }
 
-  if (/^[A-Z0-9][A-Z0-9-]*$/i.test(cardNumber)) confidence += 0.04;
-  if (flags.rookie) confidence += 0.02;
+  if (/^[A-Z0-9][A-Z0-9-]*$/i.test(cardNumber)) confidence += 0.01;
   if (!subject || subject.length < 2) confidence = 0.35;
 
   return {
@@ -224,6 +199,7 @@ function parseCard(line, section, affiliations) {
     subject,
     affiliation: affiliationValue,
     affiliation_id: affiliationId,
+    affiliation_status: affiliationStatus,
     rookie: flags.rookie,
     autograph: flags.autograph,
     memorabilia: flags.memorabilia,
@@ -236,22 +212,13 @@ function parseCard(line, section, affiliations) {
 
 function ensureMeta(meta, section) {
   if (!meta[section]) {
-    meta[section] = {
-      card_count_declared: null,
-      parallels: [],
-      notes: []
-    };
+    meta[section] = { card_count_declared: null, parallels: [], notes: [] };
   }
-
   return meta[section];
 }
 
 export function parseChecklistText(text, affiliations = []) {
-  const lines = text
-    .split(/\r?\n/)
-    .map(normalizeText)
-    .filter(Boolean);
-
+  const lines = text.split(/\r?\n/).map(normalizeText).filter(Boolean);
   const sections = [];
   const cards = [];
   const checklist_meta = {};
@@ -280,9 +247,7 @@ export function parseChecklistText(text, affiliations = []) {
     if (looksLikeHeading(line)) {
       section = line.replace(/^INSERT$/i, 'Inserts');
       captureParallels = false;
-
       if (!sections.includes(section)) sections.push(section);
-
       ensureMeta(checklist_meta, section);
       continue;
     }
@@ -297,10 +262,7 @@ export function parseChecklistText(text, affiliations = []) {
 
     if (captureParallels) {
       const meta = ensureMeta(checklist_meta, section);
-
-      if (line.length <= 240 && !meta.parallels.includes(line)) {
-        meta.parallels.push(line);
-      }
+      if (line.length <= 240 && !meta.parallels.includes(line)) meta.parallels.push(line);
     }
   }
 
@@ -311,19 +273,13 @@ export function parseChecklistText(text, affiliations = []) {
     if (checklist_meta[name]) filteredMeta[name] = checklist_meta[name];
   }
 
-  const high = cards.filter((c) => c.confidence >= .85).length;
-  const review = cards.filter((c) => c.confidence < .85).length;
-  const metaSections = Object.values(filteredMeta)
-    .filter((m) => m.parallels.length || m.card_count_declared)
-    .length;
-
   return {
     sections: usedSections,
     cards,
     checklist_meta: filteredMeta,
-    metaSections,
-    high,
-    review,
+    metaSections: Object.values(filteredMeta).filter((m) => m.parallels.length || m.card_count_declared).length,
+    high: cards.filter((c) => c.confidence >= .85).length,
+    review: cards.filter((c) => c.confidence < .85).length,
     lines: lines.length
   };
 }
