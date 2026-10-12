@@ -1,13 +1,17 @@
 <script>
+	import { productDisplayName, productDisplayTitle } from '$lib/product-display.js';
+
 	let { set } = $props();
 
 	const imageSrc = $derived(set.image_key ? `/media/set/${set.slug}` : null);
+	const displayName = $derived(productDisplayName(set.name, set.year));
+	const displayTitle = $derived(productDisplayTitle(set.name, set.year));
 </script>
 
 <a class="set-card" href={`/sets/${set.slug}`}>
 	<div class="art" class:has-image={!!imageSrc}>
 		{#if imageSrc}
-			<img src={imageSrc} alt={`${set.year} ${set.name}`} loading="lazy" />
+			<img src={imageSrc} alt={displayTitle} loading="lazy" />
 		{:else}
 			<div class="fallback" aria-hidden="true">
 				<div class="mark">
@@ -25,7 +29,7 @@
 
 	<div class="body">
 		<div class="brand">{set.manufacturer_name}</div>
-		<h3>{set.name}</h3>
+		<h3>{displayName}</h3>
 
 		<div class="meta">
 			<span><strong>{Number(set.card_count || 0).toLocaleString()}</strong> cards</span>

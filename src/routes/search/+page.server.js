@@ -1,4 +1,5 @@
 import { db } from '$lib/server/db';
+import { productDisplayName } from '$lib/product-display.js';
 
 export async function load({ platform, url }) {
   const q=(url.searchParams.get('q')||'').trim();
@@ -54,10 +55,16 @@ export async function load({ platform, url }) {
 
     return {
       q,
-      sets:sets.results||[],
+      sets:(sets.results||[]).map((set) => ({
+        ...set,
+        name: productDisplayName(set.name, set.year)
+      })),
       subjects:subjects.results||[],
       affiliations:affiliations.results||[],
-      cards:cards.results||[]
+      cards:(cards.results||[]).map((card) => ({
+        ...card,
+        product_name: productDisplayName(card.product_name, card.year)
+      }))
     };
   }catch{
     return {q,sets:[],subjects:[],affiliations:[],cards:[]};

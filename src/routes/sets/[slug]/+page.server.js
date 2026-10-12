@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { productDisplayName } from '$lib/product-display.js';
 
 export async function load({ platform, params, locals, url }) {
 	const database = db(platform);
@@ -21,6 +22,10 @@ export async function load({ platform, params, locals, url }) {
 	`).bind(params.slug).first();
 
 	if (!product) throw error(404, 'Set not found');
+
+	// Keep the canonical DB value intact, but expose the collector-facing
+	// name to the public page without a duplicated year prefix.
+	product.name = productDisplayName(product.name, product.year);
 
 	const collectionJoin = locals.user
 		? `LEFT JOIN collection_cards uc ON uc.card_id = c.id AND uc.user_id = ${Number(locals.user.id)}`

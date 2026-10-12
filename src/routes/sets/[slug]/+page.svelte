@@ -393,7 +393,7 @@
 	.hero-copy h1{font-size:clamp(2.7rem,5.5vw,5rem);letter-spacing:-.064em;line-height:.92;margin:.45rem 0 .8rem}
 	.meta-line{display:flex;flex-wrap:wrap;gap:.45rem 1rem;color:var(--muted);font-size:.74rem}
 	.meta-line span{position:relative}.meta-line span+span::before{content:'·';position:absolute;left:-.62rem;color:#b7b1b4}.meta-line strong{color:var(--ink);font-weight:850}
-	.summary{max-width:780px;margin:1.1rem 0 0;color:#3f3a3c;font-size:.9rem;line-height:1.62}
+	.summary{max-width:780px;margin:1.1rem 0 0;color:#3f3a3c;font-size:.9rem;line-height:1.62;white-space:pre-wrap}
 	.hero-side{display:grid;gap:.85rem;align-self:start}
 	.artwork{aspect-ratio:16/8.5;border-radius:.85rem;overflow:hidden;background:#f3f1ef;border:1px solid var(--line)}
 	.artwork img{width:100%;height:100%;object-fit:cover;display:block}
