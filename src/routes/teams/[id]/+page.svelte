@@ -33,17 +33,19 @@
 	<meta property="og:title" content={seoTitle} />
 	<meta property="og:description" content={seoDescription} />
 	<meta property="og:url" content={canonicalUrl} />
-	<script type="application/ld+json">{JSON.stringify({
+	<script type="application/ld+json">
+	{@html JSON.stringify({
 		'@context': 'https://schema.org',
-		'@type': 'CollectionPage',
-		name: seoTitle,
-		description: seoDescription,
-		url: canonicalUrl,
-		mainEntity: {
-			'@type': 'ItemList',
-			numberOfItems: data.stats.cards
+		'@type': 'WebSite',
+		name: 'Setbound',
+		url: 'https://setbound.app/',
+		potentialAction: {
+			'@type': 'SearchAction',
+			target: 'https://setbound.app/search?q={search_term_string}',
+			'query-input': 'required name=search_term_string'
 		}
-	})}</script>
+	})}
+</script>
 </svelte:head>
 
 <section class="shell page">
