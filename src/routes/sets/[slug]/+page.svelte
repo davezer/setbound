@@ -2,7 +2,17 @@
 	import { getOwned, setOwned } from '$lib/client/collection.js';
 
 	let { data } = $props();
-
+	const websiteSchema = JSON.stringify({
+	'@context': 'https://schema.org',
+	'@type': 'WebSite',
+	name: 'Setbound',
+	url: 'https://setbound.app/',
+	potentialAction: {
+		'@type': 'SearchAction',
+		target: 'https://setbound.app/search?q={search_term_string}',
+		'query-input': 'required name=search_term_string'
+	}
+});
 	// SEO-PASS:setbound
 	const fullProductTitle = $derived(String(data.product.year) + ' ' + data.product.name);
 	const seoTitle = $derived(fullProductTitle + ' Checklist, Cards & Set Details | Setbound');
@@ -159,30 +169,7 @@
 	<meta property="og:url" content={canonicalUrl} />
 	{#if socialImage}<meta property="og:image" content={socialImage} />{/if}
 	<meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
-	<script type="application/ld+json">{JSON.stringify({
-		'@context': 'https://schema.org',
-		'@graph': [
-			{
-				'@type': 'CollectionPage',
-				name: fullProductTitle,
-				description: seoDescription,
-				url: canonicalUrl,
-				datePublished: data.product.release_date || undefined,
-				image: socialImage || undefined,
-				mainEntity: {
-					'@type': 'ItemList',
-					numberOfItems: data.cards.length
-				}
-			},
-			{
-				'@type': 'BreadcrumbList',
-				itemListElement: [
-					{ '@type': 'ListItem', position: 1, name: 'Sets', item: 'https://setbound.app/sets' },
-					{ '@type': 'ListItem', position: 2, name: fullProductTitle, item: canonicalUrl }
-				]
-			}
-		]
-	})}</script>
+	{@html `<script type="application/ld+json">${websiteSchema}</script>`}
 </svelte:head>
 <svelte:window bind:scrollY />
 

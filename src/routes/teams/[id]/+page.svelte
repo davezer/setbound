@@ -2,6 +2,17 @@
 	let { data } = $props();
 
 	// SEO-PASS:setbound
+	const websiteSchema = JSON.stringify({
+	'@context': 'https://schema.org',
+	'@type': 'WebSite',
+	name: 'Setbound',
+	url: 'https://setbound.app/',
+	potentialAction: {
+		'@type': 'SearchAction',
+		target: 'https://setbound.app/search?q={search_term_string}',
+		'query-input': 'required name=search_term_string'
+	}
+});
 	const seoTitle = $derived(data.affiliation.name + ' Sports Cards & Checklists | Setbound');
 	const seoDescription = $derived('Browse ' + data.stats.cards.toLocaleString() + ' ' + data.affiliation.name + ' cards across ' + data.stats.sets + ' sets and ' + data.stats.subjects + ' subjects on Setbound.');
 	const canonicalUrl = $derived('https://setbound.app/teams/' + data.affiliation.id);
@@ -33,19 +44,7 @@
 	<meta property="og:title" content={seoTitle} />
 	<meta property="og:description" content={seoDescription} />
 	<meta property="og:url" content={canonicalUrl} />
-	<script type="application/ld+json">
-	{@html JSON.stringify({
-		'@context': 'https://schema.org',
-		'@type': 'WebSite',
-		name: 'Setbound',
-		url: 'https://setbound.app/',
-		potentialAction: {
-			'@type': 'SearchAction',
-			target: 'https://setbound.app/search?q={search_term_string}',
-			'query-input': 'required name=search_term_string'
-		}
-	})}
-</script>
+	{@html `<script type="application/ld+json">${websiteSchema}</script>`}
 </svelte:head>
 
 <section class="shell page">

@@ -3,6 +3,18 @@
 	import SetCard from '$lib/components/SetCard.svelte';
 
 	let { data } = $props();
+
+	const websiteSchema = JSON.stringify({
+	'@context': 'https://schema.org',
+	'@type': 'WebSite',
+	name: 'Setbound',
+	url: 'https://setbound.app/',
+	potentialAction: {
+		'@type': 'SearchAction',
+		target: 'https://setbound.app/search?q={search_term_string}',
+		'query-input': 'required name=search_term_string'
+	}
+});
 </script>
 
 <!-- SEO-PASS:setbound -->
@@ -17,19 +29,7 @@
 	<meta property="og:description" content="Browse sports card checklists, search players and teams, and track the cards you own or want." />
 	<meta property="og:url" content="https://setbound.app/" />
 	<meta name="twitter:card" content="summary" />
-	<script type="application/ld+json">
-	{@html JSON.stringify({
-		'@context': 'https://schema.org',
-		'@type': 'WebSite',
-		name: 'Setbound',
-		url: 'https://setbound.app/',
-		potentialAction: {
-			'@type': 'SearchAction',
-			target: 'https://setbound.app/search?q={search_term_string}',
-			'query-input': 'required name=search_term_string'
-		}
-	})}
-</script>
+	{@html `<script type="application/ld+json">${websiteSchema}</script>`}
 </svelte:head>
 
 <section class="hero shell">
