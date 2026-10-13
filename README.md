@@ -1,41 +1,71 @@
-# setbound MVP
+# Setbound SEO infrastructure pass
 
-Clean sports-card checklist search + a generic PDF ingestion pipeline. SvelteKit, JavaScript, Cloudflare Pages/Workers, and D1.
+Built against the current `davezer/setbound` main branch on 2026-10-13.
 
-## MVP includes
-- Clean public home, set browser, set detail, global card search
-- Browser-local "owned" checkboxes + set completion progress (no account required yet)
-- Generic checklist PDF import screen
-- Browser-side PDF text extraction with PDF.js
-- Heuristic section/card detection; not hard-coded to Allen & Ginter
-- Canonical affiliation matching with aliases and historical teams
-- NIL fallback when no affiliation is present
-- Confidence scoring + review screen before D1 import
-- D1 schema for sports, manufacturers, products, checklists, subjects, affiliations, cards, and sources
-- Baseball seeded first, with football/basketball/hockey sports already modeled
+## What it adds
 
-## Run locally
-1. `npm install`
-2. Create a D1 database: `npx wrangler d1 create setbound`
-3. Put the returned database ID in `wrangler.toml`
-4. `npm run cf:migrate:local`
-5. `npm run cf:seed:local`
-6. Use `npx wrangler pages dev .svelte-kit/cloudflare --compatibility-date=2026-09-01` after a build, or configure your normal Cloudflare Pages dev workflow.
+- Descriptive page titles and meta descriptions
+- Canonical URLs
+- Open Graph metadata
+- JSON-LD on the homepage, sets, subjects, and affiliations
+- `robots.txt`
+- Dynamic `sitemap.xml` powered by D1
+- `noindex,follow` on search result pages
+- Thin subject/team pages (<2 cards) are `noindex`
+- Sitemap also excludes subject/team pages with fewer than 2 cards
 
-For plain UI work, `npm run dev` works, but D1-backed pages need the Cloudflare binding. The home page intentionally falls back to preview content when D1 is absent.
+## What it does NOT touch
 
-## Deploy
-- Create/bind D1 as `DB`
-- Run `npm run cf:migrate`
-- Run `npm run cf:seed`
-- Build command: `npm run build`
-- Output: `.svelte-kit/cloudflare`
+- importer/parser logic
+- collection behavior
+- admin pages
+- odds
+- affiliations/data cleanup
+- D1 schema
+- product slugs
+- card/checklist data
 
-## Importing
-Open `/admin/import`, fill in the product metadata, then upload an official manufacturer PDF. PDF.js extracts the text in the browser. `checklist-parser.js` detects headings and rows using document structure and a growing affiliation vocabulary. Review low-confidence rows before importing.
+No migration is required.
 
-### Important MVP note
-The importer is deliberately generic but still heuristic. PDFs are chaotic. The long-term direction should be adapters for extraction quality (PDF/XLSX/CSV/HTML) feeding this same canonical parser + review flow, not set-specific parsers.
+## Install
 
-### Security note
-`/admin/import` is not authenticated in this MVP. Add your preferred auth/admin gate before exposing it publicly.
+From the Setbound project root:
+
+1. Copy this zip's `src` folder over your project's `src` folder. These are **new files only**:
+   - `src/lib/seo.js`
+   - `src/routes/robots.txt/+server.js`
+   - `src/routes/sitemap.xml/+server.js`
+2. Put `apply-seo-pass.mjs` in the project root.
+3. Run:
+
+```powershell
+node .\apply-seo-pass.mjs
+npm run check
+npm run dev
+```
+
+The patcher changes only the `<svelte:head>`/SEO portions of these existing pages and creates `.seo-backup` files beside them:
+
+- `src/routes/+page.svelte`
+- `src/routes/sets/+page.svelte`
+- `src/routes/search/+page.svelte`
+- `src/routes/sets/[slug]/+page.svelte`
+- `src/routes/subjects/[id]/+page.svelte`
+- `src/routes/teams/[id]/+page.svelte`
+
+## Verify locally
+
+Open:
+
+- `/robots.txt`
+- `/sitemap.xml`
+- a set page
+- a subject page
+- a team page
+- `/search?q=ohtani`
+
+View page source and confirm title, description, canonical and JSON-LD are server-rendered.
+
+## After production deploy
+
+Add `https://setbound.app/sitemap.xml` to Google Search Console and Bing Webmaster Tools.

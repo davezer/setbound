@@ -3,6 +3,17 @@
 
 	let { data } = $props();
 
+	// SEO-PASS:setbound
+	const fullProductTitle = $derived(String(data.product.year) + ' ' + data.product.name);
+	const seoTitle = $derived(fullProductTitle + ' Checklist, Cards & Set Details | Setbound');
+	const seoDescription = $derived.by(() => {
+		const fallback = 'Browse the complete ' + fullProductTitle + ' checklist with ' + data.cards.length.toLocaleString() + ' cards across ' + data.checklists.length + ' checklists. Search players, card numbers and affiliations and track your collection.';
+		const source = String(data.product.product_notes || fallback).replace(/\s+/g, ' ').trim();
+		return source.length > 158 ? source.slice(0, 155).trimEnd() + '…' : source;
+	});
+	const canonicalUrl = $derived('https://setbound.app/sets/' + data.product.slug);
+	const socialImage = $derived(data.product.image_key ? 'https://setbound.app/media/set/' + data.product.slug : null);
+
 	let active = $state('All');
 	let query = $state(data.initialQuery || '');
 	let team = $state('All teams');
@@ -136,7 +147,43 @@
 	}
 </script>
 
-<svelte:head><title>{data.product.year} {data.product.name} — setbound</title></svelte:head>
+<svelte:head>
+	<title>{seoTitle}</title>
+	<meta name="description" content={seoDescription} />
+	<meta name="robots" content="index,follow" />
+	<link rel="canonical" href={canonicalUrl} />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Setbound" />
+	<meta property="og:title" content={seoTitle} />
+	<meta property="og:description" content={seoDescription} />
+	<meta property="og:url" content={canonicalUrl} />
+	{#if socialImage}<meta property="og:image" content={socialImage} />{/if}
+	<meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
+	<script type="application/ld+json">{JSON.stringify({
+		'@context': 'https://schema.org',
+		'@graph': [
+			{
+				'@type': 'CollectionPage',
+				name: fullProductTitle,
+				description: seoDescription,
+				url: canonicalUrl,
+				datePublished: data.product.release_date || undefined,
+				image: socialImage || undefined,
+				mainEntity: {
+					'@type': 'ItemList',
+					numberOfItems: data.cards.length
+				}
+			},
+			{
+				'@type': 'BreadcrumbList',
+				itemListElement: [
+					{ '@type': 'ListItem', position: 1, name: 'Sets', item: 'https://setbound.app/sets' },
+					{ '@type': 'ListItem', position: 2, name: fullProductTitle, item: canonicalUrl }
+				]
+			}
+		]
+	})}</script>
+</svelte:head>
 <svelte:window bind:scrollY />
 
 <section class="shell page">

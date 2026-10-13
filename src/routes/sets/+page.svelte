@@ -40,7 +40,17 @@
 	}
 </script>
 
-<svelte:head><title>Sets — setbound</title></svelte:head>
+<!-- SEO-PASS:setbound -->
+<svelte:head>
+	<title>Sports Card Sets & Checklists | Setbound</title>
+	<meta name="description" content="Browse sports card sets and complete checklists by year, sport and manufacturer on Setbound." />
+	<meta name="robots" content="index,follow" />
+	<link rel="canonical" href="https://setbound.app/sets" />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content="Sports Card Sets & Checklists | Setbound" />
+	<meta property="og:description" content="Browse sports card sets and complete checklists by year, sport and manufacturer." />
+	<meta property="og:url" content="https://setbound.app/sets" />
+</svelte:head>
 
 <section class="shell page">
 	<div class="hero">

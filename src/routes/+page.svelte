@@ -5,7 +5,30 @@
 	let { data } = $props();
 </script>
 
-<svelte:head><title>Setbound — sports card checklists</title></svelte:head>
+<!-- SEO-PASS:setbound -->
+<svelte:head>
+	<title>Sports Card Checklists & Collection Tracking | Setbound</title>
+	<meta name="description" content="Browse sports card checklists, search players and teams, and track the cards you own or want with Setbound." />
+	<meta name="robots" content="index,follow" />
+	<link rel="canonical" href="https://setbound.app/" />
+	<meta property="og:type" content="website" />
+	<meta property="og:site_name" content="Setbound" />
+	<meta property="og:title" content="Sports Card Checklists & Collection Tracking | Setbound" />
+	<meta property="og:description" content="Browse sports card checklists, search players and teams, and track the cards you own or want." />
+	<meta property="og:url" content="https://setbound.app/" />
+	<meta name="twitter:card" content="summary" />
+	<script type="application/ld+json">{JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'WebSite',
+		name: 'Setbound',
+		url: 'https://setbound.app/',
+		potentialAction: {
+			'@type': 'SearchAction',
+			target: 'https://setbound.app/search?q={search_term_string}',
+			'query-input': 'required name=search_term_string'
+		}
+	})}</script>
+</svelte:head>
 
 <section class="hero shell">
 	<div class="hero-copy">

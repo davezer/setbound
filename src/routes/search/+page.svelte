@@ -21,7 +21,13 @@
 	}
 </script>
 
-<svelte:head><title>Search — setbound</title></svelte:head>
+<!-- SEO-PASS:setbound -->
+<svelte:head>
+	<title>{data.q ? 'Search “' + data.q + '” | Setbound' : 'Search Sports Card Checklists | Setbound'}</title>
+	<meta name="description" content="Search Setbound for sports card players, card numbers, teams, products and checklists." />
+	<meta name="robots" content="noindex,follow" />
+	<link rel="canonical" href="https://setbound.app/search" />
+</svelte:head>
 
 <section class="shell page">
 	<div class="eyebrow">Search</div>

@@ -1,6 +1,12 @@
 <script>
 	let { data } = $props();
 
+	// SEO-PASS:setbound
+	const seoTitle = $derived(data.affiliation.name + ' Sports Cards & Checklists | Setbound');
+	const seoDescription = $derived('Browse ' + data.stats.cards.toLocaleString() + ' ' + data.affiliation.name + ' cards across ' + data.stats.sets + ' sets and ' + data.stats.subjects + ' subjects on Setbound.');
+	const canonicalUrl = $derived('https://setbound.app/teams/' + data.affiliation.id);
+	const shouldIndex = $derived(data.stats.cards >= 2);
+
 	let query = $state('');
 	let year = $state('All years');
 	let set = $state('All sets');
@@ -18,7 +24,27 @@
 	}));
 </script>
 
-<svelte:head><title>{data.affiliation.name} cards — setbound</title></svelte:head>
+<svelte:head>
+	<title>{seoTitle}</title>
+	<meta name="description" content={seoDescription} />
+	<meta name="robots" content={shouldIndex ? 'index,follow' : 'noindex,follow'} />
+	<link rel="canonical" href={canonicalUrl} />
+	<meta property="og:type" content="website" />
+	<meta property="og:title" content={seoTitle} />
+	<meta property="og:description" content={seoDescription} />
+	<meta property="og:url" content={canonicalUrl} />
+	<script type="application/ld+json">{JSON.stringify({
+		'@context': 'https://schema.org',
+		'@type': 'CollectionPage',
+		name: seoTitle,
+		description: seoDescription,
+		url: canonicalUrl,
+		mainEntity: {
+			'@type': 'ItemList',
+			numberOfItems: data.stats.cards
+		}
+	})}</script>
+</svelte:head>
 
 <section class="shell page">
 	<div class="crumb"><a href="/search">Search</a><span>/</span>{data.affiliation.type || 'Affiliation'}</div>
