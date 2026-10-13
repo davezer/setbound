@@ -64,9 +64,10 @@ export async function GET({ platform }) {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.join('')}</urlset>`;
 
 	return new Response(xml, {
-		headers: {
-			'content-type': 'application/xml; charset=utf-8',
-			'cache-control': 'public, max-age=3600'
-		}
-	});
+	headers: {
+		'Content-Type': 'application/xml; charset=UTF-8',
+		'Cache-Control': 'public, max-age=3600',
+		'X-Robots-Tag': 'noindex'
+	}
+});
 }
