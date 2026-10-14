@@ -88,12 +88,6 @@
 	const wantedCount = $derived(data.cards.filter((card) => cardStatus(card) === 'wanted').length);
 	const percentComplete = $derived(data.cards.length ? Math.round(ownedCount / data.cards.length * 100) : 0);
 
-	const activeChecklistOdds = $derived(
-		activeChecklist
-			? data.odds.filter((row) => Number(row.checklist_id) === Number(activeChecklist.id))
-			: []
-	);
-
 	const filteredOdds = $derived(
 		data.odds.filter((row) => {
 			const queryMatch = !oddsQuery || row.name.toLowerCase().includes(oddsQuery.toLowerCase());
@@ -331,52 +325,6 @@
 			</aside>
 		</div>
 	{/if}
-
-	{#if activeChecklist && activeChecklistOdds.length}
-		<section class="checklist-odds">
-			<div class="checklist-odds-head">
-				<div>
-					<div class="eyebrow">Official odds</div>
-					<h2>Pack odds</h2>
-				</div>
-				<button onclick={() => oddsBrowserOpen = true}>View all odds →</button>
-			</div>
-
-			<div class="checklist-odds-table">
-				<table>
-					<thead>
-						<tr>
-							<th>Card / parallel</th>
-							{#each data.oddsFormats as format}<th>{format.name}</th>{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each activeChecklistOdds as row}
-							<tr>
-								<td><strong>{row.name}</strong></td>
-								{#each data.oddsFormats as format}
-									{@const value = row.values[String(format.id)]}
-									<td class:unavailable={!value || value.text === '-'}>{value?.text || '—'}</td>
-								{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-		</section>
-	{/if}
-
-	{#if activeChecklist && (activeChecklist.parallels?.length || activeChecklist.notes?.length)}
-		<section class="details">
-			<div><div class="eyebrow">Checklist details</div><h2>{activeChecklist.name}</h2></div>
-			{#if activeChecklist.parallels?.length}
-				<div class="parallel"><strong>Parallels</strong>{#each activeChecklist.parallels as line}<span>{line}</span>{/each}</div>
-			{/if}
-			{#each activeChecklist.notes || [] as note}<p>{note}</p>{/each}
-		</section>
-	{/if}
-
-	<div class="results-line"><span>{visible.length.toLocaleString()} card{visible.length === 1 ? '' : 's'}</span></div>
 
 	<div class="table-wrap">
 		<table>

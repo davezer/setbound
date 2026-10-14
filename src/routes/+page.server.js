@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 
-export async function load({ platform }) {
+export async function load({ platform, locals }) {
 	try {
 		const database = db(platform);
 
@@ -13,6 +13,7 @@ export async function load({ platform }) {
 					p.image_key,
 					m.name AS manufacturer_name,
 					s.name AS sport_name,
+					s.slug AS sport_slug,
 					COUNT(DISTINCT c.id) AS card_count,
 					COUNT(DISTINCT cl.id) AS checklist_count
 				FROM products p
@@ -52,9 +53,15 @@ export async function load({ platform }) {
 		return {
 			recent: recent.results || [],
 			sports: sports.results || [],
-			years: years.results || []
+			years: years.results || [],
+			signedIn: Boolean(locals.user)
 		};
 	} catch {
-		return { recent: [], sports: [], years: [] };
+		return {
+			recent: [],
+			sports: [],
+			years: [],
+			signedIn: Boolean(locals.user)
+		};
 	}
 }

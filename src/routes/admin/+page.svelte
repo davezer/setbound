@@ -59,7 +59,7 @@
 	</section>
 
 	<div class="admin-grid">
-		<a class="admin-link" href="/admin/import"><div class="icon">↓</div><div><span class="kicker">Import</span><h2>Import checklist</h2><p>Add a PDF, XLS, or XLSX checklist.</p></div><span class="arrow">→</span></a>
+		<a class="admin-link" href="/admin/source-harvester"><div class="icon">⇣</div><div><span class="kicker">Data acquisition</span><h2>Source Harvester</h2><p>Discover historical checklists and odds from manufacturer archives and Checklist Insider.</p></div><span class="arrow">→</span></a>\n\t\t\n		<a class="admin-link" href="/admin/import"><div class="icon">↓</div><div><span class="kicker">Import</span><h2>Import checklist</h2><p>Add a PDF, XLS, or XLSX checklist.</p></div><span class="arrow">→</span></a>
 		<a class="admin-link" href="/admin/odds"><div class="icon">1:</div><div><span class="kicker">Odds</span><h2>Import product odds</h2><p>Parse official odds PDFs and connect pack odds to checklist data.</p></div><span class="arrow">→</span></a>
 		<a class="admin-link" href="/admin/cleanup"><div class="icon">×</div><div><span class="kicker">Cleanup</span><h2>Clean imports</h2><p>Remove bad rows or an entire import.</p></div><span class="arrow">→</span></a>
 		<a class="admin-link" href="/admin/cards"><div class="icon">#</div><div><span class="kicker">Manual correction</span><h2>Card data</h2><p>Fix a player's team, tags, variation, serial number, notes, or subject on one card.</p></div><span class="arrow">→</span></a>

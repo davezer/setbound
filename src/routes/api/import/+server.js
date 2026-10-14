@@ -153,7 +153,7 @@ export async function POST({ request, platform }) {
 						published
 					)
 				VALUES
-					(?, ?, ?, ?, ?, ?, 1)
+					(?, ?, ?, ?, ?, ?, 0)
 				RETURNING id
 			`)
 			.bind(

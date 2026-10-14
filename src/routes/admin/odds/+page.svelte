@@ -11,6 +11,34 @@
 	let replaceExisting = $state(data.sources.length > 0);
 	let formatNames = $state([]);
 	let formatsVerified = $state(false);
+	let remoteLoaded = $state(false);
+
+	async function loadRemoteOdds(remoteUrl) {
+		parsing = true;
+		parseError = '';
+		try {
+			const response = await fetch(`/api/admin/source-harvester/download?url=${encodeURIComponent(remoteUrl)}`);
+			if (!response.ok) throw new Error(`Remote odds download failed (${response.status}).`);
+			const blob = await response.blob();
+			const filename = decodeURIComponent(new URL(remoteUrl).pathname.split('/').pop() || 'odds.pdf');
+			file = new File([blob], filename, { type: blob.type || 'application/pdf' });
+			sourceUrl = remoteUrl;
+			parsed = await extractOddsPdf(file);
+			formatNames = parsed.formats.map((format) => format.name);
+			formatsVerified = false;
+		} catch (error) {
+			parseError = error?.message || 'Could not load remote odds PDF.';
+		} finally {
+			parsing = false;
+		}
+	}
+
+	$effect(() => {
+		if (!remoteLoaded && data.remoteSourceUrl) {
+			remoteLoaded = true;
+			loadRemoteOdds(data.remoteSourceUrl);
+		}
+	});
 
 	const selectedProduct = $derived(
 		data.products.find((product) => Number(product.id) === Number(data.selectedProductId))

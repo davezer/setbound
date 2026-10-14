@@ -6,11 +6,11 @@
 
 	let { data } = $props();
 
-	let year = $state(new Date().getFullYear());
-	let name = $state('');
+	let year = $state(data.prefill?.year || new Date().getFullYear());
+	let name = $state(data.prefill?.name || '');
 	let sportId = $state();
 	let manufacturerId = $state();
-	let sourceUrl = $state('');
+	let sourceUrl = $state(data.prefill?.source || '');
 	let sourceFilename = $state('');
 	let sourceKind = $state('');
 	let rawDialog = $state();
@@ -29,6 +29,51 @@
 	let editRookie = $state(false);
 	let editAutograph = $state(false);
 	let editMemorabilia = $state(false);
+	let remoteLoaded = $state(false);
+
+	async function loadRemoteChecklist(remoteUrl) {
+		busy = true;
+		errorMessage = '';
+		parsed = null;
+		text = '';
+		status = 'Downloading source checklist…';
+
+		try {
+			const response = await fetch(`/api/admin/source-harvester/download?url=${encodeURIComponent(remoteUrl)}`);
+			if (!response.ok) throw new Error(`Remote checklist download failed (${response.status}).`);
+			const blob = await response.blob();
+			const filename = decodeURIComponent(new URL(remoteUrl).pathname.split('/').pop() || 'checklist');
+			const file = new File([blob], filename, { type: blob.type });
+			sourceFilename = filename;
+
+			const ext = extension(filename);
+			if (ext === 'pdf') {
+				sourceKind = 'PDF';
+				status = 'Reading PDF…';
+				text = await extractPdfText(file);
+				status = 'Parsing checklist…';
+				finishParse(parseChecklistText(text, data.affiliations));
+			} else if (ext === 'xls' || ext === 'xlsx') {
+				sourceKind = ext.toUpperCase();
+				status = `Reading ${ext.toUpperCase()} workbook…`;
+				finishParse(await extractSpreadsheetChecklist(file));
+			} else {
+				throw new Error(`Unsupported checklist file type: .${ext}`);
+			}
+			status = '';
+		} catch (error) {
+			errorMessage = error?.message || 'Could not load remote checklist.';
+		} finally {
+			busy = false;
+		}
+	}
+
+	$effect(() => {
+		if (!remoteLoaded && data.prefill?.source) {
+			remoteLoaded = true;
+			loadRemoteChecklist(data.prefill.source);
+		}
+	});
 
 	$effect(() => {
 		if (sportId == null) sportId = data.sports[0]?.id ?? 1;

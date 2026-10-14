@@ -22,13 +22,21 @@ function urlEntry(loc, lastmod = null) {
 export async function GET({ platform }) {
 	const database = db(platform);
 
-	const [products, subjects, affiliations] = await Promise.all([
+	const [products, sports, subjects, affiliations] = await Promise.all([
 		database.prepare(`
 			SELECT p.slug, COALESCE(src.imported_at, '') AS imported_at
 			FROM products p
 			LEFT JOIN sources src ON src.id = p.primary_source_id
 			WHERE p.published = 1
 			ORDER BY p.year DESC, p.name
+		`).all(),
+
+		database.prepare(`
+			SELECT DISTINCT s.slug
+			FROM sports s
+			JOIN products p ON p.sport_id = s.id
+			WHERE p.published = 1
+			ORDER BY s.name
 		`).all(),
 
 		database.prepare(`
@@ -53,6 +61,9 @@ export async function GET({ platform }) {
 	const entries = [
 		urlEntry(`${SITE_URL}/`),
 		urlEntry(`${SITE_URL}/sets`),
+		...(sports.results || []).map((sport) =>
+			urlEntry(`${SITE_URL}/sets/sport/${sport.slug}`)
+		),
 		...(products.results || []).map((product) => {
 			const lastmod = product.imported_at ? String(product.imported_at).slice(0, 10) : null;
 			return urlEntry(`${SITE_URL}/sets/${product.slug}`, lastmod);
@@ -64,10 +75,10 @@ export async function GET({ platform }) {
 	const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.join('')}</urlset>`;
 
 	return new Response(xml, {
-	headers: {
-		'Content-Type': 'application/xml; charset=UTF-8',
-		'Cache-Control': 'public, max-age=3600',
-		'X-Robots-Tag': 'noindex'
-	}
-});
+		headers: {
+			'Content-Type': 'application/xml; charset=UTF-8',
+			'Cache-Control': 'public, max-age=3600',
+			'X-Robots-Tag': 'noindex'
+		}
+	});
 }

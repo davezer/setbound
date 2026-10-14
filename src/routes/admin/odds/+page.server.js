@@ -62,6 +62,7 @@ export async function load({ platform, url }) {
 	return {
 		products,
 		selectedProductId,
+		remoteSourceUrl: String(url.searchParams.get('remote') || ''),
 		checklists: checklistResult.results || [],
 		sources: sourceResult.results || []
 	};
