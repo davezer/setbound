@@ -543,7 +543,8 @@
 					sourceFilename: row.checklistFilename,
 					cards: row.parsed.cards,
 					checklistMeta: row.parsed.checklist_meta,
-					sections: row.parsed.sections
+					sections: row.parsed.sections,
+					replaceDraft: true
 				})
 			});
 

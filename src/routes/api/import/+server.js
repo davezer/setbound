@@ -42,9 +42,50 @@ function hasVerifiedAffiliation(card) {
 	);
 }
 
+function clean(value) {
+	return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalized(value) {
+	return clean(value).toLowerCase();
+}
+
+async function cleanupPartialImport(database, productId, sourceId) {
+	if (productId) {
+		await database.prepare(`
+			DELETE FROM checklist_details
+			WHERE checklist_id IN (
+				SELECT id FROM checklists WHERE product_id = ?
+			)
+		`).bind(productId).run();
+
+		await database.prepare('DELETE FROM cards WHERE product_id = ?').bind(productId).run();
+		await database.prepare('DELETE FROM checklists WHERE product_id = ?').bind(productId).run();
+
+		for (const table of ['product_formats', 'odds_sources']) {
+			try {
+				await database.prepare(`DELETE FROM ${table} WHERE product_id = ?`)
+					.bind(productId)
+					.run();
+			} catch {}
+		}
+
+		await database.prepare('DELETE FROM products WHERE id = ?').bind(productId).run();
+	}
+
+	if (sourceId) {
+		try {
+			await database.prepare('DELETE FROM sources WHERE id = ?').bind(sourceId).run();
+		} catch {}
+	}
+}
+
 export async function POST({ request, platform }) {
+	const database = db(platform);
+	let createdProductId = null;
+	let createdSourceId = null;
+
 	try {
-		const database = db(platform);
 		const body = await request.json();
 
 		if (
@@ -107,7 +148,7 @@ export async function POST({ request, platform }) {
 
 		const existingProduct = await database
 			.prepare(`
-				SELECT id, name, year
+				SELECT id, name, year, published, primary_source_id
 				FROM products
 				WHERE slug = ?
 			`)
@@ -115,15 +156,23 @@ export async function POST({ request, platform }) {
 			.first();
 
 		if (existingProduct) {
-			return json(
-				{
-					message:
-						`${existingProduct.name} is already in Setbound. ` +
-						`Delete or replace the existing product before importing it again.`,
-					code: 'PRODUCT_ALREADY_EXISTS'
-				},
-				{ status: 409 }
-			);
+			if (body.replaceDraft === true && Number(existingProduct.published || 0) === 0) {
+				await cleanupPartialImport(
+					database,
+					existingProduct.id,
+					existingProduct.primary_source_id || null
+				);
+			} else {
+				return json(
+					{
+						message:
+							`${existingProduct.name} is already in Setbound. ` +
+							`Delete or replace the existing product before importing it again.`,
+						code: 'PRODUCT_ALREADY_EXISTS'
+					},
+					{ status: 409 }
+				);
+			}
 		}
 
 		const source = await database
@@ -139,6 +188,8 @@ export async function POST({ request, platform }) {
 				body.sourceFilename || null
 			)
 			.first();
+
+		createdSourceId = source.id;
 
 		const product = await database
 			.prepare(`
@@ -166,22 +217,27 @@ export async function POST({ request, platform }) {
 			)
 			.first();
 
+		createdProductId = product.id;
+
 		const checklistIds = new Map();
 		const subjectIds = new Map();
 		const affiliationIds = new Map();
 
 		const existingAff = await database
 			.prepare(`
-				SELECT id, name
+				SELECT id, name, normalized_name
 				FROM affiliations
 			`)
 			.all();
 
 		for (const affiliation of existingAff.results || []) {
-			affiliationIds.set(
-				affiliation.name.toLowerCase(),
-				affiliation.id
+			const normalizedKey = normalized(
+				affiliation.normalized_name || affiliation.name
 			);
+
+			if (normalizedKey) {
+				affiliationIds.set(normalizedKey, affiliation.id);
+			}
 		}
 
 		let sort = 0;
@@ -262,39 +318,51 @@ export async function POST({ request, platform }) {
 			let affiliationId = null;
 
 			if (hasVerifiedAffiliation(card)) {
-				const affiliationKey =
-					card.affiliation.toLowerCase();
+				const affiliationName = clean(card.affiliation);
+				const affiliationKey = normalized(affiliationName);
 
-				affiliationId =
-					affiliationIds.get(affiliationKey) ||
-					null;
+				affiliationId = affiliationIds.get(affiliationKey) || null;
 
 				if (!affiliationId) {
-					const row = await database
+					let row = await database
 						.prepare(`
-							INSERT INTO affiliations
-								(
-									name,
-									normalized_name,
-									type,
-									aliases_json
-								)
-							VALUES
-								(?, ?, 'team', '[]')
-							RETURNING id
+							SELECT id
+							FROM affiliations
+							WHERE normalized_name = ?
+							LIMIT 1
 						`)
-						.bind(
-							card.affiliation,
-							affiliationKey
-						)
+						.bind(affiliationKey)
 						.first();
 
-					affiliationId = row.id;
+					if (!row) {
+						await database
+							.prepare(`
+								INSERT OR IGNORE INTO affiliations
+									(name, normalized_name, type, aliases_json)
+								VALUES (?, ?, 'team', '[]')
+							`)
+							.bind(affiliationName, affiliationKey)
+							.run();
 
-					affiliationIds.set(
-						affiliationKey,
-						affiliationId
-					);
+						row = await database
+							.prepare(`
+								SELECT id
+								FROM affiliations
+								WHERE normalized_name = ?
+								LIMIT 1
+							`)
+							.bind(affiliationKey)
+							.first();
+					}
+
+					if (!row?.id) {
+						throw new Error(
+							`Could not resolve affiliation "${affiliationName}".`
+						);
+					}
+
+					affiliationId = row.id;
+					affiliationIds.set(affiliationKey, affiliationId);
 				}
 			}
 
@@ -379,6 +447,16 @@ export async function POST({ request, platform }) {
 			imported: body.cards.length
 		});
 	} catch (e) {
+		try {
+			await cleanupPartialImport(
+				database,
+				createdProductId,
+				createdSourceId
+			);
+		} catch (cleanupError) {
+			console.error('Import cleanup failed:', cleanupError);
+		}
+
 		return json(
 			{
 				message:
