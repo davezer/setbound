@@ -24,6 +24,7 @@ function textLines(html = '') {
 			.replace(/<\/p>/gi, '\n')
 			.replace(/<\/li>/gi, '\n')
 			.replace(/<\/div>/gi, '\n')
+			.replace(/<\/h[1-6]>/gi, '\n')
 			.replace(/<li\b[^>]*>/gi, '• ')
 			.replace(/<[^>]+>/g, ' ')
 	)
@@ -32,179 +33,439 @@ function textLines(html = '') {
 		.filter(Boolean);
 }
 
-function sectionAfterHeading(html, phrase) {
-	const heading = new RegExp(`<h([23])\\b[^>]*>[\\s\\S]*?${phrase}[\\s\\S]*?<\\/h\\1>`, 'i');
-	const match = heading.exec(html);
-	if (!match) return '';
-	const start = match.index + match[0].length;
-	const rest = html.slice(start);
-	const next = /<h[23]\b/i.exec(rest);
-	return next ? rest.slice(0, next.index) : rest;
+function titleFromHtml(html) {
+	const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+	return h1 ? cleanText(h1[1]).replace(/\s+Checklist Guide.*$/i, '').replace(/\s+Guide$/i, '').trim() : '';
 }
 
 function parseReleaseDate(html) {
-	const plain = cleanText(html);
-	const match = plain.match(/(?:Estimated )?Release Date:\s*([A-Z][a-z]+ \d{1,2}, \d{4})/i);
-	if (!match?.[1]) return null;
-	const date = new Date(`${match[1]} 12:00:00 UTC`);
-	return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+	const lines = textLines(html);
+	const matches = [];
+
+	for (const line of lines) {
+		const direct = line.match(/(?:Estimated )?Release Date:\s*([A-Z][a-z]+ \d{1,2}, \d{4})/i);
+		if (direct?.[1]) matches.push(direct[1]);
+
+		const variant = line.match(/(?:Hobby|FDI|Wave \d+)\s*[-–]\s*([A-Z][a-z]+ \d{1,2}, \d{4})/i);
+		if (variant?.[1]) matches.push(variant[1]);
+	}
+
+	if (!matches.length) return null;
+
+	// For split release dates, use the earliest date as the product release date.
+	const parsed = matches
+		.map((value) => new Date(`${value} 12:00:00 UTC`))
+		.filter((date) => !Number.isNaN(date.getTime()))
+		.sort((a, b) => a - b);
+
+	return parsed.length ? parsed[0].toISOString().slice(0, 10) : null;
 }
 
-function titleFromHtml(html) {
-	const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
-	return h1 ? cleanText(h1[1]).replace(/\s+Checklist Guide.*$/i, '').trim() : '';
+function isSectionHeading(line, phrase) {
+	return String(line || '').toLowerCase().includes(String(phrase).toLowerCase());
+}
+
+function extractSectionLines(lines, startPhrase, stopPhrases) {
+	const start = lines.findIndex((line) => isSectionHeading(line, startPhrase));
+	if (start < 0) return [];
+
+	const output = [];
+
+	for (let index = start + 1; index < lines.length; index++) {
+		const line = lines[index];
+
+		if (stopPhrases.some((phrase) => isSectionHeading(line, phrase))) break;
+		if (/^(?:Checklist Insider Editor|Brands)$/i.test(line)) continue;
+		if (/clicking any links|earning a commission/i.test(line)) continue;
+
+		output.push(line);
+	}
+
+	return output;
 }
 
 function normalizeFormatName(value = '') {
-	return String(value).replace(/\bbox(es)?\b/gi, '').replace(/\s+/g, ' ').trim();
+	return String(value)
+		.replace(/\u00a0/g, ' ')
+		.replace(/\bbox(es)?\b/gi, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function looksLikeFormatHeading(line) {
+	const value = String(line || '').replace(/^•\s*/, '').trim();
+
+	if (!value || value.length > 90) return false;
+	if (/cards? per|packs? per|boxes? per|total cards|autograph|parallel|relic|memorabilia/i.test(value)) return false;
+
+	return /\b(?:hobby|jumbo|breaker|delight|blaster|value|mega|retail|fat pack|hanger|collector|tin|fdi|display|super box|bulk pack|floor display)\b/i.test(value);
 }
 
 function formatKey(label = '') {
 	const value = label.toLowerCase();
+
 	if (/breaker/.test(value)) return 'breaker';
 	if (/blaster|value/.test(value)) return 'blaster';
 	if (/mega/.test(value)) return 'mega';
 	if (/jumbo/.test(value)) return 'jumbo';
-	if (/retail/.test(value)) return 'retail';
+	if (/retail|display|super box|bulk pack|floor display|fdi/.test(value)) return 'retail';
 	if (/fat pack/.test(value)) return 'fat_pack';
 	if (/hanger/.test(value)) return 'hanger';
 	if (/collector|tin/.test(value)) return 'collector';
+
 	return 'hobby';
 }
 
-function formatLabel(key, sourceLabel) {
+function formatLabel(key) {
 	const labels = {
-		hobby: 'Hobby Box Breakdown', breaker: 'Breaker / Breaker Delight Breakdown',
-		blaster: 'Blaster / Value Box Breakdown', mega: 'Mega Box Breakdown', jumbo: 'Jumbo Box Breakdown',
-		retail: 'Retail Box Breakdown', fat_pack: 'Fat Pack Breakdown', hanger: 'Hanger Box Breakdown',
+		hobby: 'Hobby Box Breakdown',
+		breaker: 'Breaker / Breaker Delight Breakdown',
+		blaster: 'Blaster / Value Box Breakdown',
+		mega: 'Mega Box Breakdown',
+		jumbo: 'Jumbo Box Breakdown',
+		retail: 'Retail Box Breakdown',
+		fat_pack: 'Fat Pack Breakdown',
+		hanger: 'Hanger Box Breakdown',
 		collector: 'Collector / Tin Breakdown'
 	};
-	return labels[key] || `${normalizeFormatName(sourceLabel) || 'Product'} Breakdown`;
+
+	return labels[key] || 'Product Breakdown';
+}
+
+function parseSectionBlocks(lines) {
+	const blocks = [];
+	let current = null;
+
+	for (const rawLine of lines) {
+		const line = String(rawLine || '').replace(/^•\s*/, '').trim();
+		if (!line) continue;
+
+		if (looksLikeFormatHeading(line)) {
+			current = { sourceLabel: line, details: [] };
+			blocks.push(current);
+			continue;
+		}
+
+		if (!current) {
+			// Some pages have a single unnamed configuration list.
+			current = { sourceLabel: 'Hobby Boxes', details: [] };
+			blocks.push(current);
+		}
+
+		if (!/^(?:buy|order|view)\b/i.test(line)) current.details.push(line);
+	}
+
+	return blocks.filter((block) => block.details.length);
 }
 
 function parseFormatBlocks(html) {
-	const configuration = textLines(sectionAfterHeading(html, 'Product Configuration'));
-	const boxBreak = textLines(sectionAfterHeading(html, 'Box Break'));
-	const headingLike = (line) => /\b(box|boxes|pack|packs|tin|tins)\b/i.test(line) && line.length <= 80 && !/cards? per|packs? per|boxes? per|autograph|parallel/i.test(line);
-	const candidateHeads = [...new Set([...configuration.filter(headingLike), ...boxBreak.filter(headingLike)])];
-	if (!candidateHeads.length && (configuration.length || boxBreak.length)) candidateHeads.push('Hobby Boxes');
+	const lines = textLines(html);
 
-	const blocks = [];
-	for (const head of candidateHeads) {
-		const gather = (lines) => {
-			let active = false;
-			const details = [];
-			for (const line of lines) {
-				const isHead = candidateHeads.includes(line);
-				if (isHead) { active = line === head; continue; }
-				if (active && line) details.push(line);
-			}
-			return details;
+	const configuration = extractSectionLines(
+		lines,
+		'Product Configuration',
+		['Box Break', 'Buy ', 'Checklist', 'Team Lists', 'Downloads']
+	);
+
+	const boxBreak = extractSectionLines(
+		lines,
+		'Box Break',
+		['Buy ', 'Checklist', 'Team Lists', 'Downloads']
+	);
+
+	const configBlocks = parseSectionBlocks(configuration);
+	const breakBlocks = parseSectionBlocks(boxBreak);
+
+	const normalizedKey = (value) =>
+		normalizeFormatName(value)
+			.toLowerCase()
+			.replace(/\b(?:orange\/red|green\/blue|mlb x nba|mlb x nfl)\b/gi, '')
+			.replace(/\s+/g, ' ')
+			.trim();
+
+	const merged = new Map();
+
+	const addBlock = (block, source) => {
+		const matchKey = normalizedKey(block.sourceLabel);
+		const existing = [...merged.values()].find((candidate) =>
+			normalizedKey(candidate.sourceLabel) === matchKey
+		);
+
+		const target = existing || {
+			sourceLabel: block.sourceLabel,
+			config: [],
+			break: []
 		};
-		const single = candidateHeads.length === 1;
-		const configDetails = gather(configuration);
-		const breakDetails = gather(boxBreak);
-		const merged = [
-			...(configDetails.length ? configDetails : single ? configuration.filter((x) => x !== head) : []),
-			...(breakDetails.length ? breakDetails : single ? boxBreak.filter((x) => x !== head) : [])
-		];
-		const unique = [...new Set(merged)].filter((line) => line !== head).filter((line) => !/^(buy|order)\b/i.test(line));
+
+		target[source].push(...block.details);
+
+		if (!existing) merged.set(`${matchKey}:${merged.size}`, target);
+	};
+
+	for (const block of configBlocks) addBlock(block, 'config');
+	for (const block of breakBlocks) addBlock(block, 'break');
+
+	const keyed = new Map();
+
+	for (const block of merged.values()) {
+		const details = [
+			...block.config,
+			...block.break
+		]
+			.map((line) => line.replace(/\s+/g, ' ').trim())
+			.filter(Boolean);
+
+		const unique = [...new Set(details)];
 		if (!unique.length) continue;
-		const key = formatKey(head);
-		blocks.push({ key, label: formatLabel(key, head), sourceLabel: head, details: unique.join('\n') });
+
+		const key = formatKey(block.sourceLabel);
+		const record = {
+			key,
+			label: formatLabel(key),
+			sourceLabel: block.sourceLabel,
+			details: unique.join('\n')
+		};
+
+		// Existing Setbound product_formats has one row per format key.
+		// If two source formats map to the same key (e.g. Hobby + FDI),
+		// preserve both instead of silently dropping one.
+		if (keyed.has(key)) {
+			const previous = keyed.get(key);
+			previous.details = `${previous.sourceLabel}\n${previous.details}\n\n${record.sourceLabel}\n${record.details}`.trim();
+			previous.sourceLabel = `${previous.sourceLabel} / ${record.sourceLabel}`;
+		} else {
+			keyed.set(key, record);
+		}
 	}
 
-	const byKey = new Map();
-	for (const block of blocks) {
-		const current = byKey.get(block.key);
-		if (!current || block.details.length > current.details.length) byKey.set(block.key, block);
-	}
-	return [...byKey.values()];
+	return [...keyed.values()];
 }
 
-function firstUsefulParagraphs(html) {
-	const h1 = /<h1\b[^>]*>[\s\S]*?<\/h1>/i.exec(html);
-	if (!h1) return [];
-	const rest = html.slice(h1.index + h1[0].length);
-	const rundown = /<h[23]\b[^>]*>[\s\S]*?Checklist Rundown[\s\S]*?<\/h[23]>/i.exec(rest);
-	const lead = rundown ? rest.slice(0, rundown.index) : rest.slice(0, 15000);
-	return [...lead.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
-		.map((match) => cleanText(match[1]))
-		.filter((paragraph) => paragraph.length >= 55)
-		.filter((paragraph) => !/commission|affiliate|buy on|ebay|clicking any links/i.test(paragraph))
-		.slice(0, 3);
+function leadFactLines(html) {
+	const lines = textLines(html);
+	const h1Index = lines.findIndex((line) => /Checklist Guide$| Guide$/.test(line) || line === titleFromHtml(html));
+	const rundownIndex = lines.findIndex((line) => /Checklist Rundown/i.test(line));
+
+	const start = h1Index >= 0 ? h1Index + 1 : 0;
+	const end = rundownIndex > start ? rundownIndex : Math.min(lines.length, start + 35);
+
+	return lines
+		.slice(start, end)
+		.filter((line) => line.length >= 45)
+		.filter((line) => !/Release Date:|Brands|Checklist Insider Editor|commission|affiliate|buy on|ebay|presales? came on|prices? increased/i.test(line))
+		.filter((line) => !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(line))
+		.slice(0, 6);
 }
 
-function makeOverview(title, releaseDate, formats, sourceParagraphs) {
-	const parts = [];
-	if (title) {
-		const dateText = releaseDate ? new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
-		parts.push(`${title} is a collector card release${dateText ? ` released on ${dateText}` : ''}.`);
-	}
-	const first = formats[0];
-	if (first?.details) {
-		const details = first.details.split('\n').map((line) => line.trim()).filter(Boolean);
-		const config = details.filter((line) => /cards? per|packs? per|boxes? per/i.test(line)).slice(0, 2);
-		const hits = details.filter((line) => /autograph|parallel|relic|memorabilia|insert/i.test(line)).slice(0, 2);
-		if (config.length) parts.push(`${first.sourceLabel || 'The product'} is configured with ${config.join(' and ').replace(/\.$/, '')}.`);
-		if (hits.length) parts.push(`The listed box break includes ${hits.join(' and ').replace(/\.$/, '')}.`);
-	}
-	const facts = sourceParagraphs.join(' ');
+function factualThemes(sourceFacts) {
+	const text = sourceFacts.join(' ').toLowerCase();
 	const themes = [];
-	if (/prospect/i.test(facts)) themes.push('prospects');
-	if (/rookie/i.test(facts)) themes.push('rookies');
-	if (/veteran/i.test(facts)) themes.push('veterans');
-	if (/autograph/i.test(facts)) themes.push('autographs');
-	if (/parallel/i.test(facts)) themes.push('parallels');
-	if (themes.length) parts.push(`Checklist Insider highlights ${themes.slice(0, 4).join(', ')} as part of the release.`);
-	return parts.join(' ').trim();
+
+	if (/1st bowman/.test(text)) themes.push('1st Bowman prospects');
+	else if (/prospect/.test(text)) themes.push('prospects');
+
+	if (/rookie/.test(text)) themes.push('rookies');
+	if (/veteran/.test(text)) themes.push('veterans');
+	if (/autograph/.test(text)) themes.push('autographs');
+	if (/parallel/.test(text)) themes.push('parallels');
+	if (/insert/.test(text)) themes.push('inserts');
+
+	return [...new Set(themes)];
+}
+
+function formatNames(formats) {
+	return formats
+		.map((format) => normalizeFormatName(format.sourceLabel))
+		.filter(Boolean);
+}
+
+function humanList(values) {
+	if (!values.length) return '';
+	if (values.length === 1) return values[0];
+	if (values.length === 2) return `${values[0]} and ${values[1]}`;
+	return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`;
+}
+
+function makeOverview(title, releaseDate, formats, sourceFacts) {
+	const sentences = [];
+
+	if (title) {
+		if (releaseDate) {
+			const dateText = new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', {
+				month: 'long',
+				day: 'numeric',
+				year: 'numeric',
+				timeZone: 'UTC'
+			});
+			sentences.push(`${title} released on ${dateText}.`);
+		} else {
+			sentences.push(`${title} is part of the current trading card release calendar.`);
+		}
+	}
+
+	const themes = factualThemes(sourceFacts);
+
+	if (themes.length) {
+		const sport = /\bbaseball\b/i.test(title) ? 'baseball' :
+			/\bfootball\b/i.test(title) ? 'football' :
+			/\bbasketball\b/i.test(title) ? 'basketball' :
+			/\bsoccer\b/i.test(title) ? 'soccer' :
+			/\bhockey\b/i.test(title) ? 'hockey' : 'card';
+
+		sentences.push(
+			`The ${sport} checklist features ${humanList(themes.slice(0, 4))}.`
+		);
+	}
+
+	const factsText = sourceFacts.join(' ');
+
+	if (/chromium|chrome/i.test(factsText) && /paper/i.test(factsText)) {
+		sentences.push('The product mixes paper and Chrome-style content across the release.');
+	} else if (/sapphire/i.test(title + ' ' + factsText)) {
+		sentences.push('The release centers on Sapphire-style cards and exclusive color parallels.');
+	}
+
+	const names = formatNames(formats);
+
+	if (names.length) {
+		sentences.push(`Checklist Insider lists ${humanList(names.slice(0, 5))} configurations for the product.`);
+	}
+
+	const autographFormats = formats
+		.filter((format) => /autograph/i.test(format.details))
+		.map((format) => normalizeFormatName(format.sourceLabel))
+		.filter(Boolean);
+
+	if (autographFormats.length) {
+		sentences.push(
+			`Autograph guarantees are listed for ${humanList(autographFormats.slice(0, 4))}.`
+		);
+	}
+
+	return sentences.slice(0, 5).join(' ').trim();
+}
+
+function canonicalImageKey(url) {
+	try {
+		const parsed = new URL(url);
+		let path = parsed.pathname.toLowerCase();
+
+		path = path
+			.replace(/-\d+x\d+(?=\.[a-z0-9]+$)/i, '')
+			.replace(/[_-](?:thumb|thumbnail|small|medium|large|scaled)(?=\.[a-z0-9]+$)/i, '')
+			.replace(/[_-](?:1200|1600|2000)(?=\.[a-z0-9]+$)/i, '');
+
+		return `${parsed.hostname}${path}`;
+	} catch {
+		return String(url || '').toLowerCase();
+	}
 }
 
 function imageCandidates(html, pageUrl, productName) {
 	const candidates = new Map();
-	const tokens = String(productName || '').toLowerCase().replace(/\b(19|20)\d{2}\b/g, '').split(/[^a-z0-9]+/).filter((token) => token.length >= 4).slice(0, 8);
-	const add = (url, alt = '', bonus = 0) => {
+
+	const tokens = String(productName || '')
+		.toLowerCase()
+		.replace(/\b(19|20)\d{2}\b/g, '')
+		.split(/[^a-z0-9]+/)
+		.filter((token) => token.length >= 4)
+		.filter((token) => !['baseball', 'football', 'basketball', 'soccer', 'hockey', 'checklist', 'guide'].includes(token))
+		.slice(0, 7);
+
+	const add = (url, alt = '', bonus = 0, width = 0, height = 0) => {
 		if (!url) return;
+
 		const absolute = absoluteUrl(url, pageUrl);
 		if (!absolute) return;
+
 		let parsed;
 		try { parsed = new URL(absolute); } catch { return; }
+
 		if (parsed.hostname !== 'xcdn.checklistinsider.com') return;
 		if (!/\.(?:jpe?g|png|webp|avif)(?:$|\?)/i.test(parsed.pathname + parsed.search)) return;
+
 		const haystack = `${absolute} ${alt}`.toLowerCase();
 		let score = bonus;
-		for (const token of tokens) if (haystack.includes(token)) score += 5;
-		if (/\bsealed\b|\bhobby[- _]?box\b|\bbox\b|\bproduct\b/i.test(haystack)) score += 18;
-		if (/thumb-1200|1200|1600|large/i.test(haystack)) score += 6;
-		if (/in-content\s*(?:1|01)\b/i.test(alt)) score += 4;
-		if (/logo|avatar|author|icon|banner|advert|ebay|listing/i.test(haystack)) score -= 30;
-		if (/in-content\s*(?:1[0-9]|[2-9])\b/i.test(alt)) score -= 7;
-		const existing = candidates.get(absolute);
-		if (!existing || score > existing.score) candidates.set(absolute, { url: absolute, alt: cleanText(alt), score });
+
+		for (const token of tokens) {
+			if (haystack.includes(token)) score += 7;
+		}
+
+		if (/\bsealed\b|\bhobby[- _]?box\b|\bproduct[- _]?image\b|\bbox[- _]?image\b/i.test(haystack)) score += 28;
+		if (/\bbox\b/i.test(haystack)) score += 10;
+		if (/in-content\s*(?:1|01)\b/i.test(alt)) score += 12;
+		if (/thumb-1200|1200|1600|large/i.test(haystack)) score += 5;
+
+		// Individual card scans dominate later in-content positions on CI pages.
+		if (/in-content\s*(?:[2-9]|[1-9]\d+)\b/i.test(alt)) score -= 15;
+		if (/autograph|refractor|parallel|variation|rookie card|card front|card back/i.test(haystack)) score -= 16;
+		if (/logo|avatar|author|icon|banner|advert|ebay|listing|social/i.test(haystack)) score -= 40;
+
+		if (Number(width) >= 500 || Number(height) >= 500) score += 3;
+
+		const key = canonicalImageKey(absolute);
+		const candidate = {
+			url: absolute,
+			alt: cleanText(alt) || 'Checklist Insider product image',
+			score
+		};
+
+		const existing = candidates.get(key);
+
+		if (!existing || candidate.score > existing.score) {
+			candidates.set(key, candidate);
+		}
 	};
 
-	for (const meta of html.matchAll(/<meta\b[^>]*(?:property|name)=(["'])(?:og:image|twitter:image)\1[^>]*>/gi)) add(attribute(meta[0], 'content'), 'Product image', 30);
+	for (const meta of html.matchAll(/<meta\b[^>]*(?:property|name)=(["'])(?:og:image|twitter:image)\1[^>]*>/gi)) {
+		add(attribute(meta[0], 'content'), 'Product image', 24);
+	}
+
 	for (const img of html.matchAll(/<img\b[^>]*>/gi)) {
 		const tag = img[0];
 		const alt = attribute(tag, 'alt');
-		add(attribute(tag, 'src'), alt);
-		add(attribute(tag, 'data-src'), alt);
-		add(attribute(tag, 'data-lazy-src'), alt);
+		const width = Number(attribute(tag, 'width') || 0);
+		const height = Number(attribute(tag, 'height') || 0);
+
+		add(attribute(tag, 'src'), alt, 0, width, height);
+		add(attribute(tag, 'data-src'), alt, 0, width, height);
+		add(attribute(tag, 'data-lazy-src'), alt, 0, width, height);
+
 		const srcset = attribute(tag, 'srcset') || attribute(tag, 'data-srcset');
+
 		if (srcset) {
-			const last = srcset.split(',').map((item) => item.trim().split(/\s+/)[0]).filter(Boolean).at(-1);
-			add(last, alt, 3);
+			const largest = srcset
+				.split(',')
+				.map((item) => item.trim().split(/\s+/)[0])
+				.filter(Boolean)
+				.at(-1);
+
+			add(largest, alt, 4, width, height);
 		}
 	}
-	return [...candidates.values()].filter((candidate) => candidate.score > 0).sort((a, b) => b.score - a.score).slice(0, 6);
+
+	return [...candidates.values()]
+		.filter((candidate) => candidate.score >= 8)
+		.sort((a, b) => b.score - a.score)
+		.slice(0, 4);
 }
 
 export function parseChecklistInsiderEnrichment(html, pageUrl, requestedName = '') {
 	const title = titleFromHtml(html) || requestedName;
 	const releaseDate = parseReleaseDate(html);
 	const formats = parseFormatBlocks(html);
-	const sourceParagraphs = firstUsefulParagraphs(html);
+	const sourceFacts = leadFactLines(html);
 	const images = imageCandidates(html, pageUrl, title || requestedName);
-	const overview = makeOverview(title || requestedName, releaseDate, formats, sourceParagraphs);
-	return { source: 'Checklist Insider', sourceUrl: pageUrl, title, releaseDate, overview, formats, images, sourceFacts: sourceParagraphs };
+	const overview = makeOverview(title || requestedName, releaseDate, formats, sourceFacts);
+
+	return {
+		source: 'Checklist Insider',
+		sourceUrl: pageUrl,
+		title,
+		releaseDate,
+		overview,
+		formats,
+		images,
+		sourceFacts
+	};
 }
