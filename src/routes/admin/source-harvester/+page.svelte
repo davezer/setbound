@@ -34,6 +34,17 @@
 	let oddsPreviewUrl = $state('');
 	let oddsPreviewName = $state('');
 
+	let enrichment = $state(null);
+	let enrichmentProductSlug = $state('');
+	let enrichmentTargetIndex = $state(null);
+	let enrichmentBusy = $state(false);
+	let enrichmentError = $state('');
+	let enrichReleaseDate = $state(true);
+	let enrichOverview = $state(true);
+	let enrichFormats = $state(true);
+	let enrichImage = $state(true);
+	let selectedEnrichmentImage = $state('');
+
 	const affiliationOptions = $derived(
 		[...new Set((data.affiliations || []).map((item) => item.name).filter(Boolean))].sort()
 	);
@@ -683,6 +694,91 @@
 		openReview(reviewQueueIndex, nextIndex);
 	}
 
+	async function openEnrichment(item, productSlug, queueIndex = null) {
+		if (!item?.pageUrl || !productSlug) {
+			errorMessage = 'This product does not have a Checklist Insider source page to enrich from.';
+			return;
+		}
+
+		enrichmentBusy = true;
+		enrichmentError = '';
+		enrichment = null;
+		enrichmentProductSlug = productSlug;
+		enrichmentTargetIndex = queueIndex;
+		enrichReleaseDate = true;
+		enrichOverview = true;
+		enrichFormats = true;
+		enrichImage = true;
+
+		try {
+			const response = await fetch(
+				`/api/admin/source-harvester/enrich?url=${encodeURIComponent(item.pageUrl)}&name=${encodeURIComponent(item.name || '')}`
+			);
+			const result = await response.json();
+			if (!response.ok) throw new Error(result.message || 'Could not enrich this product.');
+			enrichment = result.enrichment;
+			selectedEnrichmentImage = result.enrichment.images?.[0]?.url || '';
+		} catch (error) {
+			enrichmentError = error?.message || 'Could not enrich this product.';
+		} finally {
+			enrichmentBusy = false;
+		}
+	}
+
+	function closeEnrichment() {
+		enrichment = null;
+		enrichmentProductSlug = '';
+		enrichmentTargetIndex = null;
+		enrichmentError = '';
+		selectedEnrichmentImage = '';
+	}
+
+	async function applyEnrichment() {
+		if (!enrichment || !enrichmentProductSlug) return;
+
+		enrichmentBusy = true;
+		enrichmentError = '';
+
+		try {
+			const response = await fetch('/api/admin/source-harvester/apply-enrichment', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({
+					productSlug: enrichmentProductSlug,
+					releaseDate: enrichment.releaseDate || '',
+					overview: enrichment.overview || '',
+					formats: enrichment.formats || [],
+					imageUrl: selectedEnrichmentImage,
+					applyReleaseDate: enrichReleaseDate,
+					applyOverview: enrichOverview,
+					applyFormats: enrichFormats,
+					applyImage: enrichImage && Boolean(selectedEnrichmentImage)
+				})
+			});
+
+			const result = await response.json();
+			if (!response.ok) throw new Error(result.message || 'Enrichment failed.');
+
+			if (enrichmentTargetIndex != null && queue[enrichmentTargetIndex]) {
+				queue[enrichmentTargetIndex] = {
+					...queue[enrichmentTargetIndex],
+					enriched: true,
+					statusText: queue[enrichmentTargetIndex].oddsImported
+						? 'Imported + odds + enriched'
+						: 'Imported + enriched'
+				};
+				queue = [...queue];
+			}
+
+			message = 'Product metadata and artwork saved.';
+			closeEnrichment();
+		} catch (error) {
+			enrichmentError = error?.message || 'Enrichment failed.';
+		} finally {
+			enrichmentBusy = false;
+		}
+	}
+
 	function setQueueValue(index, field, value) {
 		queue[index] = { ...queue[index], [field]: value };
 		queue = [...queue];
@@ -756,7 +852,16 @@
 							<a href={downloadUrl(item.oddsUrl, true)}>Download PDF</a>
 						{:else}<span class="muted">—</span>{/if}
 					</div>
-					<div>{#if existing}<span class="badge existing-badge">In Setbound</span>{:else}<span class="badge">New</span>{/if}</div>
+					<div class="catalog-status">
+						{#if existing}
+							<span class="badge existing-badge">In Setbound</span>
+							{#if item.source === 'Checklist Insider' && item.pageUrl}
+								<button class="mini-enrich" type="button" onclick={() => openEnrichment(item, existing.slug)}>Enrich</button>
+							{/if}
+						{:else}
+							<span class="badge">New</span>
+						{/if}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -865,6 +970,11 @@
 							{#if row.status === 'odds-error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry odds/checklist prepare</button>{/if}
 							{#if row.status === 'error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry</button>{/if}
 							{#if row.status === 'odds-import-error'}<button class="secondary" onclick={() => importOddsForRow(index)} disabled={busy}>Retry odds import</button>{/if}
+							{#if row.importedSlug && row.pageUrl}
+								<button class="secondary" type="button" onclick={() => openEnrichment(row, row.importedSlug, index)}>
+									{row.enriched ? 'Enriched ✓' : 'Enrich draft →'}
+								</button>
+							{/if}
 							{#if row.importedSlug}<a class="secondary" href={`/sets/${row.importedSlug}`}>View set →</a>{/if}
 						</div>
 					</div>
@@ -872,6 +982,92 @@
 			</div>
 		</section>
 	{/if}
+	{#if enrichmentBusy && !enrichment}
+		<div class="enrich-backdrop">
+			<div class="enrich-loading">Harvesting product metadata and artwork…</div>
+		</div>
+	{/if}
+
+	{#if enrichment || enrichmentError}
+		<div class="enrich-backdrop" role="presentation" onclick={closeEnrichment}>
+			<div class="enrich-modal" role="dialog" aria-modal="true" onclick={(event) => event.stopPropagation()}>
+				<div class="enrich-head">
+					<div>
+						<div class="eyebrow">Product enrichment</div>
+						<h2>{enrichment?.title || 'Checklist Insider metadata'}</h2>
+						<p>Review everything before it is written to Setbound.</p>
+					</div>
+					<button class="close" type="button" onclick={closeEnrichment}>×</button>
+				</div>
+
+				{#if enrichmentError}<div class="enrich-error">{enrichmentError}</div>{/if}
+
+				{#if enrichment}
+					<div class="enrich-body">
+						<section class="enrich-section">
+							<label class="enrich-toggle"><input type="checkbox" bind:checked={enrichReleaseDate} /><span>Release date</span></label>
+							<input class="input" type="date" bind:value={enrichment.releaseDate} disabled={!enrichReleaseDate} />
+						</section>
+
+						<section class="enrich-section">
+							<label class="enrich-toggle"><input type="checkbox" bind:checked={enrichOverview} /><span>Setbound overview</span></label>
+							<textarea class="input overview-edit" rows="6" bind:value={enrichment.overview} disabled={!enrichOverview}></textarea>
+							<p class="enrich-help">This is an original Setbound draft assembled from factual product details, not copied article prose.</p>
+						</section>
+
+						<section class="enrich-section">
+							<label class="enrich-toggle"><input type="checkbox" bind:checked={enrichFormats} /><span>Product configuration / box break</span></label>
+							{#if enrichment.formats?.length}
+								<div class="enrich-formats">
+									{#each enrichment.formats as format}
+										<label>
+											<span>{format.label}</span>
+											<textarea class="input" rows="4" bind:value={format.details} disabled={!enrichFormats}></textarea>
+										</label>
+									{/each}
+								</div>
+							{:else}
+								<p class="enrich-help">No structured box configuration was detected on this page.</p>
+							{/if}
+						</section>
+
+						<section class="enrich-section">
+							<label class="enrich-toggle"><input type="checkbox" bind:checked={enrichImage} /><span>Product artwork</span></label>
+							{#if enrichment.images?.length}
+								<div class="image-candidates">
+									{#each enrichment.images as image}
+										<label class:selected={selectedEnrichmentImage === image.url}>
+											<input type="radio" name="enrich_image" value={image.url} bind:group={selectedEnrichmentImage} disabled={!enrichImage} />
+											<img src={image.url} alt={image.alt || 'Product image candidate'} loading="lazy" />
+											<span>{image.alt || 'Checklist Insider image'}</span>
+										</label>
+									{/each}
+								</div>
+							{:else}
+								<p class="enrich-help">No safe Checklist Insider product-image candidates were detected.</p>
+							{/if}
+						</section>
+
+						{#if enrichment.sourceFacts?.length}
+							<details class="source-facts">
+								<summary>Source facts used for review</summary>
+								{#each enrichment.sourceFacts as fact}<p>{fact}</p>{/each}
+							</details>
+						{/if}
+					</div>
+
+					<div class="enrich-footer">
+						<a href={enrichment.sourceUrl} target="_blank" rel="noreferrer">Open source page ↗</a>
+						<div>
+							<button class="ghost" type="button" onclick={closeEnrichment}>Cancel</button>
+							<button class="primary" type="button" onclick={applyEnrichment} disabled={enrichmentBusy}>{enrichmentBusy ? 'Saving…' : 'Apply enrichment'}</button>
+						</div>
+					</div>
+				{/if}
+			</div>
+		</div>
+	{/if}
+
 	{#if oddsPreviewUrl}
 		<div class="pdf-backdrop" role="presentation" onclick={closeOddsPreview}>
 			<div class="pdf-modal" role="dialog" aria-modal="true" aria-labelledby="odds-preview-title" onclick={(event) => event.stopPropagation()}>
@@ -981,8 +1177,10 @@
 	.catalog{border:1px solid var(--line);border-radius:.9rem;overflow:auto;background:white}.catalog-head,.catalog-row{display:grid;grid-template-columns:38px minmax(320px,1.7fr) 130px 145px 145px 120px;gap:.75rem;align-items:center;padding:.68rem .8rem;min-width:950px}.catalog-head{background:#faf9f7;color:var(--muted);font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.catalog-row{border-top:1px solid var(--line);font-size:.7rem}.catalog-row.existing{opacity:.68}.identity strong,.identity span{display:block}.identity span{margin-top:.12rem;color:var(--muted);font-size:.62rem}.catalog-row a{display:block;color:var(--blue);font-size:.65rem;font-weight:850;text-decoration:none}.sub-link{margin-top:.2rem}.source-badge,.badge{display:inline-block;padding:.22rem .4rem;border-radius:999px;background:#eef4f5;font-size:.56rem;font-weight:900}.existing-badge{background:#f0efed;color:var(--muted)}.muted{color:var(--muted)}
 	.batch{margin-top:2rem}.batch-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:.8rem}.batch-head h2{font-family:var(--display);font-size:2.2rem;font-weight:500;letter-spacing:-.04em;margin:.25rem 0}.batch-head p{margin:0;color:var(--muted);font-size:.74rem}.batch-list{border:1px solid var(--line);border-radius:.9rem;overflow:hidden;background:white}.batch-row{display:grid;grid-template-columns:1fr auto;gap:1rem;padding:1rem;border-bottom:1px solid var(--line)}.batch-row:last-child{border-bottom:0}.batch-row.review{background:#fff9f1}.batch-row.done{background:#f6faf8}.row-title{display:flex;justify-content:space-between;gap:1rem}.row-controls{display:grid;grid-template-columns:180px 180px;gap:.55rem;margin-top:.7rem}.row-controls label{display:grid;gap:.25rem}.metrics{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:.55rem;color:var(--muted);font-size:.63rem}.state{font-size:.6rem;font-weight:900}.state.ready,.state.imported{color:#26734d}.state.review,.state.odds-review{color:#9a5f18}.state.error,.state.odds-error,.state.odds-import-error{color:#9a3424}.row-error{margin-top:.5rem;color:#9a3424;font-size:.67rem}.row-actions{display:flex;align-items:center;gap:.4rem}
 	.odds-block{margin-top:.85rem;padding:.85rem;border:1px solid var(--line);border-radius:.75rem;background:#faf9f7}.odds-head{display:flex;justify-content:space-between;align-items:center;gap:1rem}.odds-head strong,.odds-head span{display:block}.odds-head>div>span{margin-top:.1rem;color:var(--muted);font-size:.62rem}.odds-state{font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em}.odds-state.good{color:#26734d}.odds-state.warn{color:#9a5f18}.odds-formats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.55rem;margin-top:.7rem}.odds-formats label{display:grid;gap:.22rem}.odds-formats label>span{color:var(--muted);font-size:.55rem;font-weight:900;text-transform:uppercase;letter-spacing:.07em}.odds-formats small{color:var(--muted);font-size:.55rem;line-height:1.35}.odds-problems{display:grid;gap:.18rem;margin-top:.65rem;padding:.6rem .7rem;border:1px solid #efc8bc;border-radius:.6rem;background:#fff4f0;color:#8f3726;font-size:.62rem}.odds-problems strong{margin-bottom:.1rem}.odds-verified{display:flex!important;align-items:center;gap:.45rem;margin-top:.65rem;font-size:.65rem;font-weight:800}.action-note{font-size:.62rem;color:#9a5f18;font-weight:850}
+	.catalog-status{display:grid;justify-items:start;gap:.35rem}.mini-enrich{border:0;background:transparent;padding:0;color:var(--blue);font:inherit;font-size:.58rem;font-weight:900;cursor:pointer}.mini-enrich:hover{text-decoration:underline}
+	.enrich-backdrop{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:1rem;background:rgba(20,18,16,.52);backdrop-filter:blur(2px)}.enrich-loading{padding:1rem 1.2rem;border-radius:.8rem;background:#fff;font-size:.75rem;font-weight:850;box-shadow:0 20px 70px rgba(0,0,0,.2)}.enrich-modal{width:min(1040px,96vw);max-height:92vh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;background:#fff;border:1px solid var(--line);border-radius:1rem;box-shadow:0 24px 90px rgba(0,0,0,.24)}.enrich-head{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;padding:1rem 1.15rem;border-bottom:1px solid var(--line)}.enrich-head h2{font-family:var(--display);font-size:2rem;font-weight:500;letter-spacing:-.04em;margin:.25rem 0}.enrich-head p{margin:0;color:var(--muted);font-size:.7rem}.enrich-body{overflow:auto;padding:0 1.15rem}.enrich-section{padding:1rem 0;border-bottom:1px solid var(--line)}.enrich-toggle{display:flex;align-items:center;gap:.45rem;margin-bottom:.6rem;font-size:.7rem;font-weight:900}.overview-edit{width:100%;resize:vertical;line-height:1.5}.enrich-help{margin:.4rem 0 0;color:var(--muted);font-size:.62rem;line-height:1.45}.enrich-formats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}.enrich-formats label{display:grid;gap:.3rem}.enrich-formats label>span{font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}.enrich-formats textarea{resize:vertical;line-height:1.45}.image-candidates{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.7rem}.image-candidates label{position:relative;display:grid;grid-template-rows:150px auto;overflow:hidden;border:1px solid var(--line);border-radius:.7rem;background:#faf9f7;cursor:pointer}.image-candidates label.selected{outline:2px solid var(--blue);outline-offset:1px}.image-candidates input{position:absolute;top:.55rem;left:.55rem;z-index:2}.image-candidates img{width:100%;height:100%;object-fit:contain;background:#fff}.image-candidates label>span{padding:.5rem;font-size:.58rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.source-facts{padding:1rem 0}.source-facts summary{cursor:pointer;font-size:.66rem;font-weight:900}.source-facts p{font-size:.65rem;line-height:1.5;color:var(--muted)}.enrich-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.15rem;border-top:1px solid var(--line);background:#faf9f7}.enrich-footer>a{color:var(--blue);font-size:.65rem;font-weight:850;text-decoration:none}.enrich-footer>div{display:flex;gap:.5rem}.enrich-error{margin:1rem 1.15rem;padding:.7rem;border:1px solid #efc8bc;border-radius:.6rem;background:#fff2ee;color:#8f3726;font-size:.7rem}
 	.odds-head-actions{display:flex;align-items:center;gap:.55rem}.preview-pdf{border:1px solid var(--line);border-radius:.55rem;padding:.4rem .55rem;background:white;color:var(--blue);font:inherit;font-size:.6rem;font-weight:850;cursor:pointer}.preview-pdf:hover{background:#f7f7f6}
 	.pdf-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:1rem;background:rgba(20,18,16,.5);backdrop-filter:blur(2px)}.pdf-modal{width:min(1100px,96vw);height:min(88vh,950px);display:grid;grid-template-rows:auto 1fr;overflow:hidden;background:white;border:1px solid var(--line);border-radius:1rem;box-shadow:0 24px 80px rgba(0,0,0,.24)}.pdf-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;padding:1rem 1.1rem;border-bottom:1px solid var(--line)}.pdf-head h2{margin:.25rem 0;font-family:var(--display);font-size:1.7rem;font-weight:500;letter-spacing:-.035em}.pdf-head p{margin:0;color:var(--muted);font-size:.68rem}.pdf-head-actions{display:flex;align-items:center;gap:.5rem}.pdf-frame-wrap{min-height:0;background:#efefed}.pdf-frame{width:100%;height:100%;border:0;background:white}
 	.review-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:1rem;background:rgba(20,18,16,.42);backdrop-filter:blur(2px)}.review-modal{width:min(760px,100%);max-height:min(86vh,900px);overflow:auto;background:white;border:1px solid var(--line);border-radius:1rem;box-shadow:0 24px 80px rgba(0,0,0,.2)}.review-head{display:flex;justify-content:space-between;gap:1rem;padding:1.2rem 1.25rem;border-bottom:1px solid var(--line)}.review-head h2{margin:.25rem 0;font-family:var(--display);font-size:2rem;font-weight:500;letter-spacing:-.04em}.review-head p{margin:0;color:var(--muted);font-size:.72rem}.close{border:0;background:transparent;font-size:1.5rem;line-height:1;cursor:pointer}.review-raw{padding:.9rem 1.25rem;background:#faf9f7;border-bottom:1px solid var(--line)}.review-raw span{display:block;margin-bottom:.35rem;color:var(--muted);font-size:.57rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.review-raw code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.68rem;line-height:1.5}.review-form{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;padding:1.2rem 1.25rem}.review-form label>span{display:block;margin-bottom:.3rem;color:var(--muted);font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.review-form .wide{grid-column:1/-1}.nil-check{grid-column:1/-1;display:flex;align-items:center;gap:.45rem}.nil-check span{margin:0!important;color:var(--ink)!important;text-transform:none!important;letter-spacing:0!important;font-size:.7rem!important}.flag-grid{grid-column:1/-1;display:flex;gap:1rem;flex-wrap:wrap;padding-top:.25rem}.flag-grid label{display:flex;align-items:center;gap:.4rem;font-size:.7rem;font-weight:800}.review-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.25rem;border-top:1px solid var(--line);background:#faf9f7}.review-actions{display:flex;gap:.5rem}.needs-fix{color:#9a3424;font-size:.66rem;font-weight:850}.resolved{color:#26734d;font-size:.66rem;font-weight:850}
-	@media(max-width:850px){.source-panel,.filters{grid-template-columns:1fr}.source-note{grid-column:auto}.toolbar,.batch-head{align-items:flex-start;flex-direction:column}.batch-row{grid-template-columns:1fr}.row-actions{justify-content:flex-start}.row-controls{grid-template-columns:1fr}}
+	@media(max-width:850px){.enrich-formats,.image-candidates{grid-template-columns:1fr}.enrich-footer{align-items:flex-start;flex-direction:column}.enrich-footer>div{width:100%;flex-wrap:wrap}.source-panel,.filters{grid-template-columns:1fr}.source-note{grid-column:auto}.toolbar,.batch-head{align-items:flex-start;flex-direction:column}.batch-row{grid-template-columns:1fr}.row-actions{justify-content:flex-start}.row-controls{grid-template-columns:1fr}}
 </style>
