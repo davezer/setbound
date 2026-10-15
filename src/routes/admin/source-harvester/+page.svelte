@@ -244,7 +244,10 @@
 	function oddsProblems(parsedOdds, names) {
 		if (!parsedOdds) return [];
 
-		const issues = [...(parsedOdds.headerIssues || [])];
+		// Revalidate the CURRENT editable labels. parsedOdds.headerIssues describes
+		// the parser's original guesses, so keeping those issues here made it
+		// impossible to verify a row even after the admin corrected every label.
+		const issues = [];
 		const seen = new Set();
 
 		for (let index = 0; index < names.length; index++) {
