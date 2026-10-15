@@ -279,6 +279,14 @@
 	function rowReadyState(row) {
 		if (!row?.parsed) return row;
 
+		if (row.parsed.safety?.blocked) {
+			return {
+				...row,
+				status: 'parse-review',
+				statusText: 'Suspicious spreadsheet parse'
+			};
+		}
+
 		const unresolved = row.parsed.cards.filter(
 			(card) =>
 				card.affiliation === 'UNRESOLVED' ||
@@ -449,8 +457,9 @@
 		const ready = queue.filter((row) => row.status === 'ready').length;
 		const review = queue.filter((row) => row.status === 'review').length;
 		const oddsReview = queue.filter((row) => row.status === 'odds-review').length;
+		const parseReview = queue.filter((row) => row.status === 'parse-review').length;
 		const failed = queue.filter((row) => row.status === 'error' || row.status === 'odds-error').length;
-		message = `${ready} ready · ${review} checklist review · ${oddsReview} odds review · ${failed} failed`;
+		message = `${ready} ready · ${review} checklist review · ${parseReview} parse review · ${oddsReview} odds review · ${failed} failed`;
 		busy = false;
 	}
 
@@ -896,6 +905,10 @@
 								<div class="metrics">
 									<span>{row.parsed.cards.length.toLocaleString()} cards</span>
 									<span>{row.parsed.sections.length} sections</span>
+									{#if row.parsed.paniniStats}
+										<span>{row.parsed.paniniStats.sourceRows.toLocaleString()} source rows → {row.parsed.paniniStats.cards.toLocaleString()} checklist cards</span>
+										<span>{row.parsed.paniniStats.parallelSetCount.toLocaleString()} parallel sets collapsed</span>
+									{/if}
 									<span>{row.audit?.totals?.review || 0} review flags</span>
 									<span>{row.audit?.totals?.unresolvedCards || 0} unresolved</span>
 								</div>
@@ -969,6 +982,10 @@
 						<div class="row-actions">
 							{#if row.status === 'ready'}<button class="secondary" onclick={() => importRow(index)} disabled={busy}>Import checklist + odds</button>{/if}
 							{#if row.status === 'review'}<button class="secondary" onclick={() => openReview(index)}>Review checklist inline →</button>{/if}
+							{#if row.status === 'parse-review'}
+								<span class="action-note">Import blocked: suspicious spreadsheet parse</span>
+								<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry prepare</button>
+							{/if}
 							{#if row.status === 'odds-review'}<span class="action-note">Verify odds formats above</span>{/if}
 							{#if row.status === 'odds-error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry odds/checklist prepare</button>{/if}
 							{#if row.status === 'error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry</button>{/if}
