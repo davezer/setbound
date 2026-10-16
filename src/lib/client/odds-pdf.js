@@ -60,14 +60,51 @@ function groupIntoRows(items) {
 }
 
 function parsePage(rawRows) {
-	const dataRows = findLikelyDataRows(rawRows);
+	const cardHeaderIndex = findCardHeaderIndex(rawRows);
+
+	if (cardHeaderIndex < 0) {
+		const dataRows = findLikelyDataRows(rawRows);
+		const centers = columnCentersFromData(dataRows);
+
+		if (!centers.length) {
+			return { formats: [], rows: [], textRows: rawRows.map(rowText) };
+		}
+
+		const headerBand = findHeaderBand(rawRows, dataRows);
+		return parsePageWithGeometry(rawRows, headerBand, dataRows, centers);
+	}
+
+	const cardHeaderRow = rawRows[cardHeaderIndex];
+	const cardItem = cardHeaderRow.items.find((item) => /^cards?$/i.test(item.text));
+	const cardX = cardItem?.x ?? Math.min(...cardHeaderRow.items.map((item) => item.x));
+
+	const firstDataIndex = findFirstRealDataRowIndex(
+		rawRows,
+		cardHeaderIndex + 1,
+		cardX
+	);
+
+	if (firstDataIndex < 0) {
+		return { formats: [], rows: [], textRows: rawRows.map(rowText) };
+	}
+
+	// CRITICAL: never let SKU/header rows participate in data-column detection.
+	// Bare SKU values such as 6544 used to match isOddsToken(), causing the parser
+	// to mistake the header itself for the first data row.
+	const bodyRows = rawRows.slice(firstDataIndex);
+	const dataRows = findLikelyDataRows(bodyRows);
 	const centers = columnCentersFromData(dataRows);
 
 	if (!centers.length) {
 		return { formats: [], rows: [], textRows: rawRows.map(rowText) };
 	}
 
-	const headerBand = findHeaderBand(rawRows, dataRows);
+	const headerBand = rawRows.slice(cardHeaderIndex, firstDataIndex);
+
+	return parsePageWithGeometry(rawRows, headerBand, dataRows, centers);
+}
+
+function parsePageWithGeometry(rawRows, headerBand, dataRows, centers) {
 	const formats = extractFormatHeaders(headerBand, centers);
 
 	const rows = [];
@@ -83,7 +120,9 @@ function parsePage(rawRows) {
 
 		if (!oddsItems.length) {
 			if (looksLikeContinuation(text) && rows.length) {
-				rows[rows.length - 1].name = `${rows[rows.length - 1].name} ${text}`.replace(/\s+/g, ' ').trim();
+				rows[rows.length - 1].name = `${rows[rows.length - 1].name} ${text}`
+					.replace(/\s+/g, ' ')
+					.trim();
 			} else if (looksLikeNameFragment(text)) {
 				pendingPrefix = pendingPrefix ? `${pendingPrefix} ${text}` : text;
 			}
@@ -129,6 +168,43 @@ function parsePage(rawRows) {
 	}
 
 	return { formats, rows, textRows: rawRows.map(rowText) };
+}
+
+function findCardHeaderIndex(rows) {
+	for (let index = 0; index < rows.length; index++) {
+		if (rows[index].items.some((item) => /^cards?$/i.test(item.text))) {
+			return index;
+		}
+	}
+
+	return -1;
+}
+
+function findFirstRealDataRowIndex(rows, startIndex, cardX) {
+	for (let index = startIndex; index < rows.length; index++) {
+		const row = rows[index];
+		const oddsItems = row.items.filter((item) => isOddsToken(item.text));
+
+		if (!oddsItems.length) continue;
+
+		const leftText = row.items
+			.filter((item) => item.x <= cardX + 24 && !isOddsToken(item.text))
+			.map((item) => item.text)
+			.join(' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+
+		if (
+			leftText &&
+			/[A-Za-z]/.test(leftText) &&
+			!/^cards?$/i.test(leftText) &&
+			!isBoilerplate(leftText)
+		) {
+			return index;
+		}
+	}
+
+	return -1;
 }
 
 function findLikelyDataRows(rows) {
@@ -311,15 +387,20 @@ function extractFormatHeaders(headerRows, centers) {
 	}
 
 	const buckets = centers.map(() => []);
+	const bounds = centers.map((center, index) => columnBounds(centers, index));
 
 	for (const row of headerRows) {
 		for (const item of row.items) {
 			if (/^cards?$/i.test(item.text)) continue;
 
-			// Header fragments in dense Topps PDFs often visually overlap the
-			// next cell. Assign by text center instead of overlap width so
-			// wrapped fragments like HANGE / R BOX / EA stay in one column.
-			const index = nearestCenterIndex(item.centerX, centers);
+			let index = bounds.findIndex(
+				(bound) => item.x >= bound.left && item.x < bound.right
+			);
+
+			if (index < 0) {
+				index = nearestCenterIndex(item.centerX, centers);
+			}
+
 			if (index < 0) continue;
 
 			buckets[index].push({
@@ -331,18 +412,23 @@ function extractFormatHeaders(headerRows, centers) {
 	}
 
 	return centers.map((center, index) => {
-		const pieces = buckets[index]
-			.sort((a, b) => b.y - a.y || a.x - b.x)
-			.map((piece) => piece.text);
+		const ordered = buckets[index]
+			.sort((a, b) => b.y - a.y || a.x - b.x);
 
 		const rawHeader = normalizeHeaderFragments(
-			uniquePieces(pieces).join(' ')
+			ordered.map((piece) => piece.text).join(' ')
 		);
 
 		const bottom = bottomUpFormat(buckets[index]);
+
+		// Absolute fallback: preserve the full reconstructed source header rather
+		// than reducing an unknown format to bogus labels such as "Series".
+		const fallbackHeader = cleanFullHeader(rawHeader);
+
 		const name =
 			bottom.name ||
-			cleanHumanFormat(rawHeader) ||
+			extractKnownFormat(rawHeader) ||
+			fallbackHeader ||
 			`Format ${index + 1}`;
 
 		return {
@@ -353,6 +439,13 @@ function extractFormatHeaders(headerRows, centers) {
 			formatHeader: bottom.bottomRaw
 		};
 	});
+}
+
+function cleanFullHeader(value) {
+	return normalizeHeaderFragments(value)
+		.replace(/^cards?\s+/i, '')
+		.replace(/\s+/g, ' ')
+		.trim();
 }
 
 function prettyFormatName(value) {
