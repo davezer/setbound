@@ -1,6 +1,7 @@
 <script>
 	import { extractPdfText, extractTimHortonsChecklist } from '$lib/client/pdf.js';
 	import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
+	import { extractToppsRacingChecklist } from '$lib/client/topps-racing.js';
 	import { parseChecklistText } from '$lib/client/checklist-parser.js';
 	import { validateChecklistImport } from '$lib/checklist-validation.js';
 	import { extractOddsPdf } from '$lib/client/odds-pdf.js';
@@ -407,7 +408,19 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			const ext = String(row.checklistExtension || '').toLowerCase();
 			let parsed;
 
-			if (ext === 'pdf') {
+			const isToppsRacing =
+				String(row.manufacturer || '').toLowerCase() === 'topps' &&
+				String(row.sport || '').toLowerCase() === 'racing';
+
+			if (isToppsRacing) {
+				parsed = await extractToppsRacingChecklist(file, row.name);
+
+				if (!parsed) {
+					throw new Error(
+						'Topps Racing source layout is not supported yet. Import blocked instead of falling back to the generic parser.'
+					);
+				}
+			} else if (ext === 'pdf') {
 				const isTimHortons =
 					String(row.manufacturer || '').toLowerCase() === 'upper deck' &&
 					/\btim hortons\b/i.test(String(row.name || ''));
