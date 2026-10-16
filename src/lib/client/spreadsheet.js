@@ -347,8 +347,10 @@ function parseSheetRows(rows, sheetName) {
 
 
 
-const UPPER_DECK_VARIANT_RE =
-	/\\b(parallel|foil|rainbow|script|printing plates?|outburst|high gloss|ud exclusives|deluxe|gold|silver|black|blue|red|green|purple|pink|orange|yellow|emerald|ruby|copper|jade|platinum|amber|rose|sky blue|teal|speckle|turquoise|auto|material)\\b|\\/\\//i;
+const UPPER_DECK_VARIANT_RE = new RegExp(
+	'\\b(parallel|foil|rainbow|script|printing plates?|outburst|high gloss|ud exclusives|deluxe|gold|silver|black|blue|red|green|purple|pink|orange|yellow|emerald|ruby|copper|jade|platinum|amber|rose|sky blue|teal|speckle|turquoise|auto|material)\\b|//',
+	'i'
+);
 
 function findUpperDeckLayout(row) {
 	const normalized = row.map(key);
@@ -457,7 +459,7 @@ function upperDeckVariantScore(name) {
 
 	if (/\\bbase set\\b/i.test(value)) score -= 8;
 	if (/\\bparallel\\b/i.test(value)) score += 4;
-	if (/\\/\\//.test(value)) score += 3;
+	if (value.includes('//')) score += 3;
 
 	return score;
 }
