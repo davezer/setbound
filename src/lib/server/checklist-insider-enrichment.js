@@ -286,63 +286,96 @@ function humanList(values) {
 	return `${values.slice(0, -1).join(', ')}, and ${values.at(-1)}`;
 }
 
+function overviewSport(title = '') {
+	if (/\bbaseball\b/i.test(title)) return 'baseball';
+	if (/\bfootball\b/i.test(title)) return 'football';
+	if (/\bbasketball\b/i.test(title)) return 'basketball';
+	if (/\bsoccer\b/i.test(title)) return 'soccer';
+	if (/\bhockey\b/i.test(title)) return 'hockey';
+	if (/\bwrestling|wwe|aew\b/i.test(title)) return 'wrestling';
+	if (/\bformula 1|racing|nascar\b/i.test(title)) return 'racing';
+	if (/\bgolf\b/i.test(title)) return 'golf';
+	if (/\btennis\b/i.test(title)) return 'tennis';
+	return 'trading card';
+}
+
+function hasAutographGuarantee(details = '') {
+	return /(?:\b\d+\s+autographs?\b|\bone\s+autograph\b|\btwo\s+autographs?\b|\bthree\s+autographs?\b|\bfour\s+autographs?\b|\bautographs?\s+per\s+box\b|\bguaranteed\s+autographs?\b)/i.test(
+		String(details || '')
+	);
+}
+
+function collectorFacingOverview(value = '') {
+	return String(value || '')
+		// Collector-facing copy should never expose where Setbound gathered facts.
+		.replace(/\bChecklist Insider\b/gi, '')
+		.replace(/\baccording to\s+(?:the\s+)?(?:source|article|checklist)\b/gi, '')
+		.replace(/\b(?:the\s+)?source\s+(?:lists|says|notes|reports|shows)\b/gi, '')
+		.replace(/\s+([,.;:!?])/g, '$1')
+		.replace(/\s{2,}/g, ' ')
+		.trim();
+}
+
 function makeOverview(title, releaseDate, formats, sourceFacts) {
 	const sentences = [];
+	const themes = factualThemes(sourceFacts);
+	const sport = overviewSport(title);
+	const factsText = sourceFacts.join(' ');
+
+	let dateText = '';
+	if (releaseDate) {
+		dateText = new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', {
+			month: 'long',
+			day: 'numeric',
+			year: 'numeric',
+			timeZone: 'UTC'
+		});
+	}
 
 	if (title) {
-		if (releaseDate) {
-			const dateText = new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', {
-				month: 'long',
-				day: 'numeric',
-				year: 'numeric',
-				timeZone: 'UTC'
-			});
+		if (dateText && themes.length) {
+			sentences.push(
+				`${title} released on ${dateText} with a ${sport} checklist built around ${humanList(themes.slice(0, 4))}.`
+			);
+		} else if (dateText) {
 			sentences.push(`${title} released on ${dateText}.`);
+		} else if (themes.length) {
+			sentences.push(
+				`${title} features a ${sport} checklist built around ${humanList(themes.slice(0, 4))}.`
+			);
 		} else {
-			sentences.push(`${title} is part of the current trading card release calendar.`);
+			sentences.push(`${title} is a ${sport} card release with a mix of base cards, inserts, and chase content.`);
 		}
 	}
 
-	const themes = factualThemes(sourceFacts);
-
-	if (themes.length) {
-		const sport = /\bbaseball\b/i.test(title) ? 'baseball' :
-			/\bfootball\b/i.test(title) ? 'football' :
-			/\bbasketball\b/i.test(title) ? 'basketball' :
-			/\bsoccer\b/i.test(title) ? 'soccer' :
-			/\bhockey\b/i.test(title) ? 'hockey' : 'card';
-
-		sentences.push(
-			`The ${sport} checklist features ${humanList(themes.slice(0, 4))}.`
-		);
-	}
-
-	const factsText = sourceFacts.join(' ');
-
 	if (/chromium|chrome/i.test(factsText) && /paper/i.test(factsText)) {
-		sentences.push('The product mixes paper and Chrome-style content across the release.');
-	} else if (/sapphire/i.test(title + ' ' + factsText)) {
-		sentences.push('The release centers on Sapphire-style cards and exclusive color parallels.');
+		sentences.push('The release mixes traditional paper cards with Chrome-style content.');
+	} else if (/sapphire/i.test(`${title} ${factsText}`)) {
+		sentences.push('Sapphire styling and exclusive color parallels give the release its distinct look.');
 	}
 
 	const names = formatNames(formats);
 
 	if (names.length) {
-		sentences.push(`Checklist Insider lists ${humanList(names.slice(0, 5))} configurations for the product.`);
-	}
-
-	const autographFormats = formats
-		.filter((format) => /autograph/i.test(format.details))
-		.map((format) => normalizeFormatName(format.sourceLabel))
-		.filter(Boolean);
-
-	if (autographFormats.length) {
 		sentences.push(
-			`Autograph guarantees are listed for ${humanList(autographFormats.slice(0, 4))}.`
+			`Collectors can find the product in ${humanList(names.slice(0, 5))} configurations.`
 		);
 	}
 
-	return sentences.slice(0, 5).join(' ').trim();
+	const guaranteedAutographFormats = formats
+		.filter((format) => hasAutographGuarantee(format.details))
+		.map((format) => normalizeFormatName(format.sourceLabel))
+		.filter(Boolean);
+
+	if (guaranteedAutographFormats.length) {
+		sentences.push(
+			`Autograph guarantees are included in ${humanList(guaranteedAutographFormats.slice(0, 4))} boxes.`
+		);
+	} else if (/autograph/i.test(factsText)) {
+		sentences.push('Autographs are part of the chase alongside the product’s other inserts and parallels.');
+	}
+
+	return collectorFacingOverview(sentences.slice(0, 4).join(' '));
 }
 
 function canonicalImageKey(url) {
