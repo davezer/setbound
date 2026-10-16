@@ -1,5 +1,5 @@
 <script>
-	import { extractPdfText } from '$lib/client/pdf.js';
+	import { extractPdfText, extractTimHortonsChecklist } from '$lib/client/pdf.js';
 	import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
 	import { parseChecklistText } from '$lib/client/checklist-parser.js';
 	import { validateChecklistImport } from '$lib/checklist-validation.js';
@@ -268,6 +268,56 @@
 		return [...new Set(issues)];
 	}
 
+	function productContextAffiliation(row) {
+		const name = String(row?.name || '').toLowerCase();
+		const manufacturer = String(row?.manufacturer || '').toLowerCase();
+		const sport = String(row?.sport || '').toLowerCase();
+
+		if (manufacturer !== 'upper deck' || sport !== 'hockey') return '';
+
+		if (/\\bteam canada juniors?\\b/.test(name)) return 'Canada';
+		if (/\\bteam canada\\b/.test(name)) return 'Canada';
+		if (/\\bteam usa juniors?\\b/.test(name)) return 'United States';
+
+		return '';
+	}
+
+	function applyProductContextAffiliation(row, parsed) {
+		const affiliation = productContextAffiliation(row);
+		if (!affiliation || !parsed?.cards?.length) return parsed;
+
+		let changed = 0;
+
+		const cards = parsed.cards.map((card) => {
+			const unresolved =
+				card.affiliation === 'UNRESOLVED' ||
+				card.affiliation_status === 'unresolved';
+
+			if (!unresolved) return card;
+
+			changed += 1;
+
+			return {
+				...card,
+				affiliation,
+				affiliation_id: null,
+				affiliation_status: 'product-context',
+				confidence: Math.max(Number(card.confidence || 0), 0.98)
+			};
+		});
+
+		if (!changed) return parsed;
+
+		return {
+			...parsed,
+			cards,
+			high: cards.filter((card) => Number(card.confidence || 0) >= 0.85).length,
+			review: cards.filter((card) => Number(card.confidence || 0) < 0.85).length,
+			productContextAffiliation: affiliation,
+			productContextResolved: changed
+		};
+	}
+
 	function rowReadyState(row) {
 		if (!row?.parsed) return row;
 
@@ -358,13 +408,23 @@
 			let parsed;
 
 			if (ext === 'pdf') {
-				const text = await extractPdfText(file);
-				parsed = parseChecklistText(text, data.affiliations);
+				const isTimHortons =
+					String(row.manufacturer || '').toLowerCase() === 'upper deck' &&
+					/\\btim hortons\\b/i.test(String(row.name || ''));
+
+				if (isTimHortons) {
+					parsed = await extractTimHortonsChecklist(file);
+				} else {
+					const text = await extractPdfText(file);
+					parsed = parseChecklistText(text, data.affiliations);
+				}
 			} else if (ext === 'xls' || ext === 'xlsx') {
 				parsed = await extractSpreadsheetChecklist(file);
 			} else {
 				throw new Error(`Unsupported checklist type: ${ext || 'unknown'}`);
 			}
+
+			parsed = applyProductContextAffiliation(row, parsed);
 
 			const audit = validateChecklistImport(parsed.cards, parsed.checklist_meta, parsed.sections);
 
