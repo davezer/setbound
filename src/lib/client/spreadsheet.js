@@ -253,6 +253,11 @@ function parseShapeRow(row, section) {
 			continue;
 		}
 
+		// Classification/status values are not affiliations.
+		if (['legend', 'legends'].includes(normalized)) {
+			continue;
+		}
+
 		// The first non-flag value after the subject is the affiliation/brand.
 		if (!affiliation && !FLAG_WORDS.has(normalized)) {
 			affiliation = value;
@@ -624,6 +629,10 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 
 			const flags = upperDeckFlags(setName, row, layout);
 
+			const sourceHasAffiliation =
+				layout.team >= 0 ||
+				(layout.teamCity >= 0 && layout.teamName >= 0);
+
 			sourceRows.push({
 				sheetName,
 				rowNumber: index + 1,
@@ -631,6 +640,7 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 				cardNumber,
 				subject,
 				affiliation,
+				sourceHasAffiliation,
 				rookie: flags.rookie,
 				autograph: flags.autograph,
 				memorabilia: flags.memorabilia,
@@ -710,7 +720,9 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 			const card = makeCard({
 				cardNumber: row.cardNumber,
 				subject: row.subject,
-				affiliation: row.affiliation || 'UNRESOLVED',
+				affiliation:
+					row.affiliation ||
+					(row.sourceHasAffiliation ? 'UNRESOLVED' : 'NIL'),
 				checklist: rootName,
 				rookie: row.rookie,
 				autograph: row.autograph,
@@ -723,8 +735,17 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 					row.serial,
 					row.notes
 				].filter(Boolean).join(' | '),
-				confidence: row.affiliation ? 0.99 : 0.72
+				confidence:
+					row.affiliation
+						? 0.99
+						: row.sourceHasAffiliation
+							? 0.72
+							: 0.99
 			});
+
+			if (!row.affiliation && !row.sourceHasAffiliation) {
+				card.affiliation_status = 'source-nil';
+			}
 
 			card.serial_number = row.serial || null;
 			rootCards.push(card);
@@ -822,7 +843,7 @@ const PANINI_PARALLEL_PREFIXES = [
 	'checkered flag', 'checkered flags', 'numbers', 'printing plate black',
 	'printing plate cyan', 'printing plate magenta', 'printing plate yellow',
 	'printing plate', 'press proof', 'diamond plate', 'diamond', 'fireworks',
-	'tie-dye', 'tri-color', 'maroon'
+	'tie-dye', 'tri-color', 'maroon', 'pumpkins', 'slime'
 ];
 
 function findPaniniHeader(row) {

@@ -1,4 +1,5 @@
 <script>
+	import { tick } from 'svelte';
 	import { parseChecklistSource } from '$lib/client/checklist-engine.js';
 	import { validateChecklistImport } from '$lib/checklist-validation.js';
 	import { extractOddsPdf } from '$lib/client/odds-pdf.js';
@@ -215,10 +216,33 @@
 	}
 
 	function manufacturerIdFor(item) {
-		const exact = data.manufacturers.find((manufacturer) =>
-			manufacturer.name.toLowerCase() === String(item.manufacturer || '').toLowerCase()
+		const raw = String(item.manufacturer || '').trim().toLowerCase();
+
+		const exact = data.manufacturers.find(
+			(manufacturer) => manufacturer.name.toLowerCase() === raw
 		);
-		return exact?.id ?? data.manufacturers[0]?.id ?? null;
+
+		if (exact) return exact.id;
+
+		const aliases = {
+			fleer: 'upper deck',
+			'fleer ultra': 'upper deck',
+			skybox: 'upper deck',
+			'skybox metal universe': 'upper deck',
+			donruss: 'panini',
+			score: 'panini'
+		};
+
+		const target = aliases[raw];
+
+		if (target) {
+			const aliased = data.manufacturers.find(
+				(manufacturer) => manufacturer.name.toLowerCase() === target
+			);
+			if (aliased) return aliased.id;
+		}
+
+		return data.manufacturers[0]?.id ?? null;
 	}
 
 	async function fetchFile(url, filename) {
@@ -289,7 +313,8 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 		const cards = parsed.cards.map((card) => {
 			const unresolved =
 				card.affiliation === 'UNRESOLVED' ||
-				card.affiliation_status === 'unresolved';
+				card.affiliation_status === 'unresolved' ||
+				card.affiliation_status === 'source-nil';
 
 			if (!unresolved) return card;
 
@@ -468,6 +493,10 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			errorMessage = 'Select at least one new product with a checklist file.';
 			return;
 		}
+
+		message = 'Clearing previous prepared results…';
+		queue = [];
+		await tick();
 
 		queue = items.map((item) => ({
 			...item,
