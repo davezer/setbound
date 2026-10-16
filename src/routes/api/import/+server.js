@@ -237,7 +237,7 @@ export async function POST({ request, platform }) {
 
 		const existingAff = await database
 			.prepare(`
-				SELECT id, name, normalized_name
+				SELECT id, name, normalized_name, sport_id
 				FROM affiliations
 			`)
 			.all();
@@ -247,7 +247,11 @@ export async function POST({ request, platform }) {
 				affiliation.normalized_name || affiliation.name
 			);
 
-			if (normalizedKey) {
+			const sameSport =
+				!affiliation.sport_id ||
+				Number(affiliation.sport_id) === Number(body.sportId);
+
+			if (normalizedKey && sameSport) {
 				affiliationIds.set(normalizedKey, affiliation.id);
 			}
 		}
@@ -351,32 +355,57 @@ export async function POST({ request, platform }) {
 					if (!affiliationId) {
 						let row = await database
 							.prepare(`
-								SELECT id
+								SELECT id, sport_id
 								FROM affiliations
 								WHERE normalized_name = ?
+								  AND (sport_id = ? OR sport_id IS NULL)
+								ORDER BY CASE WHEN sport_id = ? THEN 0 ELSE 1 END, id
 								LIMIT 1
 							`)
-							.bind(affiliationKey)
+							.bind(
+								affiliationKey,
+								Number(body.sportId),
+								Number(body.sportId)
+							)
 							.first();
+
+						if (row?.id && !row.sport_id) {
+							await database
+								.prepare('UPDATE affiliations SET sport_id = ? WHERE id = ? AND sport_id IS NULL')
+								.bind(Number(body.sportId), row.id)
+								.run();
+
+							row.sport_id = Number(body.sportId);
+						}
 	
 						if (!row) {
 							await database
 								.prepare(`
 									INSERT OR IGNORE INTO affiliations
-										(name, normalized_name, type, aliases_json)
-									VALUES (?, ?, 'team', '[]')
+										(name, normalized_name, sport_id, type, aliases_json)
+									VALUES (?, ?, ?, 'team', '[]')
 								`)
-								.bind(affiliationName, affiliationKey)
+								.bind(
+									affiliationName,
+									affiliationKey,
+									Number(body.sportId)
+								)
 								.run();
 	
 							row = await database
 								.prepare(`
-									SELECT id
+									SELECT id, sport_id
 									FROM affiliations
 									WHERE normalized_name = ?
+									  AND (sport_id = ? OR sport_id IS NULL)
+									ORDER BY CASE WHEN sport_id = ? THEN 0 ELSE 1 END, id
 									LIMIT 1
 								`)
-								.bind(affiliationKey)
+								.bind(
+									affiliationKey,
+									Number(body.sportId),
+									Number(body.sportId)
+								)
 								.first();
 						}
 	
