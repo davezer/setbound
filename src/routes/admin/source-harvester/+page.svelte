@@ -168,36 +168,61 @@
 		const result = await response.json();
 		if (!response.ok) throw new Error(result.message || 'Checklist Insider discovery failed.');
 
-		const stubs = result.entries || [];
+		const entries = result.entries || [];
+		const cached = entries.filter((entry) => entry.cached);
+		const uncached = entries.filter((entry) => !entry.cached);
+
+		// Cached pages already contain their checklist/odds links, so merge them
+		// immediately and never hit Checklist Insider for them again.
+		const cachedUsable = cached.filter(
+			(entry) => entry && (entry.checklistUrl || entry.oddsUrl)
+		);
+
+		if (cachedUsable.length) mergeCatalog(cachedUsable);
+
 		let scanned = 0;
-		let found = 0;
+		let found = cachedUsable.length;
 
-		for (let i = 0; i < stubs.length; i += 2) {
-			const batch = stubs.slice(i, i + 2);
+		if (!uncached.length) {
+			return `${result.note} Everything for ${year} was served from cache.`;
+		}
 
-			const results = await Promise.all(batch.map(async (stub) => {
-				try {
-					const scanResponse = await fetch(`/api/admin/source-harvester/scan?url=${encodeURIComponent(stub.pageUrl)}`);
-					const scanResult = await scanResponse.json();
-					if (!scanResponse.ok) return null;
-					return scanResult.entry;
-				} catch {
-					return null;
-				}
-			}));
+		for (let i = 0; i < uncached.length; i += 2) {
+			const batch = uncached.slice(i, i + 2);
+
+			const results = await Promise.all(
+				batch.map(async (stub) => {
+					try {
+						const scanResponse = await fetch(
+							`/api/admin/source-harvester/scan?url=${encodeURIComponent(stub.pageUrl)}`
+						);
+						const scanResult = await scanResponse.json();
+						if (!scanResponse.ok) return null;
+						return scanResult.entry;
+					} catch {
+						return null;
+					}
+				})
+			);
 
 			scanned += batch.length;
-			const usable = results.filter((entry) => entry && (entry.checklistUrl || entry.oddsUrl));
+
+			const usable = results.filter(
+				(entry) => entry && (entry.checklistUrl || entry.oddsUrl)
+			);
+
 			found += usable.length;
 			if (usable.length) mergeCatalog(usable);
 
-			message = `Scanning Checklist Insider: ${scanned}/${stubs.length} pages · ${found} products with downloads`;
+			message =
+				`Checklist Insider cache: ${cached.length} cached · scanning new pages ${scanned}/${uncached.length} · ${found} products with downloads`;
+
+			// Keep the polite delay only for pages we actually hit remotely.
 			await new Promise((resolve) => setTimeout(resolve, 250));
 		}
 
-		return `${result.note} Found ${found} products with downloadable checklist/odds files.`;
+		return `${result.note} Scanned only ${uncached.length} uncached page${uncached.length === 1 ? '' : 's'}.`;
 	}
-
 	async function refreshCatalog() {
 		if (!sourceTopps && !sourceCI) {
 			errorMessage = 'Choose at least one source.';
