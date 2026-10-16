@@ -11,6 +11,8 @@ const HEADING_HINT =
 
 const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
 const DECLARED_COUNT = /^(\d{1,6})\s*(?:-\s*)?cards?(?:\s+set)?\.?$/i;
+const PRODUCT_CONFIG_NOISE =
+  /^(?:\d{1,6}\s*(?:-\s*)?card\s+set\b|\d{1,6}\s+cards?\s+per\s+(?:box|pack)\b|\d{1,6}\s+packs?\s+per\s+box\b|\d{1,6}\s+boxes?\b|\d{1,6}\s+cards?\s*,?\s*\d{1,6}\s+cards?\s+per\s+box\b)|\b(?:cards?\s+per\s+box|cards?\s+per\s+pack|packs?\s+per\s+box|packs?\s+of\s+\d{1,6}\s+cards?|autograph\s+cards?\s+per\s+box|autographs?\s+per\s+box|relics?\s+per\s+box|hits?\s+per\s+box)\b/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
 const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
 const NUMERIC_HEADING = /^(\d{1,4})\s+(.+)$/;
@@ -129,7 +131,9 @@ function structuredColumns(rest) {
   // Example: Formula 1 legends can carry "Legend" rather than a constructor.
   if (
     !affiliation ||
-    /^(rookie|rc|auto|autograph|relic|memorabilia|legend|legends)$/i.test(affiliation)
+    /^(rookie|rc|auto|autograph|relic|memorabilia|legend|legends)$/i.test(
+      affiliation.replace(/[.:;,-]+$/g, '').trim()
+    )
   ) {
     return { subject, affiliation: null, sourceNil: true, trailing: parts.slice(1) };
   }
@@ -138,6 +142,8 @@ function structuredColumns(rest) {
 }
 
 function parseCard(line, section, affiliations) {
+  if (PRODUCT_CONFIG_NOISE.test(line)) return null;
+
   const m = line.match(CARD_START);
   if (!m) return null;
 
@@ -254,6 +260,7 @@ export function parseChecklistText(text, affiliations = []) {
 
   for (const line of lines) {
     if (PAGE_NOISE.test(line)) continue;
+    if (PRODUCT_CONFIG_NOISE.test(line)) continue;
 
     if (PARALLEL_LABEL.test(line)) {
       captureParallels = true;
