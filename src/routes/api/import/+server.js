@@ -390,7 +390,6 @@ export async function POST({ request, platform }) {
 						affiliationIds.set(affiliationKey, affiliationId);
 					}
 				}
-				}
 			}
 
 			await database
