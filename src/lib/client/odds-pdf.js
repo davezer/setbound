@@ -233,6 +233,73 @@ function headerColumnIndex(item, centers) {
 	return nearestCenterIndex(item.centerX, centers);
 }
 
+function normalizeHeaderFragments(value) {
+	return String(value || '')
+		.replace(/\bHANGE\s+R\b/gi, 'HANGER')
+		.replace(/\bFANATI\s+CS\b/gi, 'FANATICS')
+		.replace(/\bPAC\s+K\b/gi, 'PACK')
+		.replace(/\bDISPLA\s+Y\b/gi, 'DISPLAY')
+		.replace(/\bEDITIO\s+N\b/gi, 'EDITION')
+		.replace(/\bBREAKE\s+R\b/gi, 'BREAKER')
+		.replace(/\bDELIGH\s+T\b/gi, 'DELIGHT')
+		.replace(/\bVALUE\s+BO\s+X\b/gi, 'VALUE BOX')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function headerLevels(items) {
+	const levels = [];
+
+	for (const item of [...items].sort((a, b) => a.y - b.y || a.x - b.x)) {
+		let level = levels.find((candidate) => Math.abs(candidate.y - item.y) <= 2.5);
+
+		if (!level) {
+			level = { y: item.y, items: [] };
+			levels.push(level);
+		}
+
+		level.items.push(item);
+	}
+
+	return levels.sort((a, b) => a.y - b.y);
+}
+
+function bottomUpFormat(items) {
+	if (!items.length) return { name: '', bottomRaw: '' };
+
+	const levels = headerLevels(items);
+	const pieces = [];
+
+	// The collector-facing package name is printed at the BOTTOM of Topps'
+	// multi-line header. Walk upward one visual line at a time until the text
+	// becomes a recognizable package format.
+	for (const level of levels) {
+		const line = level.items
+			.sort((a, b) => a.x - b.x)
+			.map((item) => item.text)
+			.join(' ');
+
+		pieces.unshift(line);
+
+		const candidate = normalizeHeaderFragments(pieces.join(' '));
+		const known = extractKnownFormat(candidate);
+
+		if (known) {
+			return {
+				name: known,
+				bottomRaw: candidate
+			};
+		}
+	}
+
+	const fallback = normalizeHeaderFragments(pieces.join(' '));
+
+	return {
+		name: cleanHumanFormat(fallback),
+		bottomRaw: fallback
+	};
+}
+
 function extractFormatHeaders(headerRows, centers) {
 	if (!headerRows.length) {
 		return centers.map((x, index) => ({
@@ -249,10 +316,17 @@ function extractFormatHeaders(headerRows, centers) {
 		for (const item of row.items) {
 			if (/^cards?$/i.test(item.text)) continue;
 
-			const index = headerColumnIndex(item, centers);
+			// Header fragments in dense Topps PDFs often visually overlap the
+			// next cell. Assign by text center instead of overlap width so
+			// wrapped fragments like HANGE / R BOX / EA stay in one column.
+			const index = nearestCenterIndex(item.centerX, centers);
 			if (index < 0) continue;
 
-			buckets[index].push({ y: row.y, x: item.x, text: item.text });
+			buckets[index].push({
+				y: row.y,
+				x: item.x,
+				text: item.text
+			});
 		}
 	}
 
@@ -261,19 +335,28 @@ function extractFormatHeaders(headerRows, centers) {
 			.sort((a, b) => b.y - a.y || a.x - b.x)
 			.map((piece) => piece.text);
 
-		const rawHeader = uniquePieces(pieces)
-			.join(' ')
-			.replace(/\s+/g, ' ')
-			.trim();
+		const rawHeader = normalizeHeaderFragments(
+			uniquePieces(pieces).join(' ')
+		);
 
-		const name = cleanHumanFormat(rawHeader) || `Format ${index + 1}`;
+		const bottom = bottomUpFormat(buckets[index]);
+		const name =
+			bottom.name ||
+			cleanHumanFormat(rawHeader) ||
+			`Format ${index + 1}`;
 
-		return { index, x: center, name, rawHeader };
+		return {
+			index,
+			x: center,
+			name,
+			rawHeader,
+			formatHeader: bottom.bottomRaw
+		};
 	});
 }
 
 function prettyFormatName(value) {
-	let text = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+	let text = normalizeHeaderFragments(value).toLowerCase();
 
 	text = text.replace(/\b\w/g, (letter) => letter.toUpperCase());
 
@@ -282,6 +365,7 @@ function prettyFormatName(value) {
 		.replace(/\bSe\b/g, 'SE')
 		.replace(/\bCe\b/g, 'CE')
 		.replace(/\bCee\b/g, 'CEE')
+		.replace(/\bCc\b/g, 'CC')
 		.replace(/\bHta\b/g, 'HTA')
 		.replace(/\bFotl\b/g, 'FOTL')
 		.replace(/\bAsg\b/g, 'ASG')
@@ -292,28 +376,22 @@ function prettyFormatName(value) {
 }
 
 function extractKnownFormat(value) {
-	const text = String(value || '')
-		.toUpperCase()
-		.replace(/[–—]/g, '-')
-		.replace(/\s+/g, ' ')
-		.trim();
+	const text = normalizeHeaderFragments(value).toUpperCase();
 
 	if (!text) return '';
 
-	// These are the collector-facing package labels Topps prints on the
-	// bottom line of its odds headers. Product/SKU text above them is noise.
 	const patterns = [
 		/FANATICS FEST VALUE BOX\b/g,
 		/FANATICS FEST(?: N)? HOBBY\b/g,
-		/CLUB SUPER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/ASG MEGA(?: BOX)?(?: (?:EA|SE|CE|CEE))?\b/g,
-		/HANGER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/DISPLAY BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/VALUE BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/SUPER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/FAT PACK(?: (?:EA|SE|CE|CEE))?\b/g,
-		/MEGA BOX(?: (?:EA|SE|CE|CEE))?\b/g,
-		/MEGA(?: (?:EA|SE|CE|CEE))\b/g,
+		/CLUB SUPER BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/ASG MEGA(?: BOX)?(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/HANGER BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/DISPLAY BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/VALUE BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/SUPER BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/FAT PACK(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/MEGA BOX(?: (?:EA|SE|CC|CE|CEE))?\b/g,
+		/MEGA(?: (?:EA|SE|CC|CE|CEE))\b/g,
 		/FLOOR DISPLAY\b/g,
 		/BULK PACKS?\b/g,
 		/JAPAN EDITION\b/g,
@@ -343,10 +421,12 @@ function extractKnownFormat(value) {
 				index: match.index
 			};
 
+			// When walking bottom-up, the desired phrase is generally the
+			// longest recognized phrase in the reconstructed bottom lines.
 			if (
 				!best ||
-				candidate.index > best.index ||
-				(candidate.index === best.index && candidate.value.length > best.value.length)
+				candidate.value.length > best.value.length ||
+				(candidate.value.length === best.value.length && candidate.index > best.index)
 			) {
 				best = candidate;
 			}
@@ -357,33 +437,29 @@ function extractKnownFormat(value) {
 }
 
 function cleanHumanFormat(value) {
-	let text = String(value || '').replace(/\s+/g, ' ').trim();
+	let text = normalizeHeaderFragments(value);
 
 	text = text
 		.replace(/^cards?\s+/i, '')
 		.replace(/\s+cards?$/i, '')
 		.trim();
 
-	// First choice: ignore the SKU/product wording completely and take the
-	// package-format phrase Topps prints at the bottom of the column.
 	const known = extractKnownFormat(text);
 	if (known) return known;
 
-	// Fallback for a format we have not seen yet: everything after the final
-	// four-digit product year is more likely to be the package label than the
-	// SKU/product family printed before it.
 	const years = [...text.matchAll(/\b20\d{2}\b/g)];
 
 	if (years.length) {
 		const lastYear = years.at(-1);
-		const tail = text.slice(lastYear.index + lastYear[0].length).trim();
+		const tail = normalizeHeaderFragments(
+			text.slice(lastYear.index + lastYear[0].length)
+		);
 
 		if (tail && !looksLikeSku(tail)) {
 			return prettyFormatName(tail);
 		}
 	}
 
-	// Legacy fallback.
 	text = text.replace(/^\d{3,}\s*-\s*/i, '');
 	text = text.replace(/^(?:MLB|NFL|NBA|NHL|WWE)[-\s]+/i, '');
 	text = text.replace(/^(?:TOPPS|BOWMAN|PANINI)[-\s]+/i, '');
@@ -414,8 +490,6 @@ function validateFormats(formats) {
 		}
 	}
 
-	// Duplicate human labels are VALID. Topps frequently has multiple Hobby,
-	// Mega, Value Box, etc. columns differentiated only by internal SKU.
 	return issues;
 }
 
