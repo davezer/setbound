@@ -1,9 +1,114 @@
 <script>
 	let { data, form } = $props();
 
+	let products = $state([...data.products]);
+	let sportFilter = $state('All sports');
+	let yearFilter = $state('All years');
+	let manufacturerFilter = $state('All manufacturers');
+	let statusFilter = $state('All');
+	let query = $state('');
+	let deleting = $state(null);
+	let toggling = $state(null);
+	let message = $state('');
+
+	const sports = $derived(['All sports', ...[...new Set(products.map((p) => p.sport_name).filter(Boolean))].sort()]);
+	const years = $derived(['All years', ...[...new Set(products.map((p) => String(p.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a))]);
+	const manufacturers = $derived(['All manufacturers', ...[...new Set(products.map((p) => p.manufacturer_name).filter(Boolean))].sort()]);
+
+	const visible = $derived(
+		products.filter((product) => {
+			const q = query.trim().toLowerCase();
+
+			return (
+				(sportFilter === 'All sports' || product.sport_name === sportFilter) &&
+				(yearFilter === 'All years' || String(product.year) === yearFilter) &&
+				(manufacturerFilter === 'All manufacturers' || product.manufacturer_name === manufacturerFilter) &&
+				(
+					statusFilter === 'All' ||
+					(statusFilter === 'Live' && Boolean(product.published)) ||
+					(statusFilter === 'Draft' && !product.published)
+				) &&
+				(
+					!q ||
+					`${product.name} ${product.manufacturer_name} ${product.sport_name} ${product.year}`
+						.toLowerCase()
+						.includes(q)
+				)
+			);
+		})
+	);
+
 	function imageUrl(product) {
 		if (!product.image_key) return '';
 		return `/media/set/${product.slug}?v=${encodeURIComponent(product.image_key)}`;
+	}
+
+	function resetFilters() {
+		sportFilter = 'All sports';
+		yearFilter = 'All years';
+		manufacturerFilter = 'All manufacturers';
+		statusFilter = 'All';
+		query = '';
+	}
+
+	async function toggleVisibility(product) {
+		const nextPublished = product.published ? 0 : 1;
+		toggling = product.id;
+		message = '';
+
+		try {
+			const body = new FormData();
+			body.set('product_id', String(product.id));
+			body.set('published', String(nextPublished));
+
+			const response = await fetch('?/visibility', {
+				method: 'POST',
+				body
+			});
+
+			if (!response.ok) {
+				throw new Error('Could not update set visibility.');
+			}
+
+			product.published = nextPublished;
+			products = [...products];
+		} catch (error) {
+			message = error?.message || 'Could not update set visibility.';
+		} finally {
+			toggling = null;
+		}
+	}
+
+	async function deleteImport(product) {
+		const label = `${product.year} ${product.name}`;
+
+		if (!confirm(
+			`DELETE ENTIRE IMPORT?\n\n${label}\n\n` +
+			`This permanently removes the product, all ${Number(product.card_count || 0).toLocaleString()} cards, ` +
+			`${Number(product.checklist_count || 0).toLocaleString()} checklists, source record, metadata, and uploaded artwork.\n\n` +
+			`This cannot be undone.`
+		)) return;
+
+		deleting = product.id;
+		message = '';
+
+		try {
+			const response = await fetch(`/api/admin/products/${product.id}`, {
+				method: 'DELETE'
+			});
+
+			const result = await response.json();
+
+			if (!response.ok) {
+				throw new Error(result.message || 'Could not delete import.');
+			}
+
+			products = products.filter((item) => item.id !== product.id);
+		} catch (error) {
+			message = error?.message || 'Could not delete import.';
+		} finally {
+			deleting = null;
+		}
 	}
 </script>
 
@@ -11,14 +116,63 @@
 
 <section class="shell page">
 	<div class="top">
-		<div><div class="eyebrow">Admin</div><h1>Manage sets</h1><p>Artwork and collector-facing set details.</p></div>
+		<div>
+			<div class="eyebrow">Admin</div>
+			<h1>Manage sets</h1>
+			<p>Artwork and collector-facing set details.</p>
+		</div>
 		<a href="/admin">← Admin</a>
 	</div>
 
 	{#if form?.message}<div class="error">{form.message}</div>{/if}
+	{#if message}<div class="error">{message}</div>{/if}
+
+	<div class="filters">
+		<label class="search">
+			<span>Find product</span>
+			<input class="input" bind:value={query} placeholder="Chrome, Artifacts, Bowman…" />
+		</label>
+
+		<label>
+			<span>Sport</span>
+			<select class="input" bind:value={sportFilter}>
+				{#each sports as sport}<option>{sport}</option>{/each}
+			</select>
+		</label>
+
+		<label>
+			<span>Year</span>
+			<select class="input" bind:value={yearFilter}>
+				{#each years as year}<option>{year}</option>{/each}
+			</select>
+		</label>
+
+		<label>
+			<span>Manufacturer</span>
+			<select class="input" bind:value={manufacturerFilter}>
+				{#each manufacturers as manufacturer}<option>{manufacturer}</option>{/each}
+			</select>
+		</label>
+
+		<label>
+			<span>Status</span>
+			<select class="input" bind:value={statusFilter}>
+				<option>All</option>
+				<option>Live</option>
+				<option>Draft</option>
+			</select>
+		</label>
+
+		<button class="reset" onclick={resetFilters}>Clear</button>
+	</div>
+
+	<div class="filter-summary">
+		<strong>{visible.length.toLocaleString()}</strong>
+		<span>of {products.length.toLocaleString()} sets</span>
+	</div>
 
 	<div class="list">
-		{#each data.products as product}
+		{#each visible as product (product.id)}
 			<article class="row">
 				<div class="preview">
 					{#if product.image_key}
@@ -38,17 +192,28 @@
 							<span class="status draft">Draft</span>
 						{/if}
 					</div>
-					<span>{product.release_date ? `Release: ${product.release_date}` : 'No release date yet'}</span>
+
+					<div class="details">
+						<span>{product.release_date ? `Release: ${product.release_date}` : 'No release date yet'}</span>
+						<span>{Number(product.card_count || 0).toLocaleString()} cards</span>
+						<span>{Number(product.checklist_count || 0).toLocaleString()} checklists</span>
+					</div>
 				</div>
 
 				<div class="actions">
-					<form method="POST" action="?/visibility">
-						<input type="hidden" name="product_id" value={product.id} />
-						<input type="hidden" name="published" value={product.published ? '0' : '1'} />
-						<button class:offline={product.published} class:golive={!product.published} class="visibility">
-							{product.published ? 'Take offline' : 'Go live'}
-						</button>
-					</form>
+					<button
+						class:offline={product.published}
+						class:golive={!product.published}
+						class="visibility"
+						disabled={toggling === product.id}
+						onclick={() => toggleVisibility(product)}
+					>
+						{toggling === product.id
+							? 'Saving…'
+							: product.published
+								? 'Take offline'
+								: 'Go live'}
+					</button>
 
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
@@ -69,15 +234,76 @@
 					{#if product.image_key}
 						<form method="POST" action="?/clear">
 							<input type="hidden" name="product_id" value={product.id} />
-							<button class="clear">Remove</button>
+							<button class="clear">Remove image</button>
 						</form>
 					{/if}
+
+					<button
+						class="delete"
+						disabled={deleting === product.id}
+						onclick={() => deleteImport(product)}
+					>
+						{deleting === product.id ? 'Deleting…' : 'Delete import'}
+					</button>
 				</div>
 			</article>
 		{/each}
+
+		{#if visible.length === 0}
+			<div class="empty">No sets match those filters.</div>
+		{/if}
 	</div>
 </section>
 
 <style>
-.page{padding-top:3rem;padding-bottom:5rem}.top{display:flex;justify-content:space-between;gap:2rem;margin-bottom:2rem}.top h1{font-size:clamp(2.5rem,5vw,4.5rem);letter-spacing:-.055em;margin:.35rem 0 .5rem}.top p{margin:0;color:var(--muted)}.top>a{color:var(--blue);font-size:.76rem;font-weight:850;text-decoration:none}.list{border-top:1px solid var(--line)}.row{display:grid;grid-template-columns:130px 1fr auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}.preview{width:130px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:.65rem;background:#f4f3f1;overflow:hidden;display:grid;place-items:center}.preview img{width:100%;height:100%;object-fit:cover}.preview span{color:var(--muted);font-size:.7rem;font-weight:900}.info{display:grid;gap:.25rem}.info>span{color:var(--muted);font-size:.7rem}.meta{color:var(--blue);font-size:.62rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.title-line{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}.status{display:inline-flex;padding:.18rem .4rem;border-radius:999px;font-size:.55rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em}.status.live{background:#edf7f1;color:#25734d}.status.draft{background:#f2f0ed;color:#766f67}.actions{display:flex;align-items:center;gap:.45rem}.upload,.clear,.edit,.visibility{display:inline-flex;border:1px solid var(--line-strong);background:#fff;border-radius:.6rem;padding:.52rem .65rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer;text-decoration:none;color:inherit}.visibility.golive{background:#182a20;color:#fff;border-color:#182a20}.visibility.offline{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}.upload input{display:none}.clear{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}.edit{color:var(--blue)}.error{margin-bottom:1rem;padding:.8rem 1rem;background:#fff8f6;border:1px solid #efc4bc;border-radius:.7rem}@media(max-width:760px){.row{grid-template-columns:90px 1fr}.preview{width:90px}.actions{grid-column:1/-1;flex-wrap:wrap}}
+	.page{padding-top:3rem;padding-bottom:5rem}
+	.top{display:flex;justify-content:space-between;gap:2rem;margin-bottom:2rem}
+	.top h1{font-size:clamp(2.5rem,5vw,4.5rem);letter-spacing:-.055em;margin:.35rem 0 .5rem}
+	.top p{margin:0;color:var(--muted)}
+	.top>a{color:var(--blue);font-size:.76rem;font-weight:850;text-decoration:none}
+	.filters{display:grid;grid-template-columns:minmax(260px,1.5fr) repeat(4,minmax(130px,.6fr)) auto;gap:.6rem;align-items:end;padding:1rem 0 1.1rem;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+	.filters label{display:grid;gap:.35rem}
+	.filters label span{font-size:.62rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+	.reset{height:44px;border:1px solid var(--line-strong);border-radius:.65rem;background:white;padding:0 .85rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
+	.filter-summary{display:flex;gap:.35rem;align-items:baseline;padding:.8rem 0;color:var(--muted);font-size:.72rem}
+	.filter-summary strong{color:var(--ink)}
+	.list{border-top:1px solid var(--line)}
+	.row{display:grid;grid-template-columns:130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
+	.preview{width:130px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:.65rem;background:#f4f3f1;overflow:hidden;display:grid;place-items:center}
+	.preview img{width:100%;height:100%;object-fit:cover}
+	.preview span{color:var(--muted);font-size:.7rem;font-weight:900}
+	.info{display:grid;gap:.25rem;min-width:0}
+	.meta{color:var(--blue);font-size:.62rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}
+	.title-line{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+	.title-line strong{font-size:.92rem}
+	.details{display:flex;gap:.7rem;flex-wrap:wrap;color:var(--muted);font-size:.7rem}
+	.status{display:inline-flex;padding:.18rem .4rem;border-radius:999px;font-size:.55rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+	.status.live{background:#edf7f1;color:#25734d}
+	.status.draft{background:#f2f0ed;color:#766f67}
+	.actions{display:flex;align-items:center;justify-content:flex-end;gap:.4rem;flex-wrap:wrap;max-width:520px}
+	.upload,.clear,.edit,.visibility,.delete{display:inline-flex;border:1px solid var(--line-strong);background:#fff;border-radius:.6rem;padding:.52rem .65rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer;text-decoration:none;color:inherit;white-space:nowrap}
+	.visibility.golive{background:#182a20;color:#fff;border-color:#182a20}
+	.visibility.offline{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}
+	.visibility:disabled,.delete:disabled{opacity:.55;cursor:not-allowed}
+	.upload input{display:none}
+	.clear{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}
+	.edit{color:var(--blue)}
+	.delete{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}
+	.error{margin-bottom:1rem;padding:.8rem 1rem;background:#fff8f6;border:1px solid #efc4bc;border-radius:.7rem}
+	.empty{text-align:center;color:var(--muted);padding:4rem 1rem}
+	@media(max-width:1100px){
+		.filters{grid-template-columns:repeat(3,1fr)}
+		.filters .search{grid-column:span 2}
+		.row{grid-template-columns:100px 1fr}
+		.preview{width:100px}
+		.actions{grid-column:1/-1;justify-content:flex-start;max-width:none}
+	}
+	@media(max-width:700px){
+		.top{display:block}
+		.top>a{display:inline-block;margin-top:1rem}
+		.filters{grid-template-columns:1fr}
+		.filters .search{grid-column:auto}
+		.row{grid-template-columns:80px 1fr}
+		.preview{width:80px}
+	}
 </style>

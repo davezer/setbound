@@ -3,6 +3,11 @@
 
 	let openRename = $state(null);
 	let openMerge = $state(null);
+
+	function submitFilters(event) {
+		const form = event.currentTarget.form;
+		form?.requestSubmit();
+	}
 </script>
 
 <svelte:head><title>Subject cleanup — setbound admin</title></svelte:head>
@@ -19,7 +24,7 @@
 	</div>
 
 	<form method="GET" class="search-form">
-		<label>
+		<label class="search">
 			<span>Find subject</span>
 			<input
 				class="input"
@@ -29,9 +34,28 @@
 			/>
 		</label>
 
+		<label>
+			<span>Sport</span>
+			<select class="input" name="sport" value={data.sport} onchange={submitFilters}>
+				<option value="all">All sports</option>
+				{#each data.sports as sport}
+					<option value={sport.name}>{sport.name}</option>
+				{/each}
+			</select>
+		</label>
+
+		<label>
+			<span>Status</span>
+			<select class="input" name="visibility" value={data.visibility} onchange={submitFilters}>
+				<option value="all">All subjects</option>
+				<option value="live">On live sets</option>
+				<option value="draft">On draft sets</option>
+			</select>
+		</label>
+
 		<button>Search</button>
 
-		{#if data.q}
+		{#if data.q || data.sport !== 'all' || data.visibility !== 'all'}
 			<a href="/admin/subjects">Clear</a>
 		{/if}
 	</form>
@@ -52,12 +76,19 @@
 					<div class="name-line">
 						<strong>{subject.name}</strong>
 						<span>#{subject.id}</span>
+
+						{#if subject.has_live_cards}
+							<span class="status live">Live</span>
+						{:else}
+							<span class="status draft">Draft only</span>
+						{/if}
 					</div>
 
 					<div class="counts">
 						<span>{subject.card_count.toLocaleString()} cards</span>
 						<span>{subject.set_count.toLocaleString()} sets</span>
 						<span>{subject.subject_type}</span>
+						{#if subject.sports.length}<span>{subject.sports.join(' · ')}</span>{/if}
 					</div>
 
 					{#if subject.affiliations.length}
@@ -140,7 +171,7 @@
 		{/each}
 
 		{#if data.subjects.length === 0}
-			<div class="empty">No subjects matched “{data.q}”.</div>
+			<div class="empty">No subjects match these filters.</div>
 		{/if}
 	</div>
 </section>
@@ -151,7 +182,7 @@
 	.topline h1{font-size:clamp(2.7rem,5vw,4.6rem);letter-spacing:-.055em;margin:.35rem 0 .55rem}
 	.topline p{margin:0;color:var(--muted)}
 	.topline>a{margin-top:.45rem;color:var(--blue);font-size:.76rem;font-weight:850;text-decoration:none}
-	.search-form{display:grid;grid-template-columns:1fr auto auto;gap:.6rem;align-items:end;margin:2rem 0 1rem}
+	.search-form{display:grid;grid-template-columns:minmax(280px,1fr) 180px 180px auto auto;gap:.6rem;align-items:end;margin:2rem 0 1rem}
 	.search-form label{display:grid;gap:.35rem}
 	.search-form label span{font-size:.65rem;font-weight:900;text-transform:uppercase;letter-spacing:.09em;color:var(--muted)}
 	.search-form button,.search-form>a{height:44px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:.65rem;background:white;padding:0 .85rem;font:inherit;font-size:.74rem;font-weight:850;text-decoration:none;color:inherit;cursor:pointer}
@@ -161,9 +192,12 @@
 	.subject-list{border-bottom:1px solid var(--line)}
 	.subject-row{display:grid;grid-template-columns:1fr auto;gap:1rem;padding:1rem 0;border-top:1px solid var(--line)}
 	.subject-main{min-width:0}
-	.name-line{display:flex;align-items:baseline;gap:.55rem}
+	.name-line{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}
 	.name-line strong{font-size:.92rem}
-	.name-line span{color:var(--muted);font-size:.65rem}
+	.name-line>span:not(.status){color:var(--muted);font-size:.65rem}
+	.status{display:inline-flex;padding:.16rem .4rem;border-radius:999px;font-size:.55rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+	.status.live{background:#edf7f1;color:#25734d}
+	.status.draft{background:#f2f0ed;color:#766f67}
 	.counts{display:flex;flex-wrap:wrap;gap:.7rem;margin-top:.25rem;color:var(--muted);font-size:.7rem}
 	.context{margin-top:.38rem;color:var(--muted);font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 	.context-label{color:var(--blue);font-weight:850;margin-right:.4rem}
@@ -176,11 +210,14 @@
 	.merge{background:#fff8f7;color:#8d3028;border-color:#e4bab4;height:44px}
 	.error{margin:1rem 0;padding:.8rem 1rem;border:1px solid #efc2bb;background:#fff8f7;border-radius:.7rem;color:#8d3028}
 	.empty{text-align:center;padding:4rem 1rem;color:var(--muted)}
+	@media(max-width:900px){
+		.search-form{grid-template-columns:1fr 1fr}
+		.search-form .search{grid-column:1/-1}
+	}
 	@media(max-width:700px){
 		.topline{display:block}
 		.topline>a{display:inline-block;margin-top:1rem}
-		.search-form{grid-template-columns:1fr auto}
-		.search-form>a{grid-column:1/-1}
+		.search-form{grid-template-columns:1fr}
 		.subject-row{grid-template-columns:1fr}
 		.actions{justify-content:flex-start}
 		.edit-panel{grid-template-columns:1fr}

@@ -815,7 +815,8 @@ const PANINI_PARALLEL_PREFIXES = [
 	'wnba logo', 'celestial', 'power', 'golden', 'ruby', 'emerald',
 	'checkered flag', 'checkered flags', 'numbers', 'printing plate black',
 	'printing plate cyan', 'printing plate magenta', 'printing plate yellow',
-	'printing plate', 'press proof', 'diamond plate', 'diamond', 'fireworks'
+	'printing plate', 'press proof', 'diamond plate', 'diamond', 'fireworks',
+	'tie-dye', 'tri-color', 'maroon'
 ];
 
 function findPaniniHeader(row) {
@@ -840,7 +841,11 @@ function findPaniniHeader(row) {
 }
 
 function isPaniniParallelSuffix(value) {
-	const suffix = text(value).toLowerCase();
+	const suffix = text(value)
+		.toLowerCase()
+		.replace(/^[\s\-–—:|/]+/, '')
+		.trim();
+
 	if (!suffix) return false;
 
 	if (/^\d+(?:st|nd|rd|th)\s+anniversary\b/.test(suffix)) return true;

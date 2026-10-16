@@ -10,7 +10,7 @@ const HEADING_HINT =
   /\b(base|cards?|variations?|inserts?|autographs?|autos?|relics?|memorabilia|parallels?|chrome|mini|short prints?|sp|image variations?|signatures?|patches?|rookies?|stars?|set|checklist|breakout|prospects?|draft|debut|sapphire|diamond|expose)\b/i;
 
 const PARALLEL_LABEL = /^(parallels?|parallel details?)\s*:?$/i;
-const DECLARED_COUNT = /^(\d{1,6})\s+cards?\.?$/i;
+const DECLARED_COUNT = /^(\d{1,6})\s*(?:-\s*)?cards?(?:\s+set)?\.?$/i;
 const YEAR_HEADING = /^(?:19|20)\d{2}\s+(.+)$/;
 const ORDINAL_HEADING = /^(\d{1,4}(?:ST|ND|RD|TH))\s+(.+)$/i;
 const NUMERIC_HEADING = /^(\d{1,4})\s+(.+)$/;
@@ -124,7 +124,13 @@ function structuredColumns(rest) {
     return { subject, affiliation: null, sourceNil: true, trailing: parts.slice(2) };
   }
 
-  if (!affiliation || /^(rookie|rc|auto|autograph|relic|memorabilia)$/i.test(affiliation)) {
+  // Some manufacturer checklists use a category/status value in the column
+  // where other products put a team. These are not real affiliations.
+  // Example: Formula 1 legends can carry "Legend" rather than a constructor.
+  if (
+    !affiliation ||
+    /^(rookie|rc|auto|autograph|relic|memorabilia|legend|legends)$/i.test(affiliation)
+  ) {
     return { subject, affiliation: null, sourceNil: true, trailing: parts.slice(1) };
   }
 

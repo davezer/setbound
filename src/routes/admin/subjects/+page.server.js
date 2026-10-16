@@ -11,44 +11,102 @@ function normalizeName(value) {
 export async function load({ platform, url }) {
 	const database = db(platform);
 	const q = String(url.searchParams.get('q') || '').trim();
+	const sport = String(url.searchParams.get('sport') || 'all').trim();
+	const visibility = String(url.searchParams.get('visibility') || 'all').trim();
 
-	const result = await database.prepare(`
-		SELECT
-			s.id,
-			s.name,
-			s.normalized_name,
-			s.subject_type,
-			COUNT(c.id) AS card_count,
-			COUNT(DISTINCT c.product_id) AS set_count,
-			GROUP_CONCAT(DISTINCT COALESCE(a.name, 'NIL')) AS affiliations,
-			GROUP_CONCAT(DISTINCT p.year || ' ' || p.name) AS products
-		FROM subjects s
-		LEFT JOIN cards c ON c.subject_id = s.id
-		LEFT JOIN affiliations a ON a.id = c.affiliation_id
-		LEFT JOIN products p ON p.id = c.product_id
-		WHERE (
-			? = ''
-			OR instr(lower(s.name), lower(?)) > 0
-			OR instr(lower(s.normalized_name), lower(?)) > 0
-		)
-		GROUP BY s.id
-		ORDER BY
-			CASE
-				WHEN instr(s.name, '/') > 0 THEN 0
-				WHEN LENGTH(s.name) - LENGTH(REPLACE(s.name, ' ', '')) >= 3 THEN 1
-				ELSE 2
-			END,
-			COUNT(c.id) DESC,
-			s.name
-		LIMIT 250
-	`).bind(q, q, q).all();
+	const [sportsResult, result] = await Promise.all([
+		database.prepare(`
+			SELECT id, name
+			FROM sports
+			ORDER BY name
+		`).all(),
+
+		database.prepare(`
+			SELECT
+				s.id,
+				s.name,
+				s.normalized_name,
+				s.subject_type,
+				COUNT(c.id) AS card_count,
+				COUNT(DISTINCT c.product_id) AS set_count,
+				MAX(CASE WHEN p.published = 1 THEN 1 ELSE 0 END) AS has_live_cards,
+				MAX(CASE WHEN p.published = 0 THEN 1 ELSE 0 END) AS has_draft_cards,
+				GROUP_CONCAT(DISTINCT sp.name) AS sports,
+				GROUP_CONCAT(DISTINCT COALESCE(a.name, 'NIL')) AS affiliations,
+				GROUP_CONCAT(DISTINCT p.year || ' ' || p.name) AS products
+			FROM subjects s
+			LEFT JOIN cards c ON c.subject_id = s.id
+			LEFT JOIN affiliations a ON a.id = c.affiliation_id
+			LEFT JOIN products p ON p.id = c.product_id
+			LEFT JOIN sports sp ON sp.id = p.sport_id
+			WHERE (
+				? = ''
+				OR instr(lower(s.name), lower(?)) > 0
+				OR instr(lower(s.normalized_name), lower(?)) > 0
+			)
+			AND (
+				? = 'all'
+				OR EXISTS (
+					SELECT 1
+					FROM cards fc
+					JOIN products fp ON fp.id = fc.product_id
+					JOIN sports fs ON fs.id = fp.sport_id
+					WHERE fc.subject_id = s.id
+					  AND lower(fs.name) = lower(?)
+				)
+			)
+			AND (
+				? = 'all'
+				OR (
+					? = 'live'
+					AND EXISTS (
+						SELECT 1
+						FROM cards vc
+						JOIN products vp ON vp.id = vc.product_id
+						WHERE vc.subject_id = s.id
+						  AND vp.published = 1
+					)
+				)
+				OR (
+					? = 'draft'
+					AND EXISTS (
+						SELECT 1
+						FROM cards vc
+						JOIN products vp ON vp.id = vc.product_id
+						WHERE vc.subject_id = s.id
+						  AND vp.published = 0
+					)
+				)
+			)
+			GROUP BY s.id
+			ORDER BY
+				CASE
+					WHEN instr(s.name, '/') > 0 THEN 0
+					WHEN LENGTH(s.name) - LENGTH(REPLACE(s.name, ' ', '')) >= 3 THEN 1
+					ELSE 2
+				END,
+				COUNT(c.id) DESC,
+				s.name
+			LIMIT 250
+		`).bind(
+			q, q, q,
+			sport, sport,
+			visibility, visibility, visibility
+		).all()
+	]);
 
 	return {
 		q,
+		sport,
+		visibility,
+		sports: sportsResult.results || [],
 		subjects: (result.results || []).map((row) => ({
 			...row,
 			card_count: Number(row.card_count || 0),
 			set_count: Number(row.set_count || 0),
+			has_live_cards: Boolean(row.has_live_cards),
+			has_draft_cards: Boolean(row.has_draft_cards),
+			sports: row.sports ? row.sports.split(',').slice(0, 8) : [],
 			affiliations: row.affiliations ? row.affiliations.split(',').slice(0, 8) : [],
 			products: row.products ? row.products.split(',').slice(0, 6) : []
 		}))
