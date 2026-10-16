@@ -31,8 +31,15 @@
 	let editMemorabilia = $state(false);
 
 	// Existing imported odds remain intact, but the Source Harvester no longer\n	// prepares or imports odds as part of the normal checklist workflow.\n	const PREPARE_ODDS = false;\n\n	let oddsPreviewUrl = $state('');
-	let oddsPreviewName = $state('');
 
+	// Odds are legacy/optional. Existing imported odds remain untouched,
+	// but Source Harvester no longer prepares/imports them by default.
+	const PREPARE_ODDS = false;
+
+	// Keep preview state defined because legacy preview/modal helpers still
+	// exist in this page even though their UI is disabled.
+	let oddsPreviewUrl = $state('');
+	let oddsPreviewName = $state('');
 	let enrichment = $state(null);
 	let enrichmentProductSlug = $state('');
 	let enrichmentTargetIndex = $state(null);
