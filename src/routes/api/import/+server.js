@@ -487,7 +487,7 @@ export async function POST({ request, platform }) {
 
 			await database
 				.prepare(`
-					INSERT INTO cards
+					INSERT OR IGNORE INTO cards
 						(
 							product_id,
 							checklist_id,

@@ -131,7 +131,9 @@ export async function parseChecklistSource(file, context = {}) {
 			[
 				LAYOUTS.TOPPS_STRUCTURED,
 				LAYOUTS.TOPPS_ENTERTAINMENT,
-				LAYOUTS.TOPPS_DUAL
+				LAYOUTS.TOPPS_DUAL,
+				LAYOUTS.TOPPS_SPLIT_NAME_NO_HEADER,
+				LAYOUTS.TOPPS_NONSPORT_SECTIONED
 			].includes(detection.layout)
 		) {
 			parsed = await parseStructuredSpreadsheet(file, detection.layout);

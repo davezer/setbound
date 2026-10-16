@@ -6,6 +6,8 @@ export const LAYOUTS = {
 	TOPPS_STRUCTURED: 'topps-structured',
 	TOPPS_ENTERTAINMENT: 'topps-entertainment',
 	TOPPS_DUAL: 'topps-dual-subject',
+	TOPPS_SPLIT_NAME_NO_HEADER: 'topps-split-name-no-header',
+	TOPPS_NONSPORT_SECTIONED: 'topps-nonsport-sectioned',
 	TOPPS_WILLIAMS_PDF: 'topps-williams-pdf',
 	TOPPS_LIGHTS_OUT_PDF: 'topps-lights-out-pdf',
 	UPPER_DECK_TIM_PDF: 'upperdeck-tim-hortons-pdf',
@@ -85,11 +87,70 @@ export function detectSpreadsheetLayout(preview = {}, context = {}) {
 	}
 
 	const manufacturer = key(context.manufacturer);
+	const sport = key(context.sport);
 	const fileName = key(context.fileName || context.name);
 	const joined = rows
 		.flatMap((row) => row.map(clean))
 		.join(' ')
 		.toLowerCase();
+
+	// Some Topps soccer workbooks (Premier League / Bundesliga) have no header
+	// row at all. Their card rows are:
+	// Card # | First Name | Last Name | Club
+	// Detect the repeated shape instead of letting the generic parser interpret
+	// the surname as the affiliation.
+	if (manufacturer === 'topps' && sport === 'soccer') {
+		let splitRows = 0;
+
+		for (const row of rows) {
+			const cells = (Array.isArray(row) ? row : []).map(clean);
+			const number = cells[0] || '';
+			const first = cells[1] || '';
+			const last = cells[2] || '';
+			const team = cells[3] || '';
+
+			if (
+				/^[A-Z0-9][A-Z0-9._/-]{0,20}$/i.test(number) &&
+				(first || last) &&
+				team
+			) {
+				splitRows += 1;
+			}
+		}
+
+		if (splitRows >= 5) {
+			return detected(
+				LAYOUTS.TOPPS_SPLIT_NAME_NO_HEADER,
+				0.99,
+				'Headerless Card # / First Name / Last Name / Team rows'
+			);
+		}
+	}
+
+	// Topps non-sport files such as Vault Disney/Marvel use section headings
+	// followed by card-code + subject (+ optional character/artist/role).
+	// The extra third cell is descriptive metadata, not a team affiliation.
+	if (manufacturer === 'topps' && sport === 'non-sport') {
+		let nonsportRows = 0;
+
+		for (const row of rows) {
+			const cells = (Array.isArray(row) ? row : []).map(clean);
+			if (
+				/^[A-Z0-9][A-Z0-9._/-]{0,24}$/i.test(cells[0] || '') &&
+				(cells[1] || '')
+			) {
+				nonsportRows += 1;
+			}
+		}
+
+		if (nonsportRows >= 5) {
+			return detected(
+				LAYOUTS.TOPPS_NONSPORT_SECTIONED,
+				0.99,
+				'Topps non-sport sectioned card-code / subject rows'
+			);
+		}
+	}
 
 	if (
 		manufacturer === 'topps' ||

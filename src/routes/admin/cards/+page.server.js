@@ -266,5 +266,68 @@ export const actions = {
 		params.set('saved', String(cardId));
 
 		throw redirect(303, `/admin/cards?${params.toString()}`);
+	},
+
+	bulkAffiliation: async ({ platform, request, url }) => {
+		const database = db(platform);
+		const form = await request.formData();
+
+		const rawIds = form.getAll('card_ids');
+		const cardIds = [...new Set(
+			rawIds
+				.map((value) => Number(value))
+				.filter((value) => Number.isInteger(value) && value > 0)
+		)];
+
+		if (!cardIds.length) {
+			return fail(400, { message: 'Select at least one card first.' });
+		}
+
+		const target = normalize(form.get('bulk_affiliation'));
+
+		let affiliationId = null;
+
+		if (target && target.toUpperCase() !== 'NIL') {
+			const numericId = Number(target);
+
+			if (!Number.isInteger(numericId) || numericId <= 0) {
+				return fail(400, { message: 'Invalid bulk affiliation.' });
+			}
+
+			const affiliation = await database.prepare(`
+				SELECT id
+				FROM affiliations
+				WHERE id = ?
+				LIMIT 1
+			`).bind(numericId).first();
+
+			if (!affiliation) {
+				return fail(400, { message: 'Bulk affiliation not found.' });
+			}
+
+			affiliationId = affiliation.id;
+		}
+
+		try {
+			const placeholders = cardIds.map(() => '?').join(', ');
+
+			await database.prepare(`
+				UPDATE cards
+				SET affiliation_id = ?, confidence = 1.0
+				WHERE id IN (${placeholders})
+			`).bind(affiliationId, ...cardIds).run();
+		} catch (error) {
+			return fail(400, {
+				message:
+					error?.message?.includes('idx_cards_unique_identity')
+						? 'That bulk change would create duplicate logical cards. Review the conflicting rows first.'
+						: error?.message || 'Could not bulk update affiliations.'
+			});
+		}
+
+		const params = new URLSearchParams(url.searchParams);
+		params.set('bulkSaved', String(cardIds.length));
+
+		throw redirect(303, `/admin/cards?${params.toString()}`);
 	}
 };

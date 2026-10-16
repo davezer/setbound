@@ -11,7 +11,7 @@ function truthy(value) {
 	return Boolean(v && !['0', 'false', 'no', 'n', '-'].includes(v));
 }
 
-function makeCard({ cardNumber, subject, affiliation = 'NIL', checklist, rookie = false, autograph = false, memorabilia = false, raw = '' }) {
+function makeCard({ cardNumber, subject, affiliation = 'NIL', checklist, rookie = false, autograph = false, memorabilia = false, variation = null, raw = '' }) {
 	return {
 		card_number: text(cardNumber),
 		subject: text(subject),
@@ -22,6 +22,7 @@ function makeCard({ cardNumber, subject, affiliation = 'NIL', checklist, rookie 
 		autograph: Boolean(autograph),
 		memorabilia: Boolean(memorabilia),
 		serial_number: null,
+		variation: variation || null,
 		checklist_name: text(checklist) || 'Checklist',
 		confidence: 0.99,
 		raw
@@ -61,6 +62,87 @@ export async function parseStructuredSpreadsheet(file, layout) {
 
 	for (const sheetName of workbook.SheetNames) {
 		const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: '', raw: false, blankrows: false });
+
+		if (layout === 'topps-split-name-no-header') {
+			let section = 'Checklist';
+
+			for (const rawRow of rows) {
+				const row = rawRow || [];
+				const non = row.map(text).filter(Boolean);
+
+				if (non.length === 1 && !/^[A-Z0-9][A-Z0-9._/-]{0,20}$/i.test(non[0])) {
+					if (!/checklists provided by topps|subject to change|checklist$/i.test(non[0])) {
+						section = non[0];
+					}
+					continue;
+				}
+
+				const number = text(row[0]);
+				const first = text(row[1]);
+				const last = text(row[2]);
+				const team = text(row[3]);
+
+				if (!/^[A-Z0-9][A-Z0-9._/-]{0,20}$/i.test(number) || !(first || last) || !team) {
+					continue;
+				}
+
+				cards.push(makeCard({
+					cardNumber: number,
+					subject: [first, last].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim(),
+					affiliation: team,
+					checklist: section,
+					raw: non.join(' | ')
+				}));
+			}
+			continue;
+		}
+
+		if (layout === 'topps-nonsport-sectioned') {
+			let section = 'Checklist';
+			let majorType = '';
+
+			for (const rawRow of rows) {
+				const row = rawRow || [];
+				const non = row.map(text).filter(Boolean);
+
+				if (!non.length) continue;
+
+				if (non.length === 1) {
+					const label = non[0].trim();
+
+					if (/^(INSERT|AUTOGRAPH|RELIC|AUTOGRAPH RELIC|AUTOGRAPH RELICS)$/i.test(label)) {
+						majorType = label.toUpperCase();
+						continue;
+					}
+
+					if (
+						!/checklists provided by topps|subject to change|checklist$/i.test(label) &&
+						!/^2026\b/i.test(label)
+					) {
+						section = label;
+					}
+					continue;
+				}
+
+				const number = text(row[0]);
+				const subject = text(row[1]);
+				const detail = text(row[2]);
+
+				if (!/^[A-Z0-9][A-Z0-9._/-]{0,24}$/i.test(number) || !subject) continue;
+
+				cards.push(makeCard({
+					cardNumber: number,
+					subject,
+					affiliation: 'NIL',
+					checklist: section,
+					autograph: /AUTOGRAPH/.test(majorType) || /AUTO|AUTOGRAPH/i.test(section),
+					memorabilia: /RELIC/.test(majorType) || /RELIC|MEMORABILIA|PATCH/i.test(section),
+					variation: detail || null,
+					raw: non.join(' | ')
+				}));
+			}
+			continue;
+		}
 
 		if (layout === 'topps-entertainment') {
 			const header = findHeader(rows, (r) => (r.includes('card number') || r.includes('card #')) && r.includes('character'));
