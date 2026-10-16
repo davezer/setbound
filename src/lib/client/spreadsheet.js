@@ -144,12 +144,16 @@ function findHeaderMap(row) {
 
 	const card = find(CARD_HEADER_ALIASES);
 	const subject = find(SUBJECT_HEADER_ALIASES);
+	const firstName = find(['first name', 'firstname', 'player first name']);
+	const lastName = find(['last name', 'lastname', 'surname', 'player last name']);
 
-	if (card < 0 || subject < 0) return null;
+	if (card < 0 || (subject < 0 && firstName < 0)) return null;
 
 	return {
 		card,
 		subject,
+		firstName,
+		lastName,
 		affiliation: find(AFFILIATION_HEADER_ALIASES),
 		rookie: find(ROOKIE_HEADER_ALIASES),
 		autograph: find(AUTO_HEADER_ALIASES),
@@ -190,9 +194,20 @@ function makeCard({
 
 function parseMappedRow(row, headerMap, section) {
 	const cardNumber = row[headerMap.card];
-	const subject = row[headerMap.subject];
 
-	if (!isCardNumber(cardNumber) || !text(subject)) return null;
+	const subject =
+		headerMap.subject >= 0
+			? text(row[headerMap.subject])
+			: [
+					headerMap.firstName >= 0 ? text(row[headerMap.firstName]) : '',
+					headerMap.lastName >= 0 ? text(row[headerMap.lastName]) : ''
+				]
+					.filter(Boolean)
+					.join(' ')
+					.replace(/\s+/g, ' ')
+					.trim();
+
+	if (!isCardNumber(cardNumber) || !subject) return null;
 
 	let affiliation = headerMap.affiliation >= 0 ? text(row[headerMap.affiliation]) : '';
 	const rookie = headerMap.rookie >= 0 && isTruthyFlag(row[headerMap.rookie]);

@@ -104,8 +104,10 @@
 	}
 
 	function selectVisible() {
-		const next = new Set(selected);
-		for (const item of visible) if (item.checklistUrl && !existingFor(item)) next.add(key(item));
+		const next = new Set();
+		for (const item of visible) {
+			if (item.checklistUrl && !existingFor(item)) next.add(key(item));
+		}
 		selected = next;
 	}
 
@@ -127,12 +129,13 @@
 	}
 
 	function clearPrepared() {
-		if (!queue.length) return;
+		if (!queue.length && !selected.size) return;
 
 		reviewQueueIndex = null;
 		reviewCardIndex = null;
 		queue = [];
-		message = 'Prepared checklist queue cleared. Harvested products are still loaded.';
+		selected = new Set();
+		message = 'Prepared queue and selections cleared. Harvested products are still loaded.';
 	}
 
 	function mergeCatalog(items) {
@@ -509,7 +512,9 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 	}
 
 	async function prepareSelected() {
-		const items = catalog.filter((item) => selected.has(key(item)) && item.checklistUrl && !existingFor(item));
+		const items = visible.filter(
+			(item) => selected.has(key(item)) && item.checklistUrl && !existingFor(item)
+		);
 
 		if (!items.length) {
 			errorMessage = 'Select at least one new product with a checklist file.';
@@ -537,6 +542,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			oddsImported: false
 		}));
 
+		selected = new Set();
 		busy = true;
 		errorMessage = '';
 		message = `Preparing ${queue.length} checklist${queue.length === 1 ? '' : 's'}…`;
