@@ -339,13 +339,20 @@ export async function POST({ request, platform }) {
 				const aliasKey = franchiseLookupKey(historicalName);
 
 				const franchiseAlias = await database
-					.prepare('SELECT canonical_affiliation_id FROM affiliation_franchise_aliases WHERE sport_id = ? AND alias_normalized = ? LIMIT 1')
+					.prepare('SELECT canonical_affiliation_id, preserve_source_label FROM affiliation_franchise_aliases WHERE sport_id = ? AND alias_normalized = ? LIMIT 1')
 					.bind(Number(body.sportId), aliasKey)
 					.first();
 
 				if (franchiseAlias?.canonical_affiliation_id) {
 					affiliationId = franchiseAlias.canonical_affiliation_id;
-					affiliationLabel = historicalName;
+
+					// Historical aliases preserve what was printed on the card.
+					// Source shorthand aliases (e.g. "Pittsburgh") resolve to the
+					// canonical team and display that canonical team name instead.
+					affiliationLabel =
+						Number(franchiseAlias.preserve_source_label ?? 1) === 1
+							? historicalName
+							: null;
 				} else {
 					const affiliationName = clean(card.affiliation);
 					const affiliationKey = normalized(affiliationName);
