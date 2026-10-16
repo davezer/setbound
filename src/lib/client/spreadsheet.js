@@ -346,54 +346,172 @@ function parseSheetRows(rows, sheetName) {
 
 
 
-function findUpperDeckHeader(row) {
+
+const UPPER_DECK_VARIANT_RE =
+	/\\b(parallel|foil|rainbow|script|printing plates?|outburst|high gloss|ud exclusives|deluxe|gold|silver|black|blue|red|green|purple|pink|orange|yellow|emerald|ruby|copper|jade|platinum|amber|rose|sky blue|teal|speckle|turquoise|auto|material)\\b|\\/\\//i;
+
+function findUpperDeckLayout(row) {
 	const normalized = row.map(key);
+	const find = (aliases) => normalized.findIndex((value) => aliases.includes(value));
 
-	const exact = (label) => normalized.indexOf(label);
-
-	const setName = exact('set name');
-	const cardNumber = exact('card #');
-	const firstName = exact('first name');
-	const lastName = exact('last name');
-	const teamCity = exact('teamcity');
-	const teamName = exact('teamname');
-	const notes = exact('notes');
+	// Layout A: Upper Deck's own cleaner workbook style.
+	const setName = find(['set name']);
+	const cardHash = find(['card #']);
+	const firstName = find(['first name']);
+	const lastName = find(['last name']);
+	const teamCityCompact = find(['teamcity']);
+	const teamNameCompact = find(['teamname']);
+	const notes = find(['notes']);
 
 	if (
-		setName < 0 ||
-		cardNumber < 0 ||
-		firstName < 0 ||
-		teamCity < 0 ||
-		teamName < 0
+		setName >= 0 &&
+		cardHash >= 0 &&
+		firstName >= 0 &&
+		teamCityCompact >= 0 &&
+		teamNameCompact >= 0
 	) {
-		return null;
+		return {
+			kind: 'split-name',
+			setName,
+			cardNumber: cardHash,
+			firstName,
+			lastName,
+			teamCity: teamCityCompact,
+			teamName: teamNameCompact,
+			notes
+		};
 	}
 
+	// Layout B: Checklist Insider's Upper Deck export.
+	const card = find(['card', 'card #']);
+	const description = find(['description']);
+	const team = find(['team']);
+	const teamCity = find(['team city']);
+	const teamName = find(['team name']);
+	const rookie = find(['rookie']);
+	const auto = find(['auto']);
+	const mem = find(['mem', 'mem/tech']);
+	const tech = find(['tech']);
+	const serial = find(["#'d", "serial #'d"]);
+	const odds = find(['odds', 'stated odds']);
+
+	if (setName >= 0 && card >= 0 && description >= 0) {
+		return {
+			kind: 'checklist-insider',
+			setName,
+			cardNumber: card,
+			description,
+			team,
+			teamCity,
+			teamName,
+			rookie,
+			auto,
+			mem,
+			tech,
+			serial,
+			odds
+		};
+	}
+
+	return null;
+}
+
+function upperDeckTruthy(value) {
+	const v = key(value);
+	return Boolean(v && !['0', 'no', 'n', 'false', '-'].includes(v));
+}
+
+function upperDeckFlags(setName, row, layout) {
+	const label = String(setName || '');
+
+	const rookieFromColumn =
+		layout.rookie >= 0 &&
+		upperDeckTruthy(row[layout.rookie]);
+
+	const autoFromColumn =
+		layout.auto >= 0 &&
+		upperDeckTruthy(row[layout.auto]);
+
+	const memFromColumn =
+		layout.mem >= 0 &&
+		upperDeckTruthy(row[layout.mem]);
+
 	return {
-		setName,
-		cardNumber,
-		firstName,
-		lastName,
-		teamCity,
-		teamName,
-		notes
+		rookie:
+			rookieFromColumn ||
+			/\\b(?:rookie|rookies|young guns?)\\b/i.test(label),
+		autograph:
+			autoFromColumn ||
+			/\\b(?:auto|autograph|signatures?)\\b/i.test(label),
+		memorabilia:
+			memFromColumn ||
+			/\\b(?:relic|memorabilia|materials?|swatch|patch|jersey)\\b/i.test(label)
 	};
 }
 
-function upperDeckFlags(setName) {
-	const value = String(setName || '');
+function upperDeckVariantScore(name) {
+	const value = String(name || '');
+	const matches = value.match(new RegExp(UPPER_DECK_VARIANT_RE.source, 'ig')) || [];
 
-	return {
-		rookie: /\\brookie(?:s)?\\b/i.test(value),
-		autograph: /\\b(?:auto|autograph|signatures?)\\b/i.test(value),
-		memorabilia: /\\b(?:relic|memorabilia|materials?|swatch|patch|jersey)\\b/i.test(value)
-	};
+	let score = matches.length * 10;
+
+	if (/\\bbase set\\b/i.test(value)) score -= 8;
+	if (/\\bparallel\\b/i.test(value)) score += 4;
+	if (/\\/\\//.test(value)) score += 3;
+
+	return score;
+}
+
+function upperDeckRosterSignature(rows) {
+	return rows
+		.map((row) => [
+			key(row.cardNumber),
+			key(row.subject),
+			key(row.affiliation)
+		].join('|'))
+		.sort()
+		.join('||');
+}
+
+function upperDeckSemanticKey(rows) {
+	const auto = rows.some((row) => row.autograph) ? 'auto' : 'no-auto';
+	const mem = rows.some((row) => row.memorabilia) ? 'mem' : 'no-mem';
+
+	return [auto, mem, upperDeckRosterSignature(rows)].join('||');
+}
+
+function chooseUpperDeckRoot(names) {
+	return [...names].sort((a, b) => {
+		const scoreDiff = upperDeckVariantScore(a) - upperDeckVariantScore(b);
+		if (scoreDiff) return scoreDiff;
+
+		const lengthDiff = a.length - b.length;
+		if (lengthDiff) return lengthDiff;
+
+		return a.localeCompare(b);
+	})[0];
+}
+
+function upperDeckParallelLabel(name, rows) {
+	const serials = [...new Set(
+		rows
+			.map((row) => text(row.serial))
+			.filter(Boolean)
+	)];
+
+	if (serials.length === 1) {
+		return name + ' /' + serials[0];
+	}
+
+	if (serials.length > 1) {
+		return name + ' (serial varies)';
+	}
+
+	return name;
 }
 
 function parseUpperDeckWorkbook(XLSX, workbook) {
-	const cards = [];
-	const sections = [];
-	const checklist_meta = {};
+	const sourceRows = [];
 	const sheetStats = [];
 	let detected = false;
 
@@ -407,27 +525,26 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 			blankrows: false
 		});
 
-		let header = null;
+		let layout = null;
 		let headerIndex = -1;
 
 		for (let index = 0; index < Math.min(rows.length, 25); index++) {
-			const found = findUpperDeckHeader(
+			const found = findUpperDeckLayout(
 				Array.isArray(rows[index]) ? rows[index] : []
 			);
 
 			if (found) {
-				header = found;
+				layout = found;
 				headerIndex = index;
 				break;
 			}
 		}
 
-		if (!header) {
+		if (!layout) {
 			sheetStats.push({
 				name: sheetName,
 				rows: rows.length,
-				cards: 0,
-				sections: 0,
+				sourceRows: 0,
 				detected: false
 			});
 			continue;
@@ -435,102 +552,225 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 
 		detected = true;
 		let accepted = 0;
-		const sheetSections = new Set();
 
 		for (let index = headerIndex + 1; index < rows.length; index++) {
 			const row = Array.isArray(rows[index]) ? rows[index] : [];
 
-			const setName = text(row[header.setName]);
-			const cardNumber = text(row[header.cardNumber]);
-			const firstName = text(row[header.firstName]);
-			const lastName =
-				header.lastName >= 0
-					? text(row[header.lastName])
-					: '';
-			const city = text(row[header.teamCity]);
-			const team = text(row[header.teamName]);
-			const notes =
-				header.notes >= 0
-					? text(row[header.notes])
-					: '';
+			const setName = text(row[layout.setName]);
+			const cardNumber = text(row[layout.cardNumber]);
 
-			if (!setName || !cardNumber || !firstName) continue;
+			let subject = '';
+			let affiliation = '';
+			let notes = '';
+			let serial = '';
+
+			if (layout.kind === 'split-name') {
+				subject = [
+					text(row[layout.firstName]),
+					layout.lastName >= 0 ? text(row[layout.lastName]) : ''
+				]
+					.filter(Boolean)
+					.join(' ')
+					.replace(/\\s+/g, ' ')
+					.trim();
+
+				affiliation = [
+					text(row[layout.teamCity]),
+					text(row[layout.teamName])
+				]
+					.filter(Boolean)
+					.join(' ')
+					.replace(/\\s+/g, ' ')
+					.trim();
+
+				notes = layout.notes >= 0 ? text(row[layout.notes]) : '';
+			} else {
+				subject = text(row[layout.description]);
+
+				if (layout.team >= 0) {
+					affiliation = text(row[layout.team]);
+				} else {
+					affiliation = [
+						layout.teamCity >= 0 ? text(row[layout.teamCity]) : '',
+						layout.teamName >= 0 ? text(row[layout.teamName]) : ''
+					]
+						.filter(Boolean)
+						.join(' ')
+						.replace(/\\s+/g, ' ')
+						.trim();
+				}
+
+				serial =
+					layout.serial >= 0
+						? text(row[layout.serial])
+						: '';
+
+				notes =
+					layout.odds >= 0
+						? text(row[layout.odds])
+						: '';
+			}
+
+			if (!setName || !cardNumber || !subject) continue;
 			if (!isCardNumber(cardNumber)) continue;
 
-			const subject = [firstName, lastName]
-				.filter(Boolean)
-				.join(' ')
-				.replace(/\\s+/g, ' ')
-				.trim();
+			const flags = upperDeckFlags(setName, row, layout);
 
-			const affiliation = [city, team]
-				.filter(Boolean)
-				.join(' ')
-				.replace(/\\s+/g, ' ')
-				.trim();
-
-			const flags = upperDeckFlags(setName);
-
-			const card = makeCard({
+			sourceRows.push({
+				sheetName,
+				rowNumber: index + 1,
+				setName,
 				cardNumber,
 				subject,
-				affiliation: affiliation || 'NIL',
-				checklist: setName,
+				affiliation,
 				rookie: flags.rookie,
 				autograph: flags.autograph,
 				memorabilia: flags.memorabilia,
-				raw: [
-					setName,
-					cardNumber,
-					firstName,
-					lastName,
-					city,
-					team,
-					notes
-				].filter(Boolean).join(' | '),
-				confidence: affiliation ? 0.99 : 0.94
+				serial,
+				notes
 			});
 
-			cards.push(card);
 			accepted += 1;
-			sheetSections.add(setName);
-
-			if (!sections.includes(setName)) {
-				sections.push(setName);
-			}
-
-			if (!checklist_meta[setName]) {
-				checklist_meta[setName] = {
-					card_count_declared: null,
-					parallels: [],
-					notes: []
-				};
-			}
-
-			if (notes && !checklist_meta[setName].notes.includes(notes)) {
-				checklist_meta[setName].notes.push(notes);
-			}
 		}
 
 		sheetStats.push({
 			name: sheetName,
 			rows: rows.length,
-			cards: accepted,
-			sections: sheetSections.size,
+			sourceRows: accepted,
 			detected: true
 		});
 	}
 
 	if (!detected) return null;
 
-	if (!cards.length) {
+	if (!sourceRows.length) {
 		throw new Error(
 			'Upper Deck spreadsheet layout was detected, but no checklist rows were found.'
 		);
 	}
 
+	const sets = new Map();
+
+	for (const row of sourceRows) {
+		if (!sets.has(row.setName)) sets.set(row.setName, []);
+		sets.get(row.setName).push(row);
+	}
+
+	const semanticGroups = new Map();
+
+	for (const [name, rows] of sets) {
+		const groupKey = upperDeckSemanticKey(rows);
+
+		if (!semanticGroups.has(groupKey)) {
+			semanticGroups.set(groupKey, []);
+		}
+
+		semanticGroups.get(groupKey).push(name);
+	}
+
+	const cards = [];
+	const sections = [];
+	const checklist_meta = {};
+	let duplicateRowsRemoved = 0;
+	let parallelRowsCollapsed = 0;
+	let parallelSetCount = 0;
+
+	for (const names of semanticGroups.values()) {
+		const rootName = chooseUpperDeckRoot(names);
+		const rootRows = sets.get(rootName) || [];
+
+		const dedupe = new Map();
+
+		for (const row of rootRows) {
+			const dedupeKey = [
+				key(row.cardNumber),
+				key(row.subject),
+				key(row.affiliation)
+			].join('|');
+
+			if (dedupe.has(dedupeKey)) {
+				duplicateRowsRemoved += 1;
+				continue;
+			}
+
+			dedupe.set(dedupeKey, row);
+		}
+
+		const rootCards = [];
+
+		for (const row of dedupe.values()) {
+			const card = makeCard({
+				cardNumber: row.cardNumber,
+				subject: row.subject,
+				affiliation: row.affiliation || 'UNRESOLVED',
+				checklist: rootName,
+				rookie: row.rookie,
+				autograph: row.autograph,
+				memorabilia: row.memorabilia,
+				raw: [
+					row.setName,
+					row.cardNumber,
+					row.subject,
+					row.affiliation,
+					row.serial,
+					row.notes
+				].filter(Boolean).join(' | '),
+				confidence: row.affiliation ? 0.99 : 0.72
+			});
+
+			card.serial_number = row.serial || null;
+			rootCards.push(card);
+		}
+
+		if (!rootCards.length) continue;
+
+		const variants = names.filter((name) => name !== rootName);
+
+		const parallels = variants
+			.map((name) => upperDeckParallelLabel(name, sets.get(name) || []))
+			.filter(Boolean);
+
+		for (const child of variants) {
+			parallelRowsCollapsed += (sets.get(child) || []).length;
+		}
+
+		parallelSetCount += variants.length;
+
+		sections.push(rootName);
+		cards.push(...rootCards);
+
+		checklist_meta[rootName] = {
+			card_count_declared: rootCards.length,
+			parallels: [...new Set(parallels)],
+			notes: []
+		};
+	}
+
 	const high = cards.filter((card) => card.confidence >= 0.85).length;
 	const review = cards.length - high;
+
+	const rawToCardRatio = sourceRows.length / Math.max(cards.length, 1);
+
+	const blocked =
+		cards.length > 4000 ||
+		(cards.length > 2500 && sections.length <= 3) ||
+		(rawToCardRatio < 1.05 && sourceRows.length > 2000);
+
+	const reasons = [];
+
+	if (cards.length > 4000) {
+		reasons.push('Upper Deck parser still produced ' + cards.length.toLocaleString() + ' cards.');
+	}
+
+	if (cards.length > 2500 && sections.length <= 3) {
+		reasons.push(cards.length.toLocaleString() + ' cards were collapsed into only ' + sections.length + ' checklist families.');
+	}
+
+	if (rawToCardRatio < 1.05 && sourceRows.length > 2000) {
+		reasons.push(
+			'Almost every Upper Deck source row survived as a card, which usually means parallel rows were not collapsed.'
+		);
+	}
 
 	return {
 		sections,
@@ -543,12 +783,17 @@ function parseUpperDeckWorkbook(XLSX, workbook) {
 		sheetStats,
 		sourceKind: 'upper-deck-spreadsheet',
 		upperDeckStats: {
+			sourceRows: sourceRows.length,
+			sourceSets: sets.size,
+			checklistFamilies: sections.length,
 			cards: cards.length,
-			sections: sections.length
+			parallelSetCount,
+			parallelRowsCollapsed,
+			duplicateRowsRemoved
 		},
 		safety: {
-			blocked: false,
-			reasons: []
+			blocked,
+			reasons
 		}
 	};
 }
