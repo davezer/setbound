@@ -1,8 +1,5 @@
 <script>
-	import { extractPdfText, extractTimHortonsChecklist } from '$lib/client/pdf.js';
-	import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
-	import { extractToppsRacingChecklist } from '$lib/client/topps-racing.js';
-	import { parseChecklistText } from '$lib/client/checklist-parser.js';
+	import { parseChecklistSource } from '$lib/client/checklist-engine.js';
 	import { validateChecklistImport } from '$lib/checklist-validation.js';
 	import { extractOddsPdf } from '$lib/client/odds-pdf.js';
 
@@ -326,7 +323,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			return {
 				...row,
 				status: 'parse-review',
-				statusText: 'Suspicious spreadsheet parse'
+				statusText: 'Parser review required'
 			};
 		}
 
@@ -408,35 +405,13 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			const ext = String(row.checklistExtension || '').toLowerCase();
 			let parsed;
 
-			const isToppsRacing =
-				String(row.manufacturer || '').toLowerCase() === 'topps' &&
-				String(row.sport || '').toLowerCase() === 'racing';
-
-			if (isToppsRacing) {
-				parsed = await extractToppsRacingChecklist(file, row.name);
-
-				if (!parsed) {
-					throw new Error(
-						'Topps Racing source layout is not supported yet. Import blocked instead of falling back to the generic parser.'
-					);
-				}
-			} else if (ext === 'pdf') {
-				const isTimHortons =
-					String(row.manufacturer || '').toLowerCase() === 'upper deck' &&
-					/\btim hortons\b/i.test(String(row.name || ''));
-
-				if (isTimHortons) {
-					parsed = await extractTimHortonsChecklist(file);
-				} else {
-					const text = await extractPdfText(file);
-					parsed = parseChecklistText(text, data.affiliations);
-				}
-			} else if (ext === 'xls' || ext === 'xlsx') {
-				parsed = await extractSpreadsheetChecklist(file);
-			} else {
-				throw new Error(`Unsupported checklist type: ${ext || 'unknown'}`);
-			}
-
+			parsed = await parseChecklistSource(file, {
+				name: row.name,
+				manufacturer: row.manufacturer,
+				sport: row.sport,
+				extension: ext,
+				affiliations: data.affiliations
+			});
 			parsed = applyProductContextAffiliation(row, parsed);
 
 			const audit = validateChecklistImport(parsed.cards, parsed.checklist_meta, parsed.sections);

@@ -21,7 +21,10 @@ const SUBJECT_HEADER_ALIASES = [
 	'superstar name',
 	'wrestler',
 	'talent',
-	'athlete'
+	'athlete',
+	'character',
+	'description',
+	'player name'
 ];
 
 const AFFILIATION_HEADER_ALIASES = [
@@ -31,7 +34,10 @@ const AFFILIATION_HEADER_ALIASES = [
 	'show',
 	'program',
 	'roster',
-	'league'
+	'league',
+	'property',
+	'club',
+	'country'
 ];
 
 const ROOKIE_HEADER_ALIASES = ['rookie', 'rc', 'rookie card'];
@@ -386,7 +392,7 @@ function findUpperDeckLayout(row) {
 
 	// Layout B: Checklist Insider's Upper Deck export.
 	const card = find(['card', 'card #']);
-	const description = find(['description']);
+	const description = find(['description', 'name', 'player name']);
 	const team = find(['team']);
 	const teamCity = find(['team city']);
 	const teamName = find(['team name']);

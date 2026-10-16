@@ -1,0 +1,1106 @@
+{
+  "year": 2026,
+  "inputFiles": 128,
+  "uniqueFiles": 118,
+  "layoutCounts": {
+    "panini-canonical": 26,
+    "topps-sectioned": 59,
+    "upperdeck-ci": 14,
+    "topps-williams-pdf": 1,
+    "topps-entertainment-pdf": 2,
+    "upperdeck-tim-hortons-pdf": 1,
+    "topps-simple-table-pdf": 1,
+    "topps-entertainment": 4,
+    "topps-dual-subject": 1,
+    "topps-numbered-list-pdf": 1,
+    "topps-lights-out-pdf": 1,
+    "topps-match-attax-pdf": 1,
+    "topps-rugby-list-pdf": 1,
+    "topps-soccer-table-pdf": 1,
+    "topps-structured": 3,
+    "upperdeck-split-name": 1
+  },
+  "files": [
+    {
+      "file": "2026-27-Topps-Flagship-Basketball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "d2ab6d55e387b511081971add0a4131af648129c072b1eabc509400025d5794f",
+      "bytes": 111252,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Topps-Flagship-Bundesliga-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "dfe8bedd866f5218f50101b4bfceb184134589f588e00a879bed1114a64fc861",
+      "bytes": 39949,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Topps-Flagship-Premier-League-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "a465cc0addb54d3cfc8f818617afcce89f2db30291268a1ecec3bf6a0e947dfa",
+      "bytes": 53811,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Topps-Match-Attax-UEFA-Club-Competitions-Soccer-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "7c467f4fd9e0a9be0ccff0dc435df02c5103246ee5ff0321e5d79c182c3d9c14",
+      "bytes": 6290155,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-match-attax-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Topps-Summer-Signings-UEFA-Club-Competitions-Soccer-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "d19a0cd89c5162369459273db52a7b1b651c257ab0809e226070a9e54c9733eb",
+      "bytes": 559030,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-soccer-table-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Upper-Deck-Artifacts-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "5d5f6bcb47be4ef38d4c41a335a88ca5bf42368e4bfeca24d1dda6aabaecb359",
+      "bytes": 320243,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Upper-Deck-MVP-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "3da768ace98a1b665a8a97c9cd67d1242f1f3fde16f54bd61cf8d1f0ef44f9d1",
+      "bytes": 100570,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Upper-Deck-Series-1-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "ea3c0ce93415cf725dca16391333e05f5990a84a3a7ad9a05c535bf201a472a0",
+      "bytes": 267135,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-27-Upper-Deck-Tim-Hortons-Hockey-Checklist-Downloads-PDF-Binder-Album-Checklist-Insider.pdf",
+      "sha256": "85b81e65584cf7e1a904841b8e9ebabcfb698eccf1828826ab466aff420aae23",
+      "bytes": 64564,
+      "extension": ".pdf",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-tim-hortons-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Baseball-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "a2edc02fa4342a9a8fa57a4804da100c28b4648309efa338d1561de5816e59c3",
+      "bytes": 46244,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Chrome-Baseball-Checklist-Downloads-Checklist-Insider-Excel-spreadsheet.xlsx",
+      "sha256": "4ffb5d9bc0a1cc1bce1bda767cca950c8f70e2d85283d7693682904a8b7b48e7",
+      "bytes": 46927,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Chrome-Mega-Box-Baseball-Checklist-Downloads-Checklist-Insider-Excel-spreadsheet.xlsx",
+      "sha256": "9e3ef5c9bd3b0fd1cb17bfcb5a7645b9f510a519050a6be55270d5a27a97ec87",
+      "bytes": 23853,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Chrome-Sapphire-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "96b4486f4020c82e34ab0c36977623b2e307c63973d2d710ca2ec63c7e28d0a0",
+      "bytes": 19401,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "b6f6aee41b91b6e7673f3907ddefdc66b9dd6587de512c5c90d560c5c74fe0b6",
+      "bytes": 84386,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Mega-Box-Baseball-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "f237c5ad6fd3ec355af142b1dd05acae12ae8c807885add0a7fd1026371da4d8",
+      "bytes": 19440,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-Sapphire-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "8356853489a1dcef53d245e241499fde83a2487b2e2c065589a961abf8f58907",
+      "bytes": 16369,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Bowman-University-Best-Football-Checklist-Downloads-Checklist-Insider-Excel-spreadsheet.xlsx",
+      "sha256": "83db5b851a946e03c806ce312aa12cbbbee47ed369fd198abfd24e5e6e7e8887",
+      "bytes": 32556,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Donruss-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "4a30b4fcc6a033265e841d0c0186b47d14e63d100e018a6c8cc0764f07d72b88",
+      "bytes": 468096,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Donruss-Elite-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "2fb87529868bdc1d7f7d386fd01b61de7b85a0369a2277ae5537ccd74263ddc5",
+      "bytes": 217143,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Donruss-NASCAR-Racing-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "e627c97276c34384f5b3a10fc6980b8dc1c707397888231146698c92f85cb742",
+      "bytes": 237726,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Donruss-NWSL-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "4a428c6e1eaa633471f9d0bad3c2ef8d5bc316c94eb4a51408c0681d6666e453",
+      "bytes": 257039,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": [
+        "2026-Donruss-NWSL-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider (1).xlsx"
+      ]
+    },
+    {
+      "file": "2026-Fleer-Ultra-Golf-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-new.xlsx",
+      "sha256": "613eb042031a4b4907c40d4687ea62c8e1dd14b487c535f89b7d06da327c5068",
+      "bytes": 79674,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Contenders-LIV-Golf-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-update.xlsx",
+      "sha256": "c57e508791529959bfd62469e6dc99747998f7248528c77bca9ed6eacfc2083c",
+      "bytes": 117997,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Contenders-PFL-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx",
+      "sha256": "2eaddd77e3839b28c932b6e3c0b13a887acdb3c711e56f7838ef2ec35cf0db5b",
+      "bytes": 100155,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-INTL-England-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "28eb66e60d916f6c89dc92f70183ef1071cfecf4b157554ce656eca1b9c5216a",
+      "bytes": 34281,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-INTL-France-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "e249937be70054e28ab5e38737fdb34afa13e641c417b3bf7fa1587624d33f55",
+      "bytes": 29093,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-INTL-Germany-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "926d4e0325f4731bf557a254309a215b42e7fd966f2c2311ccb56aa41631733f",
+      "bytes": 41202,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-INTL-Mexico-Soccer-Checklist-Excel-spreadsheet-Downloads-Checklist-Insider.xlsx",
+      "sha256": "b50a3b4ec86699c2fdc2eba5c34f337010fc5260cc5f931cf83ac1ebe26be999",
+      "bytes": 31272,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Immaculate-Collection-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "89a1bacadf8ecb4f670b462480c051cff5f9a22f87aa3c1baa4c24f60b837910",
+      "bytes": 104279,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Luminance-England-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "20e530ea6c3e7c435fab55d4574da4c7245940de272adecea5a8970304de62fa",
+      "bytes": 26442,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Luminance-France-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "8bb6ac0dbf5b383ff53adcd1a39c4a9159bd18fa799551202aeb029c6fc9389a",
+      "bytes": 25397,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Luminance-Germany-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "365b097b1508472ef683100e7a7edc143f8413cd01f2dc4859dfd799d0214cfd",
+      "bytes": 27320,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Obsidian-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "20f6a5847e930fc26ee36cf111d1a56eaaffb9daadf25cbfe49e49b89ff9430c",
+      "bytes": 123017,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Obsidian-K-League-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider (1).xlsx",
+      "sha256": "4e181c6f693bbe8248d0ff53687f84d50010325b371f72eb5d5d2be3739d9960",
+      "bytes": 56475,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": [
+        "2026-Panini-Obsidian-K-League-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx"
+      ]
+    },
+    {
+      "file": "2026-Panini-Prizm-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-Update-1.xlsx",
+      "sha256": "d9e588f1848c3138fb7b7b3be57c7438727ca768a61e69f593dffc0d73d2adbd",
+      "bytes": 612053,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Prizm-FIFA-World-Cup-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider (1).xlsx",
+      "sha256": "2c48b9a39bc919a2e50f9d55ea120cbcb5217afd033569ccd599490c50fb8ac2",
+      "bytes": 1460434,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": [
+        "2026-Panini-Prizm-FIFA-World-Cup-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx"
+      ]
+    },
+    {
+      "file": "2026-Panini-Prizm-WNBA-Basketball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "a588da2ae864746b2a6d50fcf51a655892ae4872bf883f66e8f547592434193e",
+      "bytes": 431847,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Revolution-K-League-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider- (1).xlsx",
+      "sha256": "c30c49b584dcd0a8f5844c1218c7da58b0b2a3518e8cf08e79b542ae47312683",
+      "bytes": 59595,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": [
+        "2026-Panini-Revolution-K-League-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx"
+      ]
+    },
+    {
+      "file": "2026-Panini-Ring-Royalty-MLW-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "b02a0cef420bc1dd4fea0e4ee69bcce87874de9135c5589cdec089e69d508d32",
+      "bytes": 44329,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Select-NASCAR-Racing-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "dc61f8768aafcdb7c4acfc387b53754dc1db050d15a9d6d9814713fc7c0ed11b",
+      "bytes": 255284,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Stars-Stripes-Prizm-USA-Baseball-Checklist-Downloads-Excel-spreadsheet-new.xlsx",
+      "sha256": "c087a10585d7198092ae8ee356c27d708237baa93b86acf5aff88f516c091b6d",
+      "bytes": 412327,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Track-Kings-NASCAR-Racing-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "9bab758932a4a1be6311db31b7fbe3e3338820ceff08fc4ee41fd745a74fd4ea",
+      "bytes": 141292,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Panini-Turn-Four-NASCAR-Racing-Checklist-Downloads-Excel-Spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "0ceb060fdedf307483562d11a885b351a4526b9daaea0531c0b05f6b4f210392",
+      "bytes": 87548,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Score-A-Treat-Multi-Sport-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-new.xlsx",
+      "sha256": "f0b677851ddf0b574034c2da844eb460c22e015bf20c66653e361697c43bb172",
+      "bytes": 137434,
+      "extension": ".xlsx",
+      "manufacturer": "Panini",
+      "layout": "panini-canonical",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Skybox-Metal-Universe-SE-Multi-Sport-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "1902783c2a0f8c00bb8b0c378cbdc8a73915d4c9c96f9126cf38712f51f50d5f",
+      "bytes": 189646,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Allen-Ginter-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "df2e6a9b77619e50fae6842cfa6ba463e6252ae64e90ba569a7ec702d454e7ee",
+      "bytes": 97168,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Argentina-Team-Set-Soccer-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "9746790162b3bc9c9098e7d9f531ef7ae67e0ced304059b734edc5d47b246911",
+      "bytes": 14008,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Atlassian-Williams-Racing-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "fc36b126f603340213dd3771af949e209d198600a0424d04502d835fb9a38bf1",
+      "bytes": 540071,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-williams-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Brooklyn-Collection-Captain-America-85th-Anniversary-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "ff11b9af14e73246c38f26b4626f921d06cd619dac449fc2bba464ac672b11bf",
+      "bytes": 19276,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "2090618fd8c517869cede7f40c869dc8f4db4fe6fec4d03f4b680c122676cb83",
+      "bytes": 59702,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Black-Baseball-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "e92f8efae55eb6b59f91a3f180478884200c8c9c08609e987a82fc964ea86f31",
+      "bytes": 27848,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Disney-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx",
+      "sha256": "812e1cf8ae2222cfa699276a429d0a8cb25fc7f32511cb91c4da0f25121f156c",
+      "bytes": 42140,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "abde37f93bb75ede9309b0435346081a903a822ba1f6f214f02b882a6cc4c35e",
+      "bytes": 84323,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Formula-1-Racing-Checklist-Downloads-Checklist-Insider-Updated (1).xlsx",
+      "sha256": "6654e13f2a816907042c10430b8bf7fa64215339b2204aacfa3a9094a1ab84a8",
+      "bytes": 31869,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-structured",
+      "duplicates": [
+        "2026-Topps-Chrome-Formula-1-Racing-Checklist-Downloads-Checklist-Insider-Updated.xlsx"
+      ]
+    },
+    {
+      "file": "2026-Topps-Chrome-LogoFractor-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "71ffd8c7803d61aa4f7ae121b8b54b3456927e960acda1f5d3e946d40e8ae75c",
+      "bytes": 26104,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-MLS-Soccer-Checklist-Downloads-Excel-Spreadsheet-Checklist-Insider-Updated.xlsx",
+      "sha256": "ff4e31fedad184d615fbce7ac34b4e7ba1c3493cfac5dd75233ae1a250885802",
+      "bytes": 30055,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Marvel-Comics-Checklist-Downloads-Checklist-Insider-Excel-spreadsheet.xlsx",
+      "sha256": "069b6f8fd0f6ac29264ffd84fd4c2b8adb4237276fe0a93b1a1e64019282aec7",
+      "bytes": 30634,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "145189b39d4cca8451f4eef24239f955b54867def5b10c4cdc0d4c3d9ca9bcc9",
+      "bytes": 23186,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-Disney-Checklist-Downloads-Excel-Spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "6baf219e758bb37b8f78c84062a8a54cdecb32aef12434610bad32780a384661",
+      "bytes": 24657,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-MLS-Soccer-Checklist-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "de7c6b89f4576b68dfab3aa0d2267afc24baa2dfddd5a872ba1a025d196021ff",
+      "bytes": 20842,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-Marvel-Comics-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "8565d125fc26b766d7517874a3a41caf7fb187a0163b557f89d98fa2fb90d25a",
+      "bytes": 94021,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-numbered-list-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-UFC-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "a8d23cff0fd8a3196ff1098a362ff780c10e221a8e21814336abe7c1e0d6db0b",
+      "bytes": 19874,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Sapphire-WWE-Wrestling-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "e80286082eef94e8d6bb0fc530feca292aab8b83b5d94fd13d55f8fb87fb1f28",
+      "bytes": 26538,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Star-Wars-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "51929586988fa1192edef88bf3f66626bc91d815b08545a354a56f78e7236e7b",
+      "bytes": 51125,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-Tennis-Checklist-Downloads-Excel-Spreadsheet-Update.xlsx",
+      "sha256": "d10235a86220876564d172eea10341bd8ab17de740ac4bc64fa48707bf4cf6bc",
+      "bytes": 24970,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-U.S.-Winter-Olympics-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "5561912ad706d262fcad09ba3c4fe073d8cb9501fd8231526d423885184c4dc4",
+      "bytes": 24493,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-UFC-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "25e4cec5b2c854818019f5c6c95443eb2cfb4a7258ad0801d5e8592b13e057cf",
+      "bytes": 35696,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Chrome-VeeFriends-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "23f628bc5112a41382bb120958ccd3d99eb3d16fb84ca4958d35db4b77928513",
+      "bytes": 28345,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Cosmic-Chrome-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "c293f6557c7e99050710cf68ca07768364f0d158aa4ef476bc6840e7937f1a17",
+      "bytes": 39086,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Cosmic-Chrome-WWE-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx",
+      "sha256": "1a2f09bc5ec29720f0fb7d5edf39160d38141e4aa8dfc3ebe545954096725828",
+      "bytes": 28887,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Decades-WWE-1990s-Edition-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "e9b9b8fbd9864d0b1f4e5d9707ab2dcf0c1017bc99ae0672bc1169ed1f0f18f3",
+      "bytes": 19709,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-structured",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Disney-Neon-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "eb448dd9b2976228a6e77e6005e3590a276451aca1b07c493b9f8c81c1817c9d",
+      "bytes": 33620,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Dynamic-Duals-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "d394bb77f694c88a07b01dd61c599d87b5a0b700226fb00212f31bbd225782c8",
+      "bytes": 16587,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-dual-subject",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Finest-Baseball-Excel-spreadsheet-Checklist-Downloads-Checklist-Insider-.xlsx",
+      "sha256": "23a05fb5abb0228eb3a4f2302c4f791a49472d85d51f649ca884020d712a761e",
+      "bytes": 44791,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Flagship-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider (1).xlsx",
+      "sha256": "68e0d4c71b6ad577ea26e0b1f9dfef16000161c61ee15c65787388e9a5ff02d3",
+      "bytes": 127524,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": [
+        "2026-Topps-Flagship-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx"
+      ]
+    },
+    {
+      "file": "2026-Topps-Garbage-Pail-Kids-Valentines-Day-Checklist-Downloads-Excel-Spreadsheet.pdf",
+      "sha256": "1e8527bfcc5b4eef2eaf1e8a31c71195274f499b6e5039beb9d1308755c9202f",
+      "bytes": 128825,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Graphite-Tennis-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "72bb6b4efc144e9a4a96f821dcb1fc6e8177d585c8977e1906bc3ec7bce37e15",
+      "bytes": 25912,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Heritage-Baseball-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "a39e2045f07fcbbe830cd83f6d36f591fd9e7139a825a7593dfe7c835b1437d6",
+      "bytes": 54845,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Heritage-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-Update.xlsx",
+      "sha256": "fd4ccac8d18f9bdd080d0e767083ce5e11df69a8b26717f52f337dc22538009e",
+      "bytes": 57748,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Holiday-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "f26bf5bb12f6fb492b979922b3786e8fac4cb7cf709c91ba0b1401e4a68f16bd",
+      "bytes": 33360,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Inception-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "dc58113a61912a2c3aa9492fd8bb274d26038b2d8bf2116e39fbb02ab3e71134",
+      "bytes": 28352,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Knockout-UFC-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx",
+      "sha256": "2ac42f111931d455fa4262e6309c553870bb97cd173e9d7adb830f779fd96452",
+      "bytes": 28728,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Lights-Out-Formula-1-Racing-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "0049704e608752e63b7045fb5d2abe36c620221755ff1c5f710ae1351a1e7c39",
+      "bytes": 320931,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-lights-out-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Mars-Attacks-Xmas-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "fb6947226d5767010301e1a6a29a252f22adaabff6655de72a938f75aaf5ff6a",
+      "bytes": 17841,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Midnight-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "cc142181f968332dc7b58a5121d835d5b8c329bc419a469ddc1265d61d07d266",
+      "bytes": 30841,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Midnight-UFC-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "5105e260146052e96c20793c020aa37c9afb00190b729433baa497851c7d4f64",
+      "bytes": 22522,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Mint-Disney-Checklist-Excel-spreadsheet-Downloads-Checklist-Insider-.xlsx",
+      "sha256": "8589f6dab68aa46bd375e7b0aa0379282f138df9f76765a94217702879ad01ac",
+      "bytes": 23879,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Mint-Marvel-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "703324efe68407fc261e07b20a6f4751cd11169c545b4ef3a40459c36e42793b",
+      "bytes": 20645,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Museum-Collection-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "ec14b5729cbcb4ebe3a711c893715392c9f9e39376bf5bd0e785f9060dbb27e3",
+      "bytes": 52749,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Neon-Marvel-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "afcd34306cb917104861d3c3c09a3b5de02f5baa2286074e618b73c0b3fb10bd",
+      "bytes": 28233,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Pristine-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "4b074d58867fc2fa789eece70a807fbc29988ce1893c01cfba21d184487318b5",
+      "bytes": 33513,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Royalty-Tennis-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xls",
+      "sha256": "f6cc1a018fc76d1af3a373e39090e7f7b8b8c7fa2a1c06d95f52e293aa7ae5ed",
+      "bytes": 100352,
+      "extension": ".xls",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Rugby-Legends-Checklist-Downloads-PDF-Checklist-Insider.pdf",
+      "sha256": "bafbe4c1a43e4cd2eace7ba560034e515286207c692b720d0794305e7f957d09",
+      "bytes": 147243,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-rugby-list-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Series-1-Baseball-Checklist-Update-Feb.xlsx",
+      "sha256": "845e26bf0d7188b840bd9d14c9f7c088df5c0ef9d75fd54000bc3c2ffd0d3c10",
+      "bytes": 108325,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": [
+        "2026-Topps-Series-1-Baseball-Checklist-Update-Feb (1).xlsx"
+      ]
+    },
+    {
+      "file": "2026-Topps-Series-2-Baseball-Checklist-Downloads-Excel-Spreadsheet-5-11.xlsx",
+      "sha256": "5f8c46b633f889057b633a0155e764b9f749368979ff090470667955d77cdf90",
+      "bytes": 112571,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": [
+        "2026-Topps-Series-2-Baseball-Checklist-Downloads-Excel-Spreadsheet-5-11 (1).xlsx",
+        "2026-Topps-Series-2-Baseball-Checklist-Downloads-Excel-Spreadsheet-5-11 (2).xlsx"
+      ]
+    },
+    {
+      "file": "2026-Topps-Stadium-Club-UFC-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "e25c6c6f7f6fa0224b2c7c8c0d6f01b1ee79a27847793bdb67b29b56758b4187",
+      "bytes": 29126,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Stadium-Club-WWE-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "aeeeeb903fc2b1620a6c1a02b1ed9427e72a9dcafcdd3f3474c5ba80ff054418",
+      "bytes": 37113,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Star-Wars-Galaxy-Chrome-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "21faff94a04bca2f433b0f24da11bdae76c1d22ce83ae0cdf6175c3de30d63f1",
+      "bytes": 28515,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Tier-One-Baseball-Checklist-Excel-spreadsheet-Downloads-Checklist-Insider.xlsx",
+      "sha256": "258da0d1ba70df254975291256d2cce55fad98b2d019fffd8ad575498473ea5a",
+      "bytes": 63637,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Tribute-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "82d28683fc25a41d9ccb8c414437931001a591907e5e43e88a4b30bb38c5b871",
+      "bytes": 34226,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Triumphant-Tennis-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "76ff17addebf8aa40b2bf06be602f824c0be5ceb1b7ad6d3bd63669e83cfd26b",
+      "bytes": 87733,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-simple-table-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Turbo-Attax-Formula-1-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "485fcdc8be2870b651190d4374a5a3ed52a0609e0e939f556c17137f0aa79fa2",
+      "bytes": 24215,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-structured",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-UFC-Freedom-250-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "9514475ff211e0cdd085bde7b3647b1534ee6ce1ad935fa44ca8ea9194fe9ea8",
+      "bytes": 12491,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Universe-WWE-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "656f45d7d17e11e36fc6dab96369a27184ce9f6cb9fd8c05f1ad2e87a6d2263b",
+      "bytes": 33267,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Update-Series-Baseball-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "ddae3761f03ffe30bf86f1762cba932f24e20087e402dee77eb4e521ab80ad44",
+      "bytes": 113329,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Vault-Disney-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "c85ffcf696c33cfcded2016fa3132a5045a3f9be2809aec09a6a89cbbb09dc3c",
+      "bytes": 24376,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Vault-Marvel-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "3c3d468c545ead4a2d1667de46372cd518c5445f691b7203cc520e99315d5652",
+      "bytes": 24135,
+      "extension": ".xlsx",
+      "manufacturer": "Topps",
+      "layout": "topps-sectioned",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Topps-Wacky-Packages-All-New-Series-Checklist-Downloads-Checklist-Insider.pdf",
+      "sha256": "5be70b19efe349ff42be1661a2fe0752f162c9d37061346d8ae0967327853a7d",
+      "bytes": 338294,
+      "extension": ".pdf",
+      "manufacturer": "Topps",
+      "layout": "topps-entertainment-pdf",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-AEW-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "f055a69d22ea165ea227554fa6e8f84e91170a8dfb542ecd25962c15ab6128f7",
+      "bytes": 104887,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": [
+        "2026-Upper-Deck-AEW-Wrestling-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider (1).xlsx"
+      ]
+    },
+    {
+      "file": "2026-Upper-Deck-Allure-AEW-Wrestling-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "21ea1be9d613e4e9ed389805ae50e8d5d0a2a2d47d3e5543a70ed903c5b949f7",
+      "bytes": 93864,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Allure-Golf-Checklist-Downloads-Excel-Spreadsheet.xlsx",
+      "sha256": "5c36d48aa46af1bc16c6fe861023423477ebcd2518d0cace8f9e83dd50323ce8",
+      "bytes": 96462,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Artifacts-Golf-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider-.xlsx",
+      "sha256": "818ebb0b91ac40197557451a229b9b00c1e561bb05a9f9b7af9da12f6a0f2ebd",
+      "bytes": 62231,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-CFL-Football-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "0ceb6b5fa26f6a157f08586e4f7efe57f49e613934eb605a491a5a374a0b6e16",
+      "bytes": 44706,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Goodwin-Champions-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "c3d7fc5fe4b06fa6233274904ddc51e72bdcd3dda517104cf48f250de22d8cfc",
+      "bytes": 245830,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-National-Hockey-Card-Day-Checklist-Downloads-Excel-spreadsheet.xlsx",
+      "sha256": "e6ac01ca53b1bc2bb8a729c4c70a991d9ac278f0896510b915e8a077f2582526",
+      "bytes": 12383,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-split-name",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Team-Canada-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "78e3d3d53910959e4ca1187efc8c1678d103b6d0ad8ea5312bab5b707dfcf016",
+      "bytes": 116084,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Team-Canada-Juniors-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "4771283f628492d707a7e128154be5a7b04bbe7bc5064e49a884276f07d74808",
+      "bytes": 114366,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    },
+    {
+      "file": "2026-Upper-Deck-Team-USA-Juniors-Hockey-Checklist-Downloads-Excel-spreadsheet-Checklist-Insider.xlsx",
+      "sha256": "8be1e0045a3eb4a485c320e2e4326b133f2c8377ca986aa0f89bfe8e950d84de",
+      "bytes": 120057,
+      "extension": ".xlsx",
+      "manufacturer": "Upper Deck",
+      "layout": "upperdeck-ci",
+      "duplicates": []
+    }
+  ]
+}
