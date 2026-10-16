@@ -272,51 +272,133 @@ function extractFormatHeaders(headerRows, centers) {
 	});
 }
 
+function prettyFormatName(value) {
+	let text = String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+	text = text.replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+	return text
+		.replace(/\bEa\b/g, 'EA')
+		.replace(/\bSe\b/g, 'SE')
+		.replace(/\bCe\b/g, 'CE')
+		.replace(/\bCee\b/g, 'CEE')
+		.replace(/\bHta\b/g, 'HTA')
+		.replace(/\bFotl\b/g, 'FOTL')
+		.replace(/\bAsg\b/g, 'ASG')
+		.replace(/\bMlb\b/g, 'MLB')
+		.replace(/\bNfl\b/g, 'NFL')
+		.replace(/\bNba\b/g, 'NBA')
+		.replace(/\bNhl\b/g, 'NHL');
+}
+
+function extractKnownFormat(value) {
+	const text = String(value || '')
+		.toUpperCase()
+		.replace(/[–—]/g, '-')
+		.replace(/\s+/g, ' ')
+		.trim();
+
+	if (!text) return '';
+
+	// These are the collector-facing package labels Topps prints on the
+	// bottom line of its odds headers. Product/SKU text above them is noise.
+	const patterns = [
+		/FANATICS FEST VALUE BOX\b/g,
+		/FANATICS FEST(?: N)? HOBBY\b/g,
+		/CLUB SUPER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/ASG MEGA(?: BOX)?(?: (?:EA|SE|CE|CEE))?\b/g,
+		/HANGER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/DISPLAY BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/VALUE BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/SUPER BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/FAT PACK(?: (?:EA|SE|CE|CEE))?\b/g,
+		/MEGA BOX(?: (?:EA|SE|CE|CEE))?\b/g,
+		/MEGA(?: (?:EA|SE|CE|CEE))\b/g,
+		/FLOOR DISPLAY\b/g,
+		/BULK PACKS?\b/g,
+		/JAPAN EDITION\b/g,
+		/BREAKER DELIGHT\b/g,
+		/HOBBY DELIGHT\b/g,
+		/BLASTER BOX\b/g,
+		/RETAIL BOX\b/g,
+		/FANATICS\b/g,
+		/SAPPHIRE\b/g,
+		/JUMBO\b/g,
+		/HOBBY\b/g,
+		/BLASTER\b/g,
+		/RETAIL\b/g,
+		/FOTL\b/g,
+		/HTA\b/g
+	];
+
+	let best = null;
+
+	for (const pattern of patterns) {
+		pattern.lastIndex = 0;
+		let match;
+
+		while ((match = pattern.exec(text))) {
+			const candidate = {
+				value: match[0],
+				index: match.index
+			};
+
+			if (
+				!best ||
+				candidate.index > best.index ||
+				(candidate.index === best.index && candidate.value.length > best.value.length)
+			) {
+				best = candidate;
+			}
+		}
+	}
+
+	return best ? prettyFormatName(best.value) : '';
+}
+
 function cleanHumanFormat(value) {
 	let text = String(value || '').replace(/\s+/g, ' ').trim();
 
-	text = text.replace(/^cards?\s+/i, '').replace(/\s+cards?$/i, '').trim();
+	text = text
+		.replace(/^cards?\s+/i, '')
+		.replace(/\s+cards?$/i, '')
+		.trim();
 
-	// Topps commonly uses headers such as:
-	// 6578 - MLB-BOWMAN 2026 HOBBY
-	// 6580 - MLB-BOWMAN 2026 MEGA BOX CEE
-	// Strip the SKU/manufacturer/year portion only after the complete header
-	// has been reconstructed, rather than trying to strip individual PDF fragments.
+	// First choice: ignore the SKU/product wording completely and take the
+	// package-format phrase Topps prints at the bottom of the column.
+	const known = extractKnownFormat(text);
+	if (known) return known;
+
+	// Fallback for a format we have not seen yet: everything after the final
+	// four-digit product year is more likely to be the package label than the
+	// SKU/product family printed before it.
+	const years = [...text.matchAll(/\b20\d{2}\b/g)];
+
+	if (years.length) {
+		const lastYear = years.at(-1);
+		const tail = text.slice(lastYear.index + lastYear[0].length).trim();
+
+		if (tail && !looksLikeSku(tail)) {
+			return prettyFormatName(tail);
+		}
+	}
+
+	// Legacy fallback.
 	text = text.replace(/^\d{3,}\s*-\s*/i, '');
 	text = text.replace(/^(?:MLB|NFL|NBA|NHL|WWE)[-\s]+/i, '');
 	text = text.replace(/^(?:TOPPS|BOWMAN|PANINI)[-\s]+/i, '');
-	text = text.replace(/^(?:MLB|NFL|NBA|NHL|WWE)?[-\s]*(?:TOPPS|BOWMAN|PANINI)?[-\s]*20\d{2}\s+/i, '');
-	text = text.replace(/^20\d{2}\s+/i, '');
-	text = text.replace(/^(?:TOPPS|BOWMAN|PANINI)\s+20\d{2}\s+/i, '');
 	text = text.trim();
 
 	if (!text || looksLikeSku(text)) return '';
 
-	if (text === text.toUpperCase()) {
-		text = text
-			.toLowerCase()
-			.replace(/\b\w/g, (letter) => letter.toUpperCase())
-			.replace(/\bHta\b/g, 'HTA')
-			.replace(/\bMlb\b/g, 'MLB')
-			.replace(/\bNfl\b/g, 'NFL')
-			.replace(/\bNba\b/g, 'NBA')
-			.replace(/\bNhl\b/g, 'NHL')
-			.replace(/\bEa\b/g, 'EA')
-			.replace(/\bSe\b/g, 'SE')
-			.replace(/\bCe\b/g, 'CE')
-			.replace(/\bCee\b/g, 'CEE');
-	}
-
-	return text;
+	return prettyFormatName(text);
 }
 
 function validateFormats(formats) {
 	const issues = [];
-	const seen = new Set();
 
 	for (const format of formats) {
 		const name = String(format.name || '').trim();
-		const lower = name.toLowerCase();
 
 		if (!name || /^format \d+$/i.test(name)) {
 			issues.push(`Column ${format.index + 1} does not have a verified format name.`);
@@ -330,11 +412,10 @@ function validateFormats(formats) {
 		if (/^cards?\b/i.test(name)) {
 			issues.push(`"${name}" incorrectly includes the Card column heading.`);
 		}
-
-		if (seen.has(lower)) issues.push(`Duplicate format header detected: "${name}".`);
-		seen.add(lower);
 	}
 
+	// Duplicate human labels are VALID. Topps frequently has multiple Hobby,
+	// Mega, Value Box, etc. columns differentiated only by internal SKU.
 	return issues;
 }
 
@@ -380,20 +461,58 @@ function mergeRows(pages, formats) {
 	const rows = [];
 
 	for (const page of pages) {
-		const localNames = page.formats.map((format) => format.name.toLowerCase());
+		const sameColumnCount = page.formats.length === formats.length;
+
+		const localRawHeaders = page.formats.map((format) =>
+			String(format.rawHeader || '').replace(/\s+/g, ' ').trim().toLowerCase()
+		);
+
+		const localNames = page.formats.map((format) =>
+			String(format.name || '').trim().toLowerCase()
+		);
 
 		for (const row of page.rows) {
 			const values = new Array(formats.length).fill(null);
 
 			for (let i = 0; i < formats.length; i++) {
-				const target = formats[i].name.toLowerCase();
-				const localIndex = localNames.indexOf(target);
+				// On Topps PDFs the column order is stable from page to page.
+				// Positional mapping is essential because duplicate package labels
+				// such as Hobby/Hobby or Mega EA/Mega EA are completely legitimate.
+				if (sameColumnCount && i < row.values.length) {
+					values[i] = row.values[i] ?? null;
+					continue;
+				}
 
-				if (localIndex >= 0) values[i] = row.values[localIndex] ?? null;
-				else if (i < row.values.length) values[i] = row.values[i] ?? null;
+				const targetRaw = String(formats[i].rawHeader || '')
+					.replace(/\s+/g, ' ')
+					.trim()
+					.toLowerCase();
+
+				let localIndex = targetRaw
+					? localRawHeaders.indexOf(targetRaw)
+					: -1;
+
+				if (localIndex < 0) {
+					const targetName = String(formats[i].name || '').trim().toLowerCase();
+					const matches = localNames
+						.map((name, index) => (name === targetName ? index : -1))
+						.filter((index) => index >= 0);
+
+					// Name matching is safe only when that human label is unique.
+					if (matches.length === 1) localIndex = matches[0];
+				}
+
+				if (localIndex >= 0) {
+					values[i] = row.values[localIndex] ?? null;
+				} else if (i < row.values.length) {
+					values[i] = row.values[i] ?? null;
+				}
 			}
 
-			rows.push({ name: row.name.replace(/\s+/g, ' ').trim(), values });
+			rows.push({
+				name: row.name.replace(/\s+/g, ' ').trim(),
+				values
+			});
 		}
 	}
 

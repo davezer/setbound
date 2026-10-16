@@ -244,15 +244,13 @@
 	function oddsProblems(parsedOdds, names) {
 		if (!parsedOdds) return [];
 
-		// Revalidate the CURRENT editable labels. parsedOdds.headerIssues describes
-		// the parser's original guesses, so keeping those issues here made it
-		// impossible to verify a row even after the admin corrected every label.
+		// Validate only what is actually wrong with the editable label.
+		// Repeated labels are valid because separate Topps SKUs can share the
+		// same collector-facing format name (Hobby, Mega EA, etc.).
 		const issues = [];
-		const seen = new Set();
 
 		for (let index = 0; index < names.length; index++) {
 			const name = String(names[index] || '').trim();
-			const lower = name.toLowerCase();
 
 			if (!name || /^format \d+$/i.test(name)) {
 				issues.push(`Column ${index + 1} needs a real pack-format name.`);
@@ -265,12 +263,6 @@
 			if (/^cards?\b/i.test(name)) {
 				issues.push(`"${name}" incorrectly includes the Card column heading.`);
 			}
-
-			if (seen.has(lower) && lower) {
-				issues.push(`Duplicate format name: "${name}".`);
-			}
-
-			if (lower) seen.add(lower);
 		}
 
 		return [...new Set(issues)];
