@@ -113,6 +113,28 @@
 		selected = new Set();
 	}
 
+	function removePrepared(index) {
+		if (index < 0 || index >= queue.length) return;
+
+		if (reviewQueueIndex === index) {
+			reviewQueueIndex = null;
+			reviewCardIndex = null;
+		} else if (reviewQueueIndex != null && reviewQueueIndex > index) {
+			reviewQueueIndex -= 1;
+		}
+
+		queue = queue.filter((_, rowIndex) => rowIndex !== index);
+	}
+
+	function clearPrepared() {
+		if (!queue.length) return;
+
+		reviewQueueIndex = null;
+		reviewCardIndex = null;
+		queue = [];
+		message = 'Prepared checklist queue cleared. Harvested products are still loaded.';
+	}
+
 	function mergeCatalog(items) {
 		const map = new Map(catalog.map((item) => [
 			`${item.source}|${item.pageUrl || ''}|${item.checklistUrl || ''}|${item.name}`,
@@ -957,7 +979,10 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 					<h2>Prepared checklists</h2>
 					<p>Clean products can bulk-import. Unresolved products stay blocked for review.</p>
 				</div>
-				<button class="primary" onclick={importAllReady} disabled={busy || !queue.some((row) => row.status === 'ready')}>Import all ready</button>
+				<div class="batch-head-actions">
+					<button class="secondary" type="button" onclick={clearPrepared} disabled={busy || !queue.length}>Clear prepared</button>
+					<button class="primary" onclick={importAllReady} disabled={busy || !queue.some((row) => row.status === 'ready')}>Import all ready</button>
+				</div>
 			</div>
 
 			<div class="batch-list">
@@ -1050,6 +1075,14 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 						</div>
 
 						<div class="row-actions">
+							<button
+								class="secondary remove-prepared"
+								type="button"
+								onclick={() => removePrepared(index)}
+								disabled={busy}
+							>
+								Remove
+							</button>
 							{#if row.status === 'ready'}<button class="secondary" onclick={() => importRow(index)} disabled={busy}>Import checklist + odds</button>{/if}
 							{#if row.status === 'review'}<button class="secondary" onclick={() => openReview(index)}>Review checklist inline →</button>{/if}
 							{#if row.status === 'parse-review'}
@@ -1273,4 +1306,10 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 	.pdf-backdrop{position:fixed;inset:0;z-index:1100;display:grid;place-items:center;padding:1rem;background:rgba(20,18,16,.5);backdrop-filter:blur(2px)}.pdf-modal{width:min(1100px,96vw);height:min(88vh,950px);display:grid;grid-template-rows:auto 1fr;overflow:hidden;background:white;border:1px solid var(--line);border-radius:1rem;box-shadow:0 24px 80px rgba(0,0,0,.24)}.pdf-head{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;padding:1rem 1.1rem;border-bottom:1px solid var(--line)}.pdf-head h2{margin:.25rem 0;font-family:var(--display);font-size:1.7rem;font-weight:500;letter-spacing:-.035em}.pdf-head p{margin:0;color:var(--muted);font-size:.68rem}.pdf-head-actions{display:flex;align-items:center;gap:.5rem}.pdf-frame-wrap{min-height:0;background:#efefed}.pdf-frame{width:100%;height:100%;border:0;background:white}
 	.review-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:1rem;background:rgba(20,18,16,.42);backdrop-filter:blur(2px)}.review-modal{width:min(760px,100%);max-height:min(86vh,900px);overflow:auto;background:white;border:1px solid var(--line);border-radius:1rem;box-shadow:0 24px 80px rgba(0,0,0,.2)}.review-head{display:flex;justify-content:space-between;gap:1rem;padding:1.2rem 1.25rem;border-bottom:1px solid var(--line)}.review-head h2{margin:.25rem 0;font-family:var(--display);font-size:2rem;font-weight:500;letter-spacing:-.04em}.review-head p{margin:0;color:var(--muted);font-size:.72rem}.close{border:0;background:transparent;font-size:1.5rem;line-height:1;cursor:pointer}.review-raw{padding:.9rem 1.25rem;background:#faf9f7;border-bottom:1px solid var(--line)}.review-raw span{display:block;margin-bottom:.35rem;color:var(--muted);font-size:.57rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.review-raw code{display:block;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.68rem;line-height:1.5}.review-form{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;padding:1.2rem 1.25rem}.review-form label>span{display:block;margin-bottom:.3rem;color:var(--muted);font-size:.58rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.review-form .wide{grid-column:1/-1}.nil-check{grid-column:1/-1;display:flex;align-items:center;gap:.45rem}.nil-check span{margin:0!important;color:var(--ink)!important;text-transform:none!important;letter-spacing:0!important;font-size:.7rem!important}.flag-grid{grid-column:1/-1;display:flex;gap:1rem;flex-wrap:wrap;padding-top:.25rem}.flag-grid label{display:flex;align-items:center;gap:.4rem;font-size:.7rem;font-weight:800}.review-footer{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.25rem;border-top:1px solid var(--line);background:#faf9f7}.review-actions{display:flex;gap:.5rem}.needs-fix{color:#9a3424;font-size:.66rem;font-weight:850}.resolved{color:#26734d;font-size:.66rem;font-weight:850}
 	@media(max-width:850px){.enrich-formats,.image-candidates{grid-template-columns:1fr}.enrich-footer{align-items:flex-start;flex-direction:column}.enrich-footer>div{width:100%;flex-wrap:wrap}.source-panel,.filters{grid-template-columns:1fr}.source-note{grid-column:auto}.toolbar,.batch-head{align-items:flex-start;flex-direction:column}.batch-row{grid-template-columns:1fr}.row-actions{justify-content:flex-start}.row-controls{grid-template-columns:1fr}}
+
+	.batch-head-actions{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+	.remove-prepared{color:#8d3028;border-color:#e3bbb6;background:#fff9f8}
+	@media(max-width:700px){
+		.batch-head-actions{justify-content:flex-start}
+	}
 </style>
