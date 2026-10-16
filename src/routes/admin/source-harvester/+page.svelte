@@ -275,9 +275,9 @@
 
 		if (manufacturer !== 'upper deck' || sport !== 'hockey') return '';
 
-		if (/\\bteam canada juniors?\\b/.test(name)) return 'Canada';
-		if (/\\bteam canada\\b/.test(name)) return 'Canada';
-		if (/\\bteam usa juniors?\\b/.test(name)) return 'United States';
+		if (/\bteam canada juniors?\b/.test(name)) return 'Canada';
+if (/\bteam canada\b/.test(name)) return 'Canada';
+if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 
 		return '';
 	}
@@ -410,7 +410,7 @@
 			if (ext === 'pdf') {
 				const isTimHortons =
 					String(row.manufacturer || '').toLowerCase() === 'upper deck' &&
-					/\\btim hortons\\b/i.test(String(row.name || ''));
+					/\btim hortons\b/i.test(String(row.name || ''));
 
 				if (isTimHortons) {
 					parsed = await extractTimHortonsChecklist(file);
