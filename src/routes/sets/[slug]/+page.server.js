@@ -63,7 +63,8 @@ export async function load({ platform, params, locals, url }) {
 				c.serial_number,
 				c.confidence,
 				sub.name AS subject_name,
-				COALESCE(a.name, 'NIL') AS affiliation_name,
+				COALESCE(c.affiliation_label, a.name, 'NIL') AS affiliation_name,
+				COALESCE(a.name, 'NIL') AS franchise_name,
 				cl.name AS checklist_name
 				${collectionSelect}
 			FROM cards c

@@ -32,6 +32,18 @@ function resolvedSubject(card) {
 	);
 }
 
+function franchiseLookupKey(value) {
+	return String(value || '')
+		.trim()
+		.normalize('NFKD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.toLowerCase()
+		.replace(/&/g, ' and ')
+		.replace(/[^a-z0-9]+/g, ' ')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
 function hasVerifiedAffiliation(card) {
 	const value = String(card.affiliation || '').trim();
 
@@ -316,35 +328,28 @@ export async function POST({ request, platform }) {
 			}
 
 			let affiliationId = null;
+			let affiliationLabel = null;
 
 			if (hasVerifiedAffiliation(card)) {
-				const affiliationName = clean(card.affiliation);
-				const affiliationKey = normalized(affiliationName);
+				const historicalName = String(card.affiliation || '').trim();
+				const aliasKey = franchiseLookupKey(historicalName);
 
-				affiliationId = affiliationIds.get(affiliationKey) || null;
+				const franchiseAlias = await database
+					.prepare('SELECT canonical_affiliation_id FROM affiliation_franchise_aliases WHERE sport_id = ? AND alias_normalized = ? LIMIT 1')
+					.bind(Number(body.sportId), aliasKey)
+					.first();
 
-				if (!affiliationId) {
-					let row = await database
-						.prepare(`
-							SELECT id
-							FROM affiliations
-							WHERE normalized_name = ?
-							LIMIT 1
-						`)
-						.bind(affiliationKey)
-						.first();
-
-					if (!row) {
-						await database
-							.prepare(`
-								INSERT OR IGNORE INTO affiliations
-									(name, normalized_name, type, aliases_json)
-								VALUES (?, ?, 'team', '[]')
-							`)
-							.bind(affiliationName, affiliationKey)
-							.run();
-
-						row = await database
+				if (franchiseAlias?.canonical_affiliation_id) {
+					affiliationId = franchiseAlias.canonical_affiliation_id;
+					affiliationLabel = historicalName;
+				} else {
+					const affiliationName = clean(card.affiliation);
+					const affiliationKey = normalized(affiliationName);
+	
+					affiliationId = affiliationIds.get(affiliationKey) || null;
+	
+					if (!affiliationId) {
+						let row = await database
 							.prepare(`
 								SELECT id
 								FROM affiliations
@@ -353,16 +358,38 @@ export async function POST({ request, platform }) {
 							`)
 							.bind(affiliationKey)
 							.first();
+	
+						if (!row) {
+							await database
+								.prepare(`
+									INSERT OR IGNORE INTO affiliations
+										(name, normalized_name, type, aliases_json)
+									VALUES (?, ?, 'team', '[]')
+								`)
+								.bind(affiliationName, affiliationKey)
+								.run();
+	
+							row = await database
+								.prepare(`
+									SELECT id
+									FROM affiliations
+									WHERE normalized_name = ?
+									LIMIT 1
+								`)
+								.bind(affiliationKey)
+								.first();
+						}
+	
+						if (!row?.id) {
+							throw new Error(
+								`Could not resolve affiliation "${affiliationName}".`
+							);
+						}
+	
+						affiliationId = row.id;
+						affiliationIds.set(affiliationKey, affiliationId);
 					}
-
-					if (!row?.id) {
-						throw new Error(
-							`Could not resolve affiliation "${affiliationName}".`
-						);
-					}
-
-					affiliationId = row.id;
-					affiliationIds.set(affiliationKey, affiliationId);
+				}
 				}
 			}
 
@@ -374,6 +401,7 @@ export async function POST({ request, platform }) {
 							checklist_id,
 							subject_id,
 							affiliation_id,
+							affiliation_label,
 							card_number,
 							sort_key,
 							rookie,
@@ -384,13 +412,14 @@ export async function POST({ request, platform }) {
 							raw_source
 						)
 					VALUES
-						(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+						(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 				`)
 				.bind(
 					product.id,
 					checklistIds.get(card.checklist_name),
 					subjectIds.get(subjectKey),
 					affiliationId,
+					affiliationLabel,
 					String(card.card_number),
 					sortKey(card.card_number),
 					card.rookie ? 1 : 0,

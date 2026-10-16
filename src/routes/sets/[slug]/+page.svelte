@@ -44,7 +44,7 @@
 
 	const teams = $derived([
 		'All teams',
-		...[...new Set(data.cards.map((card) => card.affiliation_name))].sort((a, b) => a.localeCompare(b))
+		...[...new Set(data.cards.map((card) => card.franchise_name || card.affiliation_name))].sort((a, b) => a.localeCompare(b))
 	]);
 
 	const activeChecklist = $derived(active === 'All' ? null : data.checklists.find((checklist) => checklist.name === active));
@@ -59,12 +59,12 @@
 		const status = cardStatus(card);
 		return (
 			(active === 'All' || card.checklist_name === active) &&
-			(team === 'All teams' || card.affiliation_name === team) &&
+			(team === 'All teams' || (card.franchise_name || card.affiliation_name) === team) &&
 			(statusFilter === 'All cards' ||
 				(statusFilter === 'Owned' && status === 'owned') ||
 				(statusFilter === 'Wanted' && status === 'wanted') ||
 				(statusFilter === 'Missing' && status !== 'owned')) &&
-			(!query || `${card.card_number} ${card.subject_name} ${card.affiliation_name} ${card.checklist_name}`.toLowerCase().includes(query.toLowerCase()))
+			(!query || `${card.card_number} ${card.subject_name} ${card.affiliation_name} ${card.franchise_name || ''} ${card.checklist_name}`.toLowerCase().includes(query.toLowerCase()))
 		);
 	}));
 
