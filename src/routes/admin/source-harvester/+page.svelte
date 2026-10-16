@@ -30,7 +30,7 @@
 	let editAutograph = $state(false);
 	let editMemorabilia = $state(false);
 
-	let oddsPreviewUrl = $state('');
+	// Existing imported odds remain intact, but the Source Harvester no longer\n	// prepares or imports odds as part of the normal checklist workflow.\n	const PREPARE_ODDS = false;\n\n	let oddsPreviewUrl = $state('');
 	let oddsPreviewName = $state('');
 
 	let enrichment = $state(null);
@@ -416,7 +416,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			};
 		}
 
-		if (row.oddsUrl) {
+		if (PREPARE_ODDS && row.oddsUrl) {
 			if (!row.parsedOdds) {
 				return {
 					...row,
@@ -441,7 +441,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 		return {
 			...row,
 			status: 'ready',
-			statusText: `${row.parsed.cards.length.toLocaleString()} cards ready${row.oddsUrl ? ' + odds' : ''}`
+			statusText: `${row.parsed.cards.length.toLocaleString()} cards ready`
 		};
 	}
 
@@ -496,7 +496,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 			let oddsVerified = false;
 			let oddsError = '';
 
-			if (row.oddsUrl) {
+			if (PREPARE_ODDS && row.oddsUrl) {
 				queue[index] = {
 					...queue[index],
 					parsed,
@@ -578,10 +578,9 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 
 		const ready = queue.filter((row) => row.status === 'ready').length;
 		const review = queue.filter((row) => row.status === 'review').length;
-		const oddsReview = queue.filter((row) => row.status === 'odds-review').length;
 		const parseReview = queue.filter((row) => row.status === 'parse-review').length;
-		const failed = queue.filter((row) => row.status === 'error' || row.status === 'odds-error').length;
-		message = `${ready} ready · ${review} checklist review · ${parseReview} parse review · ${oddsReview} odds review · ${failed} failed`;
+		const failed = queue.filter((row) => row.status === 'error').length;
+		message = `${ready} ready · ${review} checklist review · ${parseReview} parse review · ${failed} failed`;
 		busy = false;
 	}
 
@@ -641,7 +640,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 		if (!row?.parsed) return;
 
 		if (row.importedSlug) {
-			if (row.oddsUrl && !row.oddsImported) {
+			if (PREPARE_ODDS && row.oddsUrl && !row.oddsImported) {
 				await importOddsForRow(index);
 			}
 			return;
@@ -677,11 +676,11 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 				...queue[index],
 				importedSlug: result.slug,
 				status: row.oddsUrl ? 'importing' : 'imported',
-				statusText: row.oddsUrl ? 'Checklist imported · importing odds…' : 'Imported'
+				statusText: 'Imported'
 			};
 			queue = [...queue];
 
-			if (row.oddsUrl) {
+			if (PREPARE_ODDS && row.oddsUrl) {
 				await importOddsForRow(index);
 			}
 		} catch (error) {
@@ -1039,7 +1038,7 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 									<span>{row.audit?.totals?.unresolvedCards || 0} unresolved</span>
 								</div>
 							{/if}
-							{#if row.oddsUrl}
+							{#if PREPARE_ODDS && row.oddsUrl}
 								<div class="odds-block">
 									<div class="odds-head">
 										<div>
@@ -1114,16 +1113,16 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 							>
 								Remove
 							</button>
-							{#if row.status === 'ready'}<button class="secondary" onclick={() => importRow(index)} disabled={busy}>Import checklist + odds</button>{/if}
+							{#if row.status === 'ready'}<button class="secondary" onclick={() => importRow(index)} disabled={busy}>Import checklist</button>{/if}
 							{#if row.status === 'review'}<button class="secondary" onclick={() => openReview(index)}>Review checklist inline →</button>{/if}
 							{#if row.status === 'parse-review'}
 								<span class="action-note">Import blocked: suspicious spreadsheet parse</span>
 								<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry prepare</button>
 							{/if}
-							{#if row.status === 'odds-review'}<span class="action-note">Verify odds formats above</span>{/if}
-							{#if row.status === 'odds-error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry odds/checklist prepare</button>{/if}
+							
+							
 							{#if row.status === 'error'}<button class="secondary" onclick={() => prepareItem(index)} disabled={busy}>Retry</button>{/if}
-							{#if row.status === 'odds-import-error'}<button class="secondary" onclick={() => importOddsForRow(index)} disabled={busy}>Retry odds import</button>{/if}
+							
 							{#if row.importedSlug && row.pageUrl}
 								<button class="secondary" type="button" onclick={() => openEnrichment(row, row.importedSlug, index)}>
 									{row.enriched ? 'Enriched ✓' : 'Enrich draft →'}
