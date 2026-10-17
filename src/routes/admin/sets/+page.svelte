@@ -71,6 +71,19 @@
 	}
 
 
+	function readableApiError(value, fallback) {
+		if (!value) return fallback;
+		if (typeof value === 'string') return value;
+		try {
+			if (typeof value.message === 'string') return value.message;
+			if (typeof value.error === 'string') return value.error;
+			if (value.error && typeof value.error.message === 'string') return value.error.message;
+			return JSON.stringify(value);
+		} catch {
+			return fallback;
+		}
+	}
+
 	async function backfillToppsVisible() {
 		const targets = visible.filter(
 			(product) => String(product.manufacturer_name || '').toLowerCase() === 'topps'
@@ -102,7 +115,7 @@
 				body: JSON.stringify({ mode: 'index' })
 			});
 			const indexResult = await indexResponse.json();
-			if (!indexResponse.ok) throw new Error(indexResult.message || 'Could not load Topps launch history.');
+			if (!indexResponse.ok) throw new Error(readableApiError(indexResult.message || indexResult.error || indexResult, 'Could not load Topps launch history.'));
 
 			for (let offset = 0; offset < targets.length; offset += 8) {
 				const batch = targets.slice(offset, offset + 8);
@@ -115,7 +128,7 @@
 					})
 				});
 				const result = await response.json();
-				if (!response.ok) throw new Error(result.message || 'Topps metadata batch failed.');
+				if (!response.ok) throw new Error(readableApiError(result.message || result.error || result, 'Topps metadata batch failed.'));
 
 				for (const row of result.results || []) {
 					const product = products.find((item) => Number(item.id) === Number(row.productId));

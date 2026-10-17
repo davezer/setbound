@@ -172,6 +172,20 @@ function overviewFromDescription(value = '') {
 	return lines.join(' ').replace(/\s+/g, ' ').trim();
 }
 
+function errorText(value, fallback = 'Unknown error.') {
+	if (!value) return fallback;
+	if (typeof value === 'string') return value;
+	if (value instanceof Error) return value.message || fallback;
+	try {
+		if (typeof value.message === 'string') return value.message;
+		if (typeof value.error === 'string') return value.error;
+		if (value.error && typeof value.error.message === 'string') return value.error.message;
+		return JSON.stringify(value);
+	} catch {
+		return String(value);
+	}
+}
+
 async function parseFetch(fetch, endpoint, apiKey, params = {}) {
 	const url = new URL(`${PARSE_BASE}/${endpoint}`);
 	for (const [key, value] of Object.entries(params)) {
@@ -183,10 +197,10 @@ async function parseFetch(fetch, endpoint, apiKey, params = {}) {
 	let payload = null;
 	try { payload = await response.json(); } catch {}
 	if (!response.ok) {
-		throw new Error(payload?.message || payload?.error || `Parse.bot returned HTTP ${response.status}.`);
+		throw new Error(errorText(payload?.message || payload?.error || payload, `Parse.bot returned HTTP ${response.status}.`));
 	}
 	if (payload?.status && payload.status !== 'success') {
-		throw new Error(payload?.message || payload?.error || `Parse.bot returned ${payload.status}.`);
+		throw new Error(errorText(payload?.message || payload?.error || payload, `Parse.bot returned ${payload.status}.`));
 	}
 	return payload;
 }
@@ -319,10 +333,18 @@ export async function POST({ request, platform, fetch }) {
 
 	if (mode === 'index') {
 		try {
-			const launches = await refreshLaunchIndex(database, fetch, apiKey);
-			return json({ ok: true, launchCount: launches.length });
+			const forceRefresh = body.forceRefresh === true;
+			let launches = forceRefresh ? [] : await cachedLaunchIndex(database);
+			let cached = launches.length > 0;
+
+			if (!launches.length) {
+				launches = await refreshLaunchIndex(database, fetch, apiKey);
+				cached = false;
+			}
+
+			return json({ ok: true, launchCount: launches.length, cached });
 		} catch (error) {
-			return json({ message: error?.message || 'Could not refresh Topps launch index.' }, { status: 502 });
+			return json({ message: errorText(error, 'Could not load Topps launch index.') }, { status: 502 });
 		}
 	}
 
