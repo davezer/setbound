@@ -1,5 +1,31 @@
 <script>
 	let { data, form } = $props();
+	let releaseDate = $state(data.product.release_date || '');
+	let overview = $state(data.product.product_notes || '');
+	let formatValues = $state(Object.fromEntries(data.formats.map((format) => [format.key, format.details || ''])));
+	let enrichmentBusy = $state(false);
+	let enrichmentMessage = $state('');
+
+	async function autoFillDetails() {
+		enrichmentBusy = true;
+		enrichmentMessage = '';
+		try {
+			const response = await fetch(`/api/admin/products/${data.product.id}/enrich-draft`);
+			const result = await response.json();
+			if (!response.ok) throw new Error(result.message || 'Could not build enrichment draft.');
+			const draft = result.enrichment;
+			if (draft.releaseDate) releaseDate = draft.releaseDate;
+			if (draft.overview) overview = draft.overview;
+			for (const format of draft.formats || []) {
+				if (format?.key && format?.details) formatValues[format.key] = format.details;
+			}
+			enrichmentMessage = 'Details filled from source. Review them, then save metadata.';
+		} catch (error) {
+			enrichmentMessage = error?.message || 'Could not build enrichment draft.';
+		} finally {
+			enrichmentBusy = false;
+		}
+	}
 </script>
 
 <svelte:head><title>Edit {data.product.name} — setbound admin</title></svelte:head>
@@ -25,17 +51,23 @@
 				<h2>Product info</h2>
 			</div>
 
+			<div class="autofill-row">
+				<button class="auto-fill" type="button" onclick={autoFillDetails} disabled={enrichmentBusy}>{enrichmentBusy ? 'Finding details…' : 'Auto-fill from source'}</button>
+				{#if enrichmentMessage}<span>{enrichmentMessage}</span>{/if}
+			</div>
+
 			<label>
 				Release date
-				<input class="input" name="release_date" type="date" value={data.product.release_date || ''} />
+				<input class="input" name="release_date" type="date" bind:value={releaseDate} />
 			</label>
 
 			<label>
 				Overview
 				<textarea
 					name="product_notes"
-					placeholder="Short description of the set. Keep this to a sentence or two."
-				>{data.product.product_notes || ''}</textarea>
+					placeholder="Short collector-facing description of the product."
+					bind:value={overview}
+				></textarea>
 			</label>
 		</section>
 
@@ -53,7 +85,9 @@
 						<textarea
 							name={`format_${format.key}`}
 							placeholder={`Optional — add ${format.label.toLowerCase()} details…`}
-						>{format.details}</textarea>
+							value={formatValues[format.key] || ''}
+							oninput={(event) => formatValues[format.key] = event.currentTarget.value}
+						></textarea>
 					</label>
 				{/each}
 			</div>
@@ -80,6 +114,7 @@
 	textarea{min-height:110px;border:1px solid var(--line-strong);border-radius:.7rem;padding:.8rem;font:inherit;resize:vertical;text-transform:none;letter-spacing:0;font-weight:500;line-height:1.5}
 	.format-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
 	.format-field textarea{min-height:130px}
+	.autofill-row{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}.autofill-row span{font-size:.72rem;color:var(--muted)}.auto-fill{width:max-content;border:1px solid var(--line-strong);background:#fff;border-radius:.6rem;padding:.6rem .75rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}.auto-fill:disabled{opacity:.55;cursor:not-allowed}
 	.save-row{display:flex;align-items:center;gap:1rem}
 	.save-row button{border:0;background:var(--ink);color:white;border-radius:.65rem;padding:.75rem 1rem;font:inherit;font-weight:850;cursor:pointer}
 	.save-row a{color:var(--blue);font-size:.76rem;font-weight:850;text-decoration:none}

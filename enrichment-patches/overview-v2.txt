@@ -1,0 +1,75 @@
+function overviewSignals(sourceFacts = []) {
+	const text = sourceFacts.join(' ').toLowerCase();
+	return {
+		prospects: /prospect|1st bowman/.test(text),
+		rookies: /rookie/.test(text),
+		veterans: /veteran|star player|superstar/.test(text),
+		autographs: /autograph|signature/.test(text),
+		memorabilia: /relic|memorabilia|patch|swatch|material/.test(text),
+		inserts: /insert/.test(text),
+		parallels: /parallel|refractor|prizm/.test(text),
+		shortPrints: /short print|ssp\b|sp\b/.test(text),
+		caseHits: /case hit|case-hit/.test(text)
+	};
+}
+
+function cleanOverviewTitle(title = '') {
+	return String(title || '').replace(/\s+Checklist(?:\s+Guide)?$/i, '').replace(/\s+Guide$/i, '').trim();
+}
+
+function dateSentence(releaseDate) {
+	if (!releaseDate) return '';
+	const dateText = new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', {
+		month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC'
+	});
+	return `The product released on ${dateText}.`;
+}
+
+function makeOverview(title, releaseDate, formats, sourceFacts) {
+	const product = cleanOverviewTitle(title);
+	const signals = overviewSignals(sourceFacts);
+	const sentences = [];
+	const people = [];
+	if (signals.prospects) people.push('prospects');
+	if (signals.rookies) people.push('rookies');
+	if (signals.veterans) people.push('established stars');
+	const chase = [];
+	if (signals.inserts) chase.push('inserts');
+	if (signals.parallels) chase.push('parallels');
+	if (signals.autographs) chase.push('autographs');
+	if (signals.memorabilia) chase.push('memorabilia cards');
+
+	if (people.length && chase.length) {
+		sentences.push(`${product} brings ${humanList(people.slice(0, 3))} together with a mix of ${humanList(chase.slice(0, 3))} across the checklist.`);
+	} else if (chase.length) {
+		sentences.push(`${product} pairs its base checklist with a mix of ${humanList(chase.slice(0, 4))}.`);
+	} else if (people.length) {
+		sentences.push(`${product} centers its checklist on ${humanList(people.slice(0, 3))}.`);
+	} else {
+		sentences.push(`${product} expands the season's checklist with a mix of base cards and chase content.`);
+	}
+
+	if (/bowman/i.test(product) && signals.prospects) {
+		sentences.push('Prospect-focused cards remain a major part of the release, giving collectors plenty of early-career names to track alongside the rest of the set.');
+	} else if (/sapphire/i.test(product)) {
+		sentences.push('The Sapphire treatment gives the release its own visual identity, with color-driven chase cards adding another layer beyond the base set.');
+	} else if (/chrome/i.test(product) && signals.parallels) {
+		sentences.push('Chrome styling and a broad parallel chase give the product more depth beyond the main checklist.');
+	} else if (signals.autographs && signals.memorabilia) {
+		sentences.push('Hit-focused content is a meaningful part of the product, with both signed cards and memorabilia pieces mixed into the chase.');
+	} else if (signals.autographs) {
+		sentences.push('Signed cards are a meaningful part of the chase, adding hit-driven appeal beyond straightforward set building.');
+	} else if (signals.parallels && signals.inserts) {
+		sentences.push('The mix of inserts and parallel versions gives collectors multiple ways to chase the product beyond the base set.');
+	}
+
+	if (signals.shortPrints || signals.caseHits) {
+		const scarce = [];
+		if (signals.shortPrints) scarce.push('short prints');
+		if (signals.caseHits) scarce.push('case-hit cards');
+		sentences.push(`Scarcer ${humanList(scarce)} add another chase tier for collectors looking beyond the standard checklist.`);
+	}
+	const released = dateSentence(releaseDate);
+	if (released) sentences.push(released);
+	return collectorFacingOverview(sentences.slice(0, 4).join(' '));
+}

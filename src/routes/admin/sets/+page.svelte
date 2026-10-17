@@ -1,4 +1,5 @@
 <script>
+	import ProductEnrichmentModal from '$lib/components/ProductEnrichmentModal.svelte';
 	let { data, form } = $props();
 
 	let products = $state([...data.products]);
@@ -10,6 +11,7 @@
 	let deleting = $state(null);
 	let toggling = $state(null);
 	let message = $state('');
+	let enrichmentProduct = $state(null);
 
 	const sports = $derived(['All sports', ...[...new Set(products.map((p) => p.sport_name).filter(Boolean))].sort()]);
 	const years = $derived(['All years', ...[...new Set(products.map((p) => String(p.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a))]);
@@ -77,6 +79,14 @@
 		} finally {
 			toggling = null;
 		}
+	}
+
+	function enrichmentApplied(payload) {
+		if (!enrichmentProduct) return;
+		enrichmentProduct.release_date = payload.releaseDate || enrichmentProduct.release_date;
+		if (payload.result?.imageKey) enrichmentProduct.image_key = payload.result.imageKey;
+		products = [...products];
+		message = 'Product details enriched.';
 	}
 
 	async function deleteImport(product) {
@@ -215,6 +225,7 @@
 								: 'Go live'}
 					</button>
 
+					<button class="edit" type="button" onclick={() => enrichmentProduct = product}>Enrich details</button>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
 					<form method="POST" action="?/upload" enctype="multipart/form-data">
@@ -254,6 +265,10 @@
 		{/if}
 	</div>
 </section>
+
+{#if enrichmentProduct}
+	<ProductEnrichmentModal product={enrichmentProduct} onclose={() => enrichmentProduct = null} onapplied={enrichmentApplied} />
+{/if}
 
 <style>
 	.page{padding-top:3rem;padding-bottom:5rem}

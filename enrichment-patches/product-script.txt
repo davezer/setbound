@@ -1,0 +1,29 @@
+<script>
+	let { data, form } = $props();
+	let releaseDate = $state(data.product.release_date || '');
+	let overview = $state(data.product.product_notes || '');
+	let formatValues = $state(Object.fromEntries(data.formats.map((format) => [format.key, format.details || ''])));
+	let enrichmentBusy = $state(false);
+	let enrichmentMessage = $state('');
+
+	async function autoFillDetails() {
+		enrichmentBusy = true;
+		enrichmentMessage = '';
+		try {
+			const response = await fetch(`/api/admin/products/${data.product.id}/enrich-draft`);
+			const result = await response.json();
+			if (!response.ok) throw new Error(result.message || 'Could not build enrichment draft.');
+			const draft = result.enrichment;
+			if (draft.releaseDate) releaseDate = draft.releaseDate;
+			if (draft.overview) overview = draft.overview;
+			for (const format of draft.formats || []) {
+				if (format?.key && format?.details) formatValues[format.key] = format.details;
+			}
+			enrichmentMessage = 'Details filled from source. Review them, then save metadata.';
+		} catch (error) {
+			enrichmentMessage = error?.message || 'Could not build enrichment draft.';
+		} finally {
+			enrichmentBusy = false;
+		}
+	}
+</script>
