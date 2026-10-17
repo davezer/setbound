@@ -316,21 +316,6 @@ function collectorFacingOverview(value = '') {
 		.trim();
 }
 
-function overviewSignals(sourceFacts = []) {
-	const text = sourceFacts.join(' ').toLowerCase();
-	return {
-		prospects: /prospect|1st bowman/.test(text),
-		rookies: /rookie/.test(text),
-		veterans: /veteran|star player|superstar/.test(text),
-		autographs: /autograph|signature/.test(text),
-		memorabilia: /relic|memorabilia|patch|swatch|material/.test(text),
-		inserts: /insert/.test(text),
-		parallels: /parallel|refractor|prizm/.test(text),
-		shortPrints: /short print|ssp\b|sp\b/.test(text),
-		caseHits: /case hit|case-hit/.test(text)
-	};
-}
-
 function cleanOverviewTitle(title = '') {
 	return String(title || '').replace(/\s+Checklist(?:\s+Guide)?$/i, '').replace(/\s+Guide$/i, '').trim();
 }
