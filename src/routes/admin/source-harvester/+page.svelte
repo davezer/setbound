@@ -79,9 +79,77 @@
 			.replace(/^-|-$/g, '')}`;
 	}
 
+	function normalizeProductName(value, productYear) {
+		const stopWords = new Set([
+			'baseball',
+			'football',
+			'basketball',
+			'hockey',
+			'soccer',
+			'wrestling',
+			'mma',
+			'ufc',
+			'golf',
+			'tennis',
+			'racing',
+			'cards',
+			'card',
+			'edition'
+		]);
+
+		return String(value || '')
+			.toLowerCase()
+			.normalize('NFKD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(new RegExp(`\\b${productYear}\\b`, 'g'), ' ')
+			.replace(/®|™/g, ' ')
+			.replace(/\bsapphire\s+edition\b/g, 'sapphire')
+			.replace(/\bmega\s+box\b/g, 'mega box')
+			.replace(/\blogofractor\s+edition\b/g, 'logofractor')
+			.replace(/\bblack\s+edition\b/g, 'black')
+			.replace(/&/g, ' and ')
+			.replace(/[^a-z0-9]+/g, ' ')
+			.split(/\s+/)
+			.filter(Boolean)
+			.filter((token) => !stopWords.has(token))
+			.join(' ')
+			.trim();
+	}
+
+	function productTokenSet(value, productYear) {
+		return new Set(
+			normalizeProductName(value, productYear)
+				.split(/\s+/)
+				.filter(Boolean)
+		);
+	}
+
+	function sameTokenSet(left, right) {
+		if (left.size !== right.size) return false;
+		for (const token of left) {
+			if (!right.has(token)) return false;
+		}
+		return true;
+	}
+
 	function existingFor(item) {
-		const slug = canonicalSlug(item.name, item.year);
-		return data.products.find((product) => product.slug === slug) || null;
+		const exactSlug = canonicalSlug(item.name, item.year);
+		const exact = data.products.find((product) => product.slug === exactSlug);
+		if (exact) return exact;
+
+		const incomingTokens = productTokenSet(item.name, item.year);
+		if (!incomingTokens.size) return null;
+
+		for (const product of data.products) {
+			if (Number(product.year) !== Number(item.year)) continue;
+
+			const existingTokens = productTokenSet(product.name, product.year);
+			if (sameTokenSet(incomingTokens, existingTokens)) {
+				return product;
+			}
+		}
+
+		return null;
 	}
 
 	const visible = $derived(
