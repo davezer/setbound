@@ -2,7 +2,7 @@ import { extractPdfText, extractTimHortonsChecklist } from '$lib/client/pdf.js';
 import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
 import { extractToppsRacingChecklist } from '$lib/client/topps-racing.js';
 import { parseStructuredSpreadsheet } from '$lib/client/structured-spreadsheet.js';
-import { parseKnownPdfSource } from '$lib/client/known-pdf.js';
+import { parseKnownPdfSource, parseToppsModernChecklistPdf } from '$lib/client/known-pdf.js';
 import { detectSpreadsheetLayout, detectPdfLayout, sanityCheckParsed, LAYOUTS } from '$lib/parser-layouts.js';
 
 function ext(file, context) {
@@ -157,6 +157,8 @@ export async function parseChecklistSource(file, context = {}) {
 			].includes(detection.layout)
 		) {
 			parsed = await extractToppsRacingChecklist(file, context.name);
+		} else if (detection.layout === LAYOUTS.TOPPS_MODERN_CHECKLIST_PDF) {
+			parsed = await parseToppsModernChecklistPdf(file);
 		} else if (
 			[
 				LAYOUTS.TOPPS_SIMPLE_TABLE_PDF,

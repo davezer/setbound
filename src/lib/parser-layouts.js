@@ -17,6 +17,7 @@ export const LAYOUTS = {
 	TOPPS_RUGBY_LIST_PDF: 'topps-rugby-list-pdf',
 	TOPPS_ENTERTAINMENT_PDF: 'topps-entertainment-pdf',
 	TOPPS_NUMBERED_LIST_PDF: 'topps-numbered-list-pdf',
+	TOPPS_MODERN_CHECKLIST_PDF: 'topps-modern-checklist-pdf',
 	UNKNOWN_SPREADSHEET: 'unknown-spreadsheet',
 	UNKNOWN_PDF: 'unknown-pdf'
 };
@@ -208,6 +209,22 @@ export function detectPdfLayout(text, context = {}) {
 
 	if (name.includes('marvel') && /\bcharacters?\b/i.test(text) && /\b1\s+[a-z]/i.test(text)) {
 		return detected(LAYOUTS.TOPPS_NUMBERED_LIST_PDF, 0.9, 'Numbered entertainment list');
+	}
+
+	// Modern Topps/Bowman checklist PDFs use stacked major sections (BASE, INSERT,
+	// AUTOGRAPH, AUTOGRAPH RELIC) with named subsets and visual columns for
+	// card number, subject, and affiliation. Keep this after the more specific
+	// entertainment/rugby/soccer families so they retain priority.
+	if (
+		(manufacturer === 'topps' || manufacturer === 'bowman' || source.includes('checklists provided by topps')) &&
+		source.includes('base cards') &&
+		(source.includes('insert') || source.includes('autograph') || source.includes('relic'))
+	) {
+		return detected(
+			LAYOUTS.TOPPS_MODERN_CHECKLIST_PDF,
+			0.99,
+			'Modern Topps section/subset PDF with card / subject / affiliation rows'
+		);
 	}
 
 	return detected(LAYOUTS.UNKNOWN_PDF, 0, 'No registered PDF family matched');

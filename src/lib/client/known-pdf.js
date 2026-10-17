@@ -314,6 +314,161 @@ function parseNumberedListPdf(source) {
 	return finish(cards, 'topps-numbered-list-pdf');
 }
 
+export async function parseToppsModernChecklistPdf(file) {
+	const pages = await pdfPages(file);
+	const cards = [];
+	let majorSection = 'Checklist';
+	let checklist = 'Checklist';
+
+	const majorHeadings = new Map([
+		['BASE', 'Base'],
+		['INSERT', 'Insert'],
+		['AUTOGRAPH', 'Autograph'],
+		['AUTOGRAPHS', 'Autograph'],
+		['AUTOGRAPH RELIC', 'Autograph Relic'],
+		['AUTOGRAPH RELICS', 'Autograph Relic'],
+		['RELIC', 'Relic'],
+		['RELICS', 'Relic'],
+		['MEMORABILIA', 'Memorabilia']
+	]);
+
+	function cleanAffiliation(value) {
+		return text(value)
+			.replace(/[®™©]/g, '')
+			.replace(/\s+/g, ' ')
+			.trim();
+	}
+
+	function isBoilerplate(value) {
+		return /^(?:checklists provided by topps|at the time of production|time of production|but actual contents|actual contents|subject to change)/i.test(
+			text(value)
+		);
+	}
+
+	function heading(value) {
+		const v = text(value);
+		if (!v || v.length > 100 || isBoilerplate(v)) return false;
+		if (/^[A-Z0-9]{1,12}(?:-[A-Z0-9]{1,16})+\s+/i.test(v)) return false;
+		if (/^\d{1,4}\s+/.test(v)) return false;
+
+		const letters = v.replace(/[^A-Za-z]/g, '');
+		if (!letters) return false;
+		const uppercase = [...letters].filter((char) => char === char.toUpperCase()).length;
+		return uppercase / letters.length >= 0.92;
+	}
+
+	function cardNumber(value) {
+		const v = text(value);
+		return /^(?:\d{1,4}[A-Z]?|[A-Z0-9]{1,12}(?:-[A-Z0-9]{1,16})+)$/i.test(v) ? v : null;
+	}
+
+	for (const page of pages) {
+		const rows = groupRows(page.items, 3);
+
+		for (const row of rows) {
+			const rowText = text(row.text);
+			if (!rowText || isBoilerplate(rowText)) continue;
+
+			const upper = rowText.toUpperCase().replace(/\s+/g, ' ').trim();
+			if (majorHeadings.has(upper)) {
+				majorSection = majorHeadings.get(upper);
+				continue;
+			}
+
+			if (heading(rowText)) {
+				// Generic container labels do not replace the named subset.
+				if (!/^(BASE CARDS?|INSERTS?|AUTOGRAPHS?|AUTOGRAPH RELICS?|RELICS?|MEMORABILIA)$/i.test(rowText)) {
+					checklist = rowText;
+				} else if (/^BASE CARDS?$/i.test(rowText)) {
+					checklist = 'Base Cards';
+				}
+				continue;
+			}
+
+			const items = row.items.map((item) => ({ ...item, text: text(item.text) })).filter((item) => item.text);
+			if (!items.length) continue;
+
+			let numberIndex = -1;
+			let number = null;
+			for (let i = 0; i < Math.min(items.length, 3); i++) {
+				const candidate = cardNumber(items[i].text);
+				if (candidate) {
+					numberIndex = i;
+					number = candidate;
+					break;
+				}
+			}
+			if (!number || numberIndex < 0) continue;
+
+			const rest = items.slice(numberIndex + 1);
+			if (!rest.length) continue;
+
+			let subject = '';
+			let affiliation = '';
+
+			if (rest.length >= 2) {
+				// The modern Topps PDFs are laid out as visual columns. Find the largest
+				// horizontal gap after the card number; that boundary separates the
+				// subject column from the affiliation column even when either contains
+				// multiple PDF text fragments.
+				let splitAt = -1;
+				let largestGap = -Infinity;
+				for (let i = 1; i < rest.length; i++) {
+					const previous = rest[i - 1];
+					const gap = Number(rest[i].x || 0) - Number(previous.right || previous.x || 0);
+					if (gap > largestGap) {
+						largestGap = gap;
+						splitAt = i;
+					}
+				}
+
+				// Require some visual separation; otherwise we know a card exists but
+				// refuse to invent where the subject ends and affiliation begins.
+				if (splitAt > 0 && largestGap >= 8) {
+					subject = text(rest.slice(0, splitAt).map((item) => item.text).join(' '));
+					affiliation = cleanAffiliation(rest.slice(splitAt).map((item) => item.text).join(' '));
+				}
+			}
+
+			if (!subject) {
+				// Some PDFs emit the subject as one item and omit a distinct affiliation
+				// cell. Keep the card reviewable rather than guessing an affiliation.
+				subject = text(rest.map((item) => item.text).join(' '));
+				affiliation = 'UNRESOLVED';
+			}
+
+			if (!subject || /^(card|card number|name|team|subset)$/i.test(subject)) continue;
+
+			const sectionText = `${majorSection} ${checklist}`;
+			const parsed = card({
+				number,
+				subject: subject.replace(/\s*\(RC\)\s*/gi, ' ').trim(),
+				affiliation: affiliation || 'UNRESOLVED',
+				checklist: checklist || majorSection || 'Checklist',
+				rookie: /\(RC\)|\brookie\b/i.test(rowText),
+				autograph: /\bauto(?:graph)?s?\b|signature/i.test(sectionText),
+				memorabilia: /\brelic\b|memorabilia|patch|swatch|material/i.test(sectionText),
+				raw: rowText
+			});
+
+			if (parsed.affiliation === 'UNRESOLVED') {
+				parsed.affiliation_status = 'unresolved';
+				parsed.confidence = 0.72;
+			}
+
+			cards.push(parsed);
+		}
+	}
+
+	if (!cards.length) {
+		throw new Error(
+			'Recognized modern Topps checklist PDF, but no card rows matched the registered visual-column parser.'
+		);
+	}
+
+	return finish(cards, 'topps-modern-checklist-pdf');
+}
+
 export function parseKnownPdfText(source, layout) {
 	const lines = String(source || '')
 		.split(/\n+/)
