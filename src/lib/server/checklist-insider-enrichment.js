@@ -343,54 +343,208 @@ function dateSentence(releaseDate) {
 	return `The product released on ${dateText}.`;
 }
 
-function makeOverview(title, releaseDate, formats, sourceFacts) {
-	const product = cleanOverviewTitle(title);
-	const signals = overviewSignals(sourceFacts);
-	const sentences = [];
-	const people = [];
-	if (signals.prospects) people.push('prospects');
-	if (signals.rookies) people.push('rookies');
-	if (signals.veterans) people.push('established stars');
-	const chase = [];
-	if (signals.inserts) chase.push('inserts');
-	if (signals.parallels) chase.push('parallels');
-	if (signals.autographs) chase.push('autographs');
-	if (signals.memorabilia) chase.push('memorabilia cards');
-
-	if (people.length && chase.length) {
-		sentences.push(`${product} brings ${humanList(people.slice(0, 3))} together with a mix of ${humanList(chase.slice(0, 3))} across the checklist.`);
-	} else if (chase.length) {
-		sentences.push(`${product} pairs its base checklist with a mix of ${humanList(chase.slice(0, 4))}.`);
-	} else if (people.length) {
-		sentences.push(`${product} centers its checklist on ${humanList(people.slice(0, 3))}.`);
-	} else {
-		sentences.push(`${product} expands the season's checklist with a mix of base cards and chase content.`);
+function overviewSeed(value = '') {
+	let hash = 2166136261;
+	for (const char of String(value || '')) {
+		hash ^= char.charCodeAt(0);
+		hash = Math.imul(hash, 16777619);
 	}
+	return Math.abs(hash >>> 0);
+}
+
+function chooseOverview(options, seed, offset = 0) {
+	if (!options.length) return '';
+	return options[(seed + offset) % options.length];
+}
+
+function overviewDateText(releaseDate) {
+	if (!releaseDate) return '';
+	return new Date(`${releaseDate}T12:00:00Z`).toLocaleDateString('en-US', {
+		month: 'long',
+		day: 'numeric',
+		year: 'numeric',
+		timeZone: 'UTC'
+	});
+}
+
+function overviewSignals(sourceFacts = []) {
+	const factText = sourceFacts.join(' ').toLowerCase();
+	return {
+		prospects: /prospect|1st bowman/.test(factText),
+		rookies: /rookie|\brc\b/.test(factText),
+		veterans: /veteran|star player|superstar/.test(factText),
+		inserts: /insert/.test(factText),
+		parallels: /parallel|refractor|prizm/.test(factText),
+		autographs: /autograph|signed card|signature/.test(factText),
+		memorabilia: /memorabilia|relic|patch|swatch/.test(factText),
+		shortPrints: /short print|\bssp\b|\bsp\b/.test(factText),
+		caseHits: /case hit|case-hit|super short print/.test(factText)
+	};
+}
+
+function overviewSubjectPhrase(signals) {
+	const groups = [];
+	if (signals.prospects) groups.push('prospects');
+	if (signals.rookies) groups.push('rookies');
+	if (signals.veterans) groups.push('veterans and established stars');
+	return groups;
+}
+
+function overviewContentPhrase(signals) {
+	const groups = [];
+	if (signals.inserts) groups.push('inserts');
+	if (signals.parallels) groups.push('parallels');
+	if (signals.autographs) groups.push('autographs');
+	if (signals.memorabilia) groups.push('memorabilia cards');
+	return groups;
+}
+
+function makeOverview(title, releaseDate, formats, sourceFacts) {
+	const product = String(title || '').trim() || 'This release';
+	const signals = overviewSignals(sourceFacts);
+	const seed = overviewSeed(product);
+	const subjects = overviewSubjectPhrase(signals);
+	const content = overviewContentPhrase(signals);
+	const dateText = overviewDateText(releaseDate);
+	const sentences = [];
+	const openings = [];
+
+	if (subjects.length && content.length) {
+		openings.push(
+			`${product} combines ${humanList(subjects.slice(0, 3))} with ${humanList(content.slice(0, 3))} across the release.`,
+			`${product} gives collectors a checklist featuring ${humanList(subjects.slice(0, 3))}, backed by ${humanList(content.slice(0, 3))}.`,
+			`The ${product} checklist mixes ${humanList(subjects.slice(0, 3))} with a strong selection of ${humanList(content.slice(0, 3))}.`,
+			`${product} balances set-building around ${humanList(subjects.slice(0, 3))} with chase content that includes ${humanList(content.slice(0, 3))}.`,
+			`Built around ${humanList(subjects.slice(0, 3))}, ${product} also works in ${humanList(content.slice(0, 3))} throughout the checklist.`
+		);
+	} else if (content.length) {
+		openings.push(
+			`${product} builds beyond its base checklist with ${humanList(content.slice(0, 4))}.`,
+			`${product} offers a base set alongside ${humanList(content.slice(0, 4))}.`,
+			`The checklist for ${product} is supported by ${humanList(content.slice(0, 4))}, giving collectors several different angles to chase.`
+		);
+	} else if (subjects.length) {
+		openings.push(
+			`${product} centers on ${humanList(subjects.slice(0, 3))} across its checklist.`,
+			`${product} puts ${humanList(subjects.slice(0, 3))} at the center of the release.`,
+			`The ${product} checklist is built primarily around ${humanList(subjects.slice(0, 3))}.`
+		);
+	} else {
+		openings.push(
+			`${product} adds another release to the season with a full base checklist and supporting chase content.`,
+			`${product} gives collectors another set-building option for the season, with additional content beyond the base cards.`,
+			`${product} is structured around a core checklist with additional chase elements spread throughout the release.`
+		);
+	}
+
+	if (dateText && seed % 4 === 0) {
+		sentences.push(`${product} arrived on ${dateText}.`);
+	} else {
+		sentences.push(chooseOverview(openings, seed, 1));
+	}
+
+	const featureSentences = [];
 
 	if (/bowman/i.test(product) && signals.prospects) {
-		sentences.push('Prospect-focused cards remain a major part of the release, giving collectors plenty of early-career names to track alongside the rest of the set.');
-	} else if (/sapphire/i.test(product)) {
-		sentences.push('The Sapphire treatment gives the release its own visual identity, with color-driven chase cards adding another layer beyond the base set.');
-	} else if (/chrome/i.test(product) && signals.parallels) {
-		sentences.push('Chrome styling and a broad parallel chase give the product more depth beyond the main checklist.');
-	} else if (signals.autographs && signals.memorabilia) {
-		sentences.push('Hit-focused content is a meaningful part of the product, with both signed cards and memorabilia pieces mixed into the chase.');
-	} else if (signals.autographs) {
-		sentences.push('Signed cards are a meaningful part of the chase, adding hit-driven appeal beyond straightforward set building.');
-	} else if (signals.parallels && signals.inserts) {
-		sentences.push('The mix of inserts and parallel versions gives collectors multiple ways to chase the product beyond the base set.');
+		featureSentences.push(
+			'Prospect content carries much of the set, with early-career names appearing throughout the checklist.',
+			'The prospect side of the checklist gives the release a strong future-focused feel.',
+			'Prospects are a major piece of the set, giving collectors plenty of younger names to follow.'
+		);
 	}
 
-	if (signals.shortPrints || signals.caseHits) {
-		const scarce = [];
-		if (signals.shortPrints) scarce.push('short prints');
-		if (signals.caseHits) scarce.push('case-hit cards');
-		sentences.push(`Scarcer ${humanList(scarce)} add another chase tier for collectors looking beyond the standard checklist.`);
+	if (/sapphire/i.test(product)) {
+		featureSentences.push(
+			'Sapphire styling gives the cards a distinct visual identity, while color variations add depth beyond the main set.',
+			'The Sapphire treatment separates this release visually, with additional color-driven versions layered onto the checklist.',
+			'Its Sapphire finish gives the product a recognizable look and creates another tier of color-focused collecting.'
+		);
+	} else if (/chrome/i.test(product) && signals.parallels) {
+		featureSentences.push(
+			'Chrome treatment and parallel versions give collectors plenty to pursue beyond the standard checklist.',
+			'The Chrome format adds another dimension to the set through its range of parallel versions.',
+			'Chrome styling is complemented by a deeper parallel structure for collectors who want more than the base set.'
+		);
 	}
-	const released = dateSentence(releaseDate);
-	if (released) sentences.push(released);
-	return collectorFacingOverview(sentences.slice(0, 4).join(' '));
+
+	if (signals.autographs && signals.memorabilia) {
+		featureSentences.push(
+			'Autographs and memorabilia cards give the release a hit-driven side without replacing the set-building core.',
+			'Signed cards and memorabilia pieces add premium targets alongside the regular checklist.',
+			'The product also includes both autograph and memorabilia content for collectors chasing hits.'
+		);
+	} else if (signals.autographs) {
+		featureSentences.push(
+			'Autographs add another layer to the release for collectors looking beyond the base and insert checklists.',
+			'Signed cards provide an additional target throughout the product.',
+			'Autograph content gives collectors another reason to dig deeper than the standard checklist.'
+		);
+	} else if (signals.memorabilia) {
+		featureSentences.push(
+			'Memorabilia cards add a hit-focused element alongside the main checklist.',
+			'The release also includes memorabilia content for collectors chasing something beyond standard card variations.'
+		);
+	}
+
+	if (signals.inserts && signals.parallels && !/chrome|sapphire/i.test(product)) {
+		featureSentences.push(
+			'Insert sets and parallel versions give the checklist more variety beyond the base cards.',
+			'The mix of inserts and parallels creates several collecting paths within the same release.',
+			'Beyond the base set, inserts and parallel versions broaden the checklist considerably.'
+		);
+	}
+
+	if (featureSentences.length) sentences.push(chooseOverview(featureSentences, seed, 7));
+
+	if (signals.shortPrints || signals.caseHits) {
+		const scarcityOptions = signals.shortPrints && signals.caseHits
+			? [
+				'Short prints and case-hit cards provide a scarcer tier for collectors looking for tougher pulls.',
+				'Collectors chasing the harder-to-find side of the product also have short prints and case hits to track down.',
+				'Scarcer short prints and case-hit cards sit above the standard checklist as tougher targets.'
+			]
+			: signals.shortPrints
+				? [
+					'Short prints give collectors a tougher group of cards to track down beyond the regular checklist.',
+					'A short-print tier adds some scarcity for collectors looking for more difficult pulls.'
+				]
+				: [
+					'Case-hit cards give the product a smaller group of tougher chase targets.',
+					'Case hits sit at the scarcer end of the release for collectors hunting difficult pulls.'
+				];
+		sentences.push(chooseOverview(scarcityOptions, seed, 13));
+	}
+
+	if (dateText && seed % 4 !== 0) {
+		sentences.push(chooseOverview([
+			`The product released on ${dateText}.`,
+			`Its release date was ${dateText}.`,
+			`${product} reached collectors on ${dateText}.`
+		], seed, 17));
+	}
+
+	if (dateText && seed % 4 === 0 && openings.length) {
+		sentences.splice(1, 0, chooseOverview(openings, seed, 3));
+	}
+
+	const unique = [];
+	for (const sentence of sentences) {
+		const cleaned = String(sentence || '').trim();
+		if (!cleaned) continue;
+		const fingerprint = cleaned
+			.toLowerCase()
+			.replace(/\b(the|a|an|its|product|release|collectors?)\b/g, '')
+			.replace(/[^a-z0-9]+/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+		if (!unique.some((item) => item.fingerprint === fingerprint)) {
+			unique.push({ sentence: cleaned, fingerprint });
+		}
+	}
+
+	return collectorFacingOverview(unique.slice(0, 4).map((item) => item.sentence).join(' '));
 }
+
 function canonicalImageKey(url) {
 	try {
 		const parsed = new URL(url);
