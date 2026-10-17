@@ -186,6 +186,70 @@ function errorText(value, fallback = 'Unknown error.') {
 	}
 }
 
+function decodeHtmlEntities(value = '') {
+	return String(value)
+		.replace(/&amp;/gi, '&')
+		.replace(/&quot;/gi, '"')
+		.replace(/&#39;|&apos;/gi, "'")
+		.replace(/&lt;/gi, '<')
+		.replace(/&gt;/gi, '>')
+		.replace(/&nbsp;|&#160;/gi, ' ')
+		.replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+		.replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+function htmlToLines(html = '') {
+	const text = decodeHtmlEntities(String(html)
+		.replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+		.replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+		.replace(/<(?:br|\/p|\/div|\/li|\/h[1-6])\s*\/?>/gi, '\n')
+		.replace(/<[^>]+>/g, ' '));
+	return text.split(/\n+/).map((line) => clean(line)).filter(Boolean);
+}
+
+function extractToppsLaunchDescription(html = '', expectedName = '') {
+	const lines = htmlToLines(html);
+	if (!lines.length) return '';
+	const endIndex = lines.findIndex((line) => /^(?:download checklist|download odds|sku\s*:)/i.test(line));
+	const working = endIndex >= 0 ? lines.slice(0, endIndex) : lines;
+	let startIndex = working.findIndex((line) => /\b\d+\s+packs?\s+per\s+box\b/i.test(line) || /\b\d+\s+cards?\s+per\s+pack\b/i.test(line));
+	if (startIndex < 0) startIndex = working.findIndex((line) => /^featuring\b/i.test(line) || /^look out\b/i.test(line) || /^(?:19|20)\d{2}\s+(?:topps|bowman)\b/i.test(line));
+	if (startIndex < 0 && expectedName) {
+		const expected = normalize(expectedName);
+		startIndex = working.findIndex((line) => normalize(line) === expected);
+		if (startIndex >= 0) startIndex += 1;
+	}
+	if (startIndex < 0) return '';
+	const boilerplate = [/^how do eql launches work\??$/i,/^free to enter$/i,/^one entry per person$/i,/^no bots$/i,/^the eqlizer$/i,/^read the faqs/i,/^maximum of \d+ per customer$/i,/^(?:us\$|\$)\d/i];
+	const out=[]; const seen=new Set();
+	for (const line of working.slice(startIndex)) {
+		if (boilerplate.some((pattern)=>pattern.test(line))) continue;
+		if (expectedName && normalize(line) === normalize(expectedName)) continue;
+		const key=normalize(line); if (!key || seen.has(key)) continue;
+		seen.add(key); out.push(line); if (out.length >= 12) break;
+	}
+	return out.join('\n').trim();
+}
+
+async function fetchToppsLaunchDirect(fetch, launch) {
+	const slug = String(launch?.slug || '').trim();
+	if (!slug) throw new Error('Matched launch did not include a slug.');
+	const launchUrl = `https://launches.topps.com/en-US/launch/${encodeURIComponent(slug)}`;
+	const response = await fetch(launchUrl, { headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'en-US,en;q=0.9', 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/155.0.0.0 Safari/537.36' } });
+	if (!response.ok) throw new Error(`Topps launch page returned HTTP ${response.status}.`);
+	const html = await response.text();
+	const titleMatch = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+	const title = titleMatch ? clean(decodeHtmlEntities(titleMatch[1].replace(/<[^>]+>/g, ' '))) : clean(launch.product || '');
+	if (title && launch.product) {
+		const pageScore = scoreNames(launch.product, title);
+		if (pageScore < 55) throw new Error(`Topps page title did not safely match cached launch (${pageScore}% match).`);
+	}
+	const description = extractToppsLaunchDescription(html, title || launch.product || '');
+	if (!description) throw new Error('Topps launch page loaded, but no usable product description was found.');
+	const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i) || html.match(/<meta\s+content=["']([^"']+)["']\s+property=["']og:image["']/i);
+	return { slug, product: title || launch.product || '', description, launch_url: launchUrl, image_url: imageMatch ? decodeHtmlEntities(imageMatch[1]) : (launch.image_url || null), sku: launch.sku || null, listing_date: launch.listing_date || null, start: launch.start || null };
+}
+
 async function parseFetch(fetch, endpoint, apiKey, params = {}) {
 	const url = new URL(`${PARSE_BASE}/${endpoint}`);
 	for (const [key, value] of Object.entries(params)) {
@@ -320,16 +384,17 @@ async function saveMetadata(database, product, match, detail) {
 export async function POST({ request, platform, fetch }) {
 	const database = db(platform);
 	const apiKey = String(platform?.env?.PARSE_API_KEY || env.PARSE_API_KEY || '').trim();
-	if (!apiKey) {
-		return json({
-			message: 'PARSE_API_KEY is not configured. Add the free Parse.bot API key to Cloudflare first.',
-			code: 'PARSE_API_KEY_MISSING'
-		}, { status: 400 });
-	}
 
 	let body = {};
 	try { body = await request.json(); } catch {}
 	const mode = String(body.mode || 'backfill');
+
+	// Parse.bot is optional now. Product detail pages are fetched directly from Topps.
+	if (mode === 'index' && !apiKey) {
+		const cached = await cachedLaunchIndex(database);
+		if (cached.length) return json({ ok: true, launchCount: cached.length, cached: true });
+		return json({ message: 'No cached Topps launch index exists and PARSE_API_KEY is not configured.', code: 'TOPPS_INDEX_MISSING' }, { status: 400 });
+	}
 
 	if (mode === 'index') {
 		try {
@@ -401,8 +466,7 @@ export async function POST({ request, platform, fetch }) {
 		}
 
 		try {
-			const payload = await parseFetch(fetch, 'get_launch', apiKey, { slug: match.launch.slug });
-			const detail = parsePayload(payload) || {};
+			const detail = await fetchToppsLaunchDirect(fetch, match.launch);
 			const metadata = await saveMetadata(database, product, match, detail);
 			results.push({
 				productId: product.id,
