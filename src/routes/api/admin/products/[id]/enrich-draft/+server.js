@@ -110,7 +110,7 @@ function stripToppsFooter(value = '') {
   return text.replace(/\\s+/g, ' ').trim();
 }
 
-async async function cachedToppsLaunchEnrichment(database, product) {
+async function cachedToppsLaunchEnrichment(database, product) {
   try {
     const rows = await database.prepare(`
       SELECT entry_json

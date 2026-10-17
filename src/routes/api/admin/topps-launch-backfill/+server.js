@@ -390,7 +390,7 @@ async function refreshLaunchIndex(database, fetch, apiKey) {
 	return launches;
 }
 
-async async function existingMetadata(database, product) {
+async function existingMetadata(database, product) {
   const rows = await database.prepare(`
     SELECT page_url, entry_json
     FROM source_harvester_cache
