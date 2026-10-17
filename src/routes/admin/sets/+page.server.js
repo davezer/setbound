@@ -14,7 +14,10 @@ export async function load({ platform }) {
 			p.name,
 			p.image_key,
 			p.release_date,
+			p.product_notes,
 			p.published,
+			CASE WHEN NULLIF(TRIM(COALESCE(p.product_notes, '')), '') IS NOT NULL THEN 1 ELSE 0 END AS has_product_details,
+			CASE WHEN length(trim(COALESCE(p.product_notes, ''))) > 0 THEN 1 ELSE 0 END AS has_enrichment,
 			m.name AS manufacturer_name,
 			s.name AS sport_name,
 			CASE WHEN EXISTS (

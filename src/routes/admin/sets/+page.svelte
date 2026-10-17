@@ -17,6 +17,7 @@
 	let backfillBusy = $state(false);
 	let backfillProgress = $state(null);
 	let backfillIssues = $state([]);
+	let lastFailedProductIds = $state([]);
 
 	const toppsReadyCount = $derived(
 		products.filter((product) => Boolean(product.has_topps_backfill)).length
@@ -84,94 +85,87 @@
 		}
 	}
 
-	async function backfillToppsVisible() {
-		const targets = visible.filter(
-			(product) => String(product.manufacturer_name || '').toLowerCase() === 'topps'
-		);
+\tasync function runToppsBackfill(targets, label = 'Topps backfill') {
+\t\tif (!targets.length) {
+\t\t\tmessage = 'No Topps products need this backfill.';
+\t\t\treturn;
+\t\t}
 
-		if (!targets.length) {
-			message = 'No visible Topps products to backfill.';
-			return;
-		}
+\t\tbackfillBusy = true;
+\t\tmessage = '';
+\t\tbackfillIssues = [];
+\t\tlastFailedProductIds = [];
+\t\tbackfillProgress = {
+\t\t\ttotal: targets.length,
+\t\t\tprocessed: 0,
+\t\t\tharvested: 0,
+\t\t\tcached: 0,
+\t\t\tunmatched: 0,
+\t\t\tfailed: 0
+\t\t};
 
-		if (!confirm(`Backfill Topps enrichment metadata for ${targets.length} visible product${targets.length === 1 ? '' : 's'}?\n\nThis harvests and caches metadata only. It does not overwrite product details.`)) return;
+\t\ttry {
+\t\t\tfor (let offset = 0; offset < targets.length; offset += 8) {
+\t\t\t\tconst batch = targets.slice(offset, offset + 8);
+\t\t\t\tconst response = await fetch('/api/admin/topps-launch-backfill', {
+\t\t\t\t\tmethod: 'POST',
+\t\t\t\t\theaders: { 'content-type': 'application/json' },
+\t\t\t\t\tbody: JSON.stringify({ mode: 'backfill', productIds: batch.map((product) => product.id) })
+\t\t\t\t});
+\t\t\t\tconst result = await response.json();
+\t\t\t\tif (!response.ok) throw new Error(readableApiError(result.message || result.error || result, 'Topps metadata batch failed.'));
 
-		backfillBusy = true;
-		message = '';
-		backfillIssues = [];
-		backfillProgress = {
-			total: targets.length,
-			processed: 0,
-			harvested: 0,
-			cached: 0,
-			unmatched: 0,
-			failed: 0
-		};
+\t\t\t\tfor (const row of result.results || []) {
+\t\t\t\t\tconst product = products.find((item) => Number(item.id) === Number(row.productId));
+\t\t\t\t\tif (row.status === 'harvested') {
+\t\t\t\t\t\tbackfillProgress.harvested += 1;
+\t\t\t\t\t\tif (product) product.has_topps_backfill = 1;
+\t\t\t\t\t} else if (row.status === 'cached') {
+\t\t\t\t\t\tbackfillProgress.cached += 1;
+\t\t\t\t\t\tif (product) product.has_topps_backfill = 1;
+\t\t\t\t\t} else if (row.status === 'unmatched') {
+\t\t\t\t\t\tbackfillProgress.unmatched += 1;
+\t\t\t\t\t\tbackfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Unmatched', reason: row.reason || 'No safe launch match.', candidate: row.candidate || null });
+\t\t\t\t\t} else if (row.status === 'failed') {
+\t\t\t\t\t\tbackfillProgress.failed += 1;
+\t\t\t\t\t\tlastFailedProductIds = [...lastFailedProductIds, Number(row.productId)];
+\t\t\t\t\t\tbackfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Failed', reason: row.reason || 'Launch detail failed.', candidate: row.candidate || null });
+\t\t\t\t\t}
+\t\t\t\t}
 
-		try {
-			const indexResponse = await fetch('/api/admin/topps-launch-backfill', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ mode: 'index' })
-			});
-			const indexResult = await indexResponse.json();
-			if (!indexResponse.ok) throw new Error(readableApiError(indexResult.message || indexResult.error || indexResult, 'Could not load Topps launch history.'));
+\t\t\t\tproducts = [...products];
+\t\t\t\tbackfillIssues = [...backfillIssues];
+\t\t\t\tbackfillProgress.processed += batch.length;
+\t\t\t\tbackfillProgress = { ...backfillProgress };
+\t\t\t}
 
-			for (let offset = 0; offset < targets.length; offset += 8) {
-				const batch = targets.slice(offset, offset + 8);
-				const response = await fetch('/api/admin/topps-launch-backfill', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({
-						mode: 'backfill',
-						productIds: batch.map((product) => product.id)
-					})
-				});
-				const result = await response.json();
-				if (!response.ok) throw new Error(readableApiError(result.message || result.error || result, 'Topps metadata batch failed.'));
+\t\t\tmessage = label + ' complete: ' + backfillProgress.harvested + ' harvested · ' + backfillProgress.cached + ' already cached · ' + backfillProgress.unmatched + ' unmatched · ' + backfillProgress.failed + ' failed.';
+\t\t} catch (error) {
+\t\t\tmessage = error?.message || 'Topps enrichment backfill failed.';
+\t\t} finally {
+\t\t\tbackfillBusy = false;
+\t\t}
+\t}
 
-				for (const row of result.results || []) {
-					const product = products.find((item) => Number(item.id) === Number(row.productId));
+\tasync function backfillToppsVisible() {
+\t\tconst targets = visible.filter((product) => String(product.manufacturer_name || '').toLowerCase() === 'topps' && !product.has_topps_backfill);
+\t\tif (!targets.length) {
+\t\t\tmessage = 'All visible Topps products with available backfill are already cached.';
+\t\t\treturn;
+\t\t}
+\t\tif (!confirm('Backfill Topps enrichment metadata for ' + targets.length + ' visible product' + (targets.length === 1 ? '' : 's') + '?\\n\\nThis harvests and caches metadata only. It does not overwrite product details.')) return;
+\t\tawait runToppsBackfill(targets, 'Topps backfill');
+\t}
 
-					if (row.status === 'harvested') {
-						backfillProgress.harvested += 1;
-						if (product) product.has_topps_backfill = 1;
-					} else if (row.status === 'cached') {
-						backfillProgress.cached += 1;
-						if (product) product.has_topps_backfill = 1;
-					} else if (row.status === 'unmatched') {
-						backfillProgress.unmatched += 1;
-						backfillIssues.push({
-							product: product?.name || `Product ${row.productId}`,
-							status: 'Unmatched',
-							reason: row.reason || 'No safe launch match.',
-							candidate: row.candidate || null
-						});
-					} else if (row.status === 'failed') {
-						backfillProgress.failed += 1;
-						backfillIssues.push({
-							product: product?.name || `Product ${row.productId}`,
-							status: 'Failed',
-							reason: row.reason || 'Launch detail failed.',
-							candidate: row.candidate || null
-						});
-					}
-				}
-
-				products = [...products];
-				backfillIssues = [...backfillIssues];
-
-				backfillProgress.processed += batch.length;
-				backfillProgress = { ...backfillProgress };
-			}
-
-			message = `Topps backfill complete: ${backfillProgress.harvested} harvested · ${backfillProgress.cached} already cached · ${backfillProgress.unmatched} unmatched · ${backfillProgress.failed} failed.`;
-		} catch (error) {
-			message = error?.message || 'Topps enrichment backfill failed.';
-		} finally {
-			backfillBusy = false;
-		}
-	}
+\tasync function retryFailedTopps() {
+\t\tconst failedIds = new Set(lastFailedProductIds.map(Number));
+\t\tconst targets = products.filter((product) => failedIds.has(Number(product.id)));
+\t\tif (!targets.length) {
+\t\t\tmessage = 'There are no failed Topps backfill products to retry.';
+\t\t\treturn;
+\t\t}
+\t\tawait runToppsBackfill(targets, 'Topps failed retry');
+\t}
 
 	async function toggleVisibility(product) {
 		const nextPublished = product.published ? 0 : 1;
@@ -205,6 +199,7 @@
 		if (!enrichmentProduct) return;
 		enrichmentProduct.release_date = payload.releaseDate || enrichmentProduct.release_date;
 		if (payload.result?.imageKey) enrichmentProduct.image_key = payload.result.imageKey;
+		enrichmentProduct.has_product_details = 1;
 		products = [...products];
 		message = 'Product details enriched.';
 	}
@@ -313,6 +308,9 @@
 		<button class="backfill" type="button" onclick={backfillToppsVisible} disabled={backfillBusy}>
 			{backfillBusy ? 'Backfilling Topps…' : 'Backfill Topps metadata'}
 		</button>
+		{#if lastFailedProductIds.length}
+			<button class="retry-failed" type="button" onclick={retryFailedTopps} disabled={backfillBusy}>Retry {lastFailedProductIds.length} failed only</button>
+		{/if}
 	</div>
 
 	{#if backfillProgress}
@@ -363,6 +361,9 @@
 						{#if product.has_topps_backfill}
 							<span class="status topps-ready" title="Cached first-party Topps launch metadata is ready for enrichment">Topps ready</span>
 						{/if}
+						{#if product.has_product_details}
+							<span class="status enriched">Enriched ✓</span>
+						{/if}
 					</div>
 
 					<div class="details">
@@ -388,7 +389,7 @@
 					</button>
 
 					<button class:topps-enrich={product.has_topps_backfill} class="edit" type="button" onclick={() => enrichmentProduct = product}>
-						{product.has_topps_backfill ? 'Enrich with Topps' : 'Enrich details'}
+						{product.has_product_details ? 'Review enrichment' : (product.has_topps_backfill ? 'Enrich with Topps' : 'Enrich details')}
 					</button>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
@@ -449,6 +450,7 @@
 	.backfill-summary{justify-content:space-between}
 	.backfill{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:.65rem;padding:.58rem .8rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer}
 	.backfill:disabled{opacity:.55;cursor:not-allowed}
+	.retry-failed{border:1px solid var(--line-strong);background:#fff;border-radius:.65rem;padding:.58rem .8rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer}
 	.backfill-panel{display:flex;justify-content:space-between;gap:1rem;margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--line);border-radius:.65rem;background:#faf9f7;color:var(--muted);font-size:.7rem}
 	.backfill-panel strong{color:var(--ink)}
 	.list{border-top:1px solid var(--line)}
@@ -465,6 +467,7 @@
 	.status.live{background:#edf7f1;color:#25734d}
 	.status.draft{background:#f2f0ed;color:#766f67}
 	.status.topps-ready{background:#eef6ef;color:#21613f;border:1px solid #cfe4d5}
+	.status.enriched{background:#eef4ff;color:#234f8f;border:1px solid #c9d8ef}
 	.topps-ready-summary{color:#25734d;font-weight:800}
 	.edit.topps-enrich{background:#182a20;color:#fff;border-color:#182a20}
 	.backfill-issues{margin:.7rem 0 1rem;border:1px solid var(--line);border-radius:.7rem;background:#fff}
