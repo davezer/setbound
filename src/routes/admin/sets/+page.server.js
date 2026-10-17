@@ -17,6 +17,12 @@ export async function load({ platform }) {
 			p.published,
 			m.name AS manufacturer_name,
 			s.name AS sport_name,
+			CASE WHEN EXISTS (
+				SELECT 1
+				FROM source_harvester_cache shc
+				WHERE shc.source = 'topps-launch-metadata'
+				  AND CAST(json_extract(shc.entry_json, '$.productId') AS INTEGER) = p.id
+			) THEN 1 ELSE 0 END AS has_topps_backfill,
 			COUNT(DISTINCT c.id) AS card_count,
 			COUNT(DISTINCT cl.id) AS checklist_count
 		FROM products p

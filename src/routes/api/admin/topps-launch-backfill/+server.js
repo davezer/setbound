@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { env } from '$env/dynamic/private';
 
 const PARSE_BASE = 'https://api.parse.bot/scraper/79d19729-33e1-4ce6-9d65-cb0fd2477169';
 const INDEX_SOURCE = 'topps-launch-index';
@@ -21,7 +22,7 @@ function clean(value = '') {
 function normalize(value = '') {
 	const stop = new Set([
 		'hobby', 'box', 'sealed', 'case', 'pre', 'order', 'preorder',
-		'cards', 'card', 'trading', 'edition'
+		'cards', 'card', 'trading', 'edition', 'configuration', 'display'
 	]);
 
 	return clean(value)
@@ -29,6 +30,12 @@ function normalize(value = '') {
 		.normalize('NFKD')
 		.replace(/[\u0300-\u036f]/g, '')
 		.replace(/^\s*\d{4}\s+/, '')
+		.replace(/\bformula\s*1r?\b/g, 'formula 1')
+		.replace(/\bbowman university\b/g, 'bowman u')
+		.replace(/\bu best\b/g, 'u best')
+		.replace(/\bvalue box\b/g, 'blaster')
+		.replace(/\bmega box\b/g, 'mega')
+		.replace(/\bjumbo box\b/g, 'jumbo')
 		.replace(/&/g, ' and ')
 		.replace(/[^a-z0-9]+/g, ' ')
 		.split(/\s+/)
@@ -42,6 +49,22 @@ function tokenSet(value = '') {
 	return new Set(normalize(value).split(/\s+/).filter(Boolean));
 }
 
+function tokenStats(productName, launchName) {
+	const aa = tokenSet(productName);
+	const bb = tokenSet(launchName);
+	let shared = 0;
+	for (const token of aa) if (bb.has(token)) shared += 1;
+	const union = new Set([...aa, ...bb]).size || 1;
+	return {
+		shared,
+		productTokens: aa.size,
+		launchTokens: bb.size,
+		union,
+		jaccard: shared / union,
+		coverage: aa.size ? shared / aa.size : 0
+	};
+}
+
 function scoreNames(productName, launchName) {
 	const a = normalize(productName);
 	const b = normalize(launchName);
@@ -49,12 +72,8 @@ function scoreNames(productName, launchName) {
 	if (a === b) return 100;
 	if (a.includes(b) || b.includes(a)) return 94;
 
-	const aa = tokenSet(productName);
-	const bb = tokenSet(launchName);
-	let shared = 0;
-	for (const token of aa) if (bb.has(token)) shared += 1;
-	const union = new Set([...aa, ...bb]).size || 1;
-	return Math.round((shared / union) * 100);
+	const stats = tokenStats(productName, launchName);
+	return Math.round((stats.jaccard * 65) + (stats.coverage * 35));
 }
 
 function yearFrom(value = '') {
@@ -66,33 +85,71 @@ function isCaseLaunch(launch) {
 	return /\bsealed\s+case\b|\bcase\b/i.test(`${launch.product || ''} ${launch.subtitle || ''}`);
 }
 
+const DISTINGUISHERS = [
+	'sapphire', 'black', 'logofractor', 'mega', 'jumbo', 'blaster',
+	'breaker', 'lite', 'update', 'sterling', 'finest', 'cosmic'
+];
+
 function packagingPenalty(product, launch) {
 	const p = clean(product.name).toLowerCase();
 	const l = clean(`${launch.product || ''} ${launch.subtitle || ''}`).toLowerCase();
 	let penalty = 0;
 
-	if (/\bmega\b/.test(p) !== /\bmega\b/.test(l)) penalty += 18;
-	if (/\bsapphire\b/.test(p) !== /\bsapphire\b/.test(l)) penalty += 28;
-	if (/\bblack\b/.test(p) !== /\bblack\b/.test(l)) penalty += 28;
-	if (/\blogofractor\b/.test(p) !== /\blogofractor\b/.test(l)) penalty += 28;
-	if (/\bjumbo\b/.test(p) !== /\bjumbo\b/.test(l)) penalty += 18;
-	if (isCaseLaunch(launch)) penalty += 5;
+	for (const word of DISTINGUISHERS) {
+		const pattern = new RegExp(`\\b${word}\\b`, 'i');
+		if (pattern.test(p) !== pattern.test(l)) penalty += 24;
+	}
 
+	if (isCaseLaunch(launch) && !/\bcase\b/i.test(p)) penalty += 8;
 	return penalty;
+}
+
+function launchLabel(launch) {
+	return clean(launch.product || launch.subtitle || launch.slug || '');
+}
+
+function candidateFor(product, launch) {
+	const label = launchLabel(launch);
+	const launchYear = yearFrom(`${launch.product || ''} ${launch.slug || ''}`);
+	if (launchYear && Number(product.year) !== launchYear) return null;
+
+	const stats = tokenStats(product.name, label);
+	let score = scoreNames(product.name, label) - packagingPenalty(product, launch);
+
+	return {
+		score,
+		stats,
+		launch,
+		label
+	};
 }
 
 function findBestLaunch(product, launches) {
 	let best = null;
 	for (const launch of launches) {
-		const launchYear = yearFrom(launch.product || launch.slug || '');
-		if (launchYear && Number(product.year) !== launchYear) continue;
-
-		let score = scoreNames(product.name, launch.product || launch.subtitle || launch.slug || '');
-		score -= packagingPenalty(product, launch);
-
-		if (!best || score > best.score) best = { score, launch };
+		const candidate = candidateFor(product, launch);
+		if (!candidate) continue;
+		if (!best || candidate.score > best.score) best = candidate;
 	}
-	return best && best.score >= 64 ? best : null;
+
+	if (!best) return { match: null, best: null, reason: 'No same-year launch candidate.' };
+
+	// Strong exact-ish matches still pass at the traditional threshold. For the
+	// historical backfill we also accept a slightly lower score when nearly all
+	// Setbound name tokens are covered and at least three meaningful tokens agree.
+	const safe =
+		best.score >= 64 ||
+		(best.score >= 56 && best.stats.shared >= 3 && best.stats.coverage >= 0.8);
+
+	if (!safe) {
+		return {
+			match: null,
+			best,
+			reason: `Best candidate scored ${best.score}; coverage ${Math.round(best.stats.coverage * 100)}%.`
+		};
+	}
+
+	return { match: best, best, reason: '' };
 }
 
 function parsePayload(payload) {
@@ -248,7 +305,7 @@ async function saveMetadata(database, product, match, detail) {
 
 export async function POST({ request, platform, fetch }) {
 	const database = db(platform);
-	const apiKey = String(platform?.env?.PARSE_API_KEY || '').trim();
+	const apiKey = String(platform?.env?.PARSE_API_KEY || env.PARSE_API_KEY || '').trim();
 	if (!apiKey) {
 		return json({
 			message: 'PARSE_API_KEY is not configured. Add the free Parse.bot API key to Cloudflare first.',
@@ -303,9 +360,21 @@ export async function POST({ request, platform, fetch }) {
 			continue;
 		}
 
-		const match = findBestLaunch(product, launches);
+		const resolution = findBestLaunch(product, launches);
+		const match = resolution.match;
 		if (!match) {
-			results.push({ productId: product.id, status: 'unmatched' });
+			results.push({
+				productId: product.id,
+				status: 'unmatched',
+				reason: resolution.reason || 'No safe launch match.',
+				candidate: resolution.best ? {
+					product: resolution.best.label,
+					slug: resolution.best.launch?.slug || null,
+					score: resolution.best.score,
+					sharedTokens: resolution.best.stats.shared,
+					coverage: Math.round(resolution.best.stats.coverage * 100)
+				} : null
+			});
 			continue;
 		}
 
@@ -313,9 +382,24 @@ export async function POST({ request, platform, fetch }) {
 			const payload = await parseFetch(fetch, 'get_launch', apiKey, { slug: match.launch.slug });
 			const detail = parsePayload(payload) || {};
 			const metadata = await saveMetadata(database, product, match, detail);
-			results.push({ productId: product.id, status: 'harvested', score: match.score, sourceUrl: metadata.sourceUrl });
+			results.push({
+				productId: product.id,
+				status: 'harvested',
+				score: match.score,
+				matchedProduct: match.label,
+				sourceUrl: metadata.sourceUrl
+			});
 		} catch (error) {
-			results.push({ productId: product.id, status: 'failed', reason: error?.message || 'Launch detail failed.' });
+			results.push({
+				productId: product.id,
+				status: 'failed',
+				reason: error?.message || 'Launch detail failed.',
+				candidate: {
+					product: match.label,
+					slug: match.launch?.slug || null,
+					score: match.score
+				}
+			});
 		}
 	}
 

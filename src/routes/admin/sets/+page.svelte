@@ -7,6 +7,7 @@
 	let yearFilter = $state('All years');
 	let manufacturerFilter = $state('All manufacturers');
 	let statusFilter = $state('All');
+	let enrichmentFilter = $state('All enrichment');
 	let query = $state('');
 	let deleting = $state(null);
 	let toggling = $state(null);
@@ -15,6 +16,11 @@
 
 	let backfillBusy = $state(false);
 	let backfillProgress = $state(null);
+	let backfillIssues = $state([]);
+
+	const toppsReadyCount = $derived(
+		products.filter((product) => Boolean(product.has_topps_backfill)).length
+	);
 
 	const sports = $derived(['All sports', ...[...new Set(products.map((p) => p.sport_name).filter(Boolean))].sort()]);
 	const years = $derived(['All years', ...[...new Set(products.map((p) => String(p.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a))]);
@@ -32,6 +38,13 @@
 					statusFilter === 'All' ||
 					(statusFilter === 'Live' && Boolean(product.published)) ||
 					(statusFilter === 'Draft' && !product.published)
+				) &&
+				(
+					enrichmentFilter === 'All enrichment' ||
+					(enrichmentFilter === 'Topps backfill ready' && Boolean(product.has_topps_backfill)) ||
+					(enrichmentFilter === 'Needs Topps backfill' &&
+						String(product.manufacturer_name || '').toLowerCase() === 'topps' &&
+						!product.has_topps_backfill)
 				) &&
 				(
 					!q ||
@@ -53,6 +66,7 @@
 		yearFilter = 'All years';
 		manufacturerFilter = 'All manufacturers';
 		statusFilter = 'All';
+		enrichmentFilter = 'All enrichment';
 		query = '';
 	}
 
@@ -71,6 +85,7 @@
 
 		backfillBusy = true;
 		message = '';
+		backfillIssues = [];
 		backfillProgress = {
 			total: targets.length,
 			processed: 0,
@@ -103,11 +118,35 @@
 				if (!response.ok) throw new Error(result.message || 'Topps metadata batch failed.');
 
 				for (const row of result.results || []) {
-					if (row.status === 'harvested') backfillProgress.harvested += 1;
-					else if (row.status === 'cached') backfillProgress.cached += 1;
-					else if (row.status === 'unmatched') backfillProgress.unmatched += 1;
-					else if (row.status === 'failed') backfillProgress.failed += 1;
+					const product = products.find((item) => Number(item.id) === Number(row.productId));
+
+					if (row.status === 'harvested') {
+						backfillProgress.harvested += 1;
+						if (product) product.has_topps_backfill = 1;
+					} else if (row.status === 'cached') {
+						backfillProgress.cached += 1;
+						if (product) product.has_topps_backfill = 1;
+					} else if (row.status === 'unmatched') {
+						backfillProgress.unmatched += 1;
+						backfillIssues.push({
+							product: product?.name || `Product ${row.productId}`,
+							status: 'Unmatched',
+							reason: row.reason || 'No safe launch match.',
+							candidate: row.candidate || null
+						});
+					} else if (row.status === 'failed') {
+						backfillProgress.failed += 1;
+						backfillIssues.push({
+							product: product?.name || `Product ${row.productId}`,
+							status: 'Failed',
+							reason: row.reason || 'Launch detail failed.',
+							candidate: row.candidate || null
+						});
+					}
 				}
+
+				products = [...products];
+				backfillIssues = [...backfillIssues];
 
 				backfillProgress.processed += batch.length;
 				backfillProgress = { ...backfillProgress };
@@ -241,11 +280,23 @@
 			</select>
 		</label>
 
+		<label>
+			<span>Enrichment</span>
+			<select class="input" bind:value={enrichmentFilter}>
+				<option>All enrichment</option>
+				<option>Topps backfill ready</option>
+				<option>Needs Topps backfill</option>
+			</select>
+		</label>
+
 		<button class="reset" onclick={resetFilters}>Clear</button>
 	</div>
 
 	<div class="filter-summary backfill-summary">
-		<div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div>
+		<div>
+			<strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span>
+			<span class="topps-ready-summary">· {toppsReadyCount.toLocaleString()} Topps backfill ready</span>
+		</div>
 		<button class="backfill" type="button" onclick={backfillToppsVisible} disabled={backfillBusy}>
 			{backfillBusy ? 'Backfilling Topps…' : 'Backfill Topps metadata'}
 		</button>
@@ -256,6 +307,24 @@
 			<div><strong>{backfillProgress.processed}</strong> / {backfillProgress.total} checked</div>
 			<div>{backfillProgress.harvested} harvested · {backfillProgress.cached} cached · {backfillProgress.unmatched} unmatched · {backfillProgress.failed} failed</div>
 		</div>
+	{/if}
+
+	{#if backfillIssues.length}
+		<details class="backfill-issues">
+			<summary>Review {backfillIssues.length} unmatched / failed result{backfillIssues.length === 1 ? '' : 's'}</summary>
+			<div class="issue-list">
+				{#each backfillIssues.slice(0, 40) as issue}
+					<div class="issue-row">
+						<strong>{issue.product}</strong>
+						<span>{issue.status}: {issue.reason}</span>
+						{#if issue.candidate}
+							<small>Best launch: {issue.candidate.product} · score {issue.candidate.score}{issue.candidate.coverage ? ` · ${issue.candidate.coverage}% coverage` : ''}</small>
+						{/if}
+					</div>
+				{/each}
+				{#if backfillIssues.length > 40}<small>Showing first 40 results.</small>{/if}
+			</div>
+		</details>
 	{/if}
 
 	<div class="list">
@@ -277,6 +346,9 @@
 							<span class="status live">Live</span>
 						{:else}
 							<span class="status draft">Draft</span>
+						{/if}
+						{#if product.has_topps_backfill}
+							<span class="status topps-ready" title="Cached first-party Topps launch metadata is ready for enrichment">Topps ready</span>
 						{/if}
 					</div>
 
@@ -302,7 +374,9 @@
 								: 'Go live'}
 					</button>
 
-					<button class="edit" type="button" onclick={() => enrichmentProduct = product}>Enrich details</button>
+					<button class:topps-enrich={product.has_topps_backfill} class="edit" type="button" onclick={() => enrichmentProduct = product}>
+						{product.has_topps_backfill ? 'Enrich with Topps' : 'Enrich details'}
+					</button>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
 					<form method="POST" action="?/upload" enctype="multipart/form-data">
@@ -353,7 +427,7 @@
 	.top h1{font-size:clamp(2.5rem,5vw,4.5rem);letter-spacing:-.055em;margin:.35rem 0 .5rem}
 	.top p{margin:0;color:var(--muted)}
 	.top>a{color:var(--blue);font-size:.76rem;font-weight:850;text-decoration:none}
-	.filters{display:grid;grid-template-columns:minmax(260px,1.5fr) repeat(4,minmax(130px,.6fr)) auto;gap:.6rem;align-items:end;padding:1rem 0 1.1rem;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+	.filters{display:grid;grid-template-columns:minmax(240px,1.35fr) repeat(5,minmax(120px,.6fr)) auto;gap:.6rem;align-items:end;padding:1rem 0 1.1rem;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 	.filters label{display:grid;gap:.35rem}
 	.filters label span{font-size:.62rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 	.reset{height:44px;border:1px solid var(--line-strong);border-radius:.65rem;background:white;padding:0 .85rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
@@ -377,6 +451,15 @@
 	.status{display:inline-flex;padding:.18rem .4rem;border-radius:999px;font-size:.55rem;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
 	.status.live{background:#edf7f1;color:#25734d}
 	.status.draft{background:#f2f0ed;color:#766f67}
+	.status.topps-ready{background:#eef6ef;color:#21613f;border:1px solid #cfe4d5}
+	.topps-ready-summary{color:#25734d;font-weight:800}
+	.edit.topps-enrich{background:#182a20;color:#fff;border-color:#182a20}
+	.backfill-issues{margin:.7rem 0 1rem;border:1px solid var(--line);border-radius:.7rem;background:#fff}
+	.backfill-issues summary{padding:.75rem .9rem;font-size:.72rem;font-weight:850;cursor:pointer}
+	.issue-list{border-top:1px solid var(--line);padding:.25rem .9rem .75rem}
+	.issue-row{display:grid;gap:.2rem;padding:.65rem 0;border-bottom:1px solid var(--line);font-size:.7rem}
+	.issue-row:last-child{border-bottom:0}
+	.issue-row small{color:var(--muted)}
 	.actions{display:flex;align-items:center;justify-content:flex-end;gap:.4rem;flex-wrap:wrap;max-width:520px}
 	.upload,.clear,.edit,.visibility,.delete{display:inline-flex;border:1px solid var(--line-strong);background:#fff;border-radius:.6rem;padding:.52rem .65rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer;text-decoration:none;color:inherit;white-space:nowrap}
 	.visibility.golive{background:#182a20;color:#fff;border-color:#182a20}
