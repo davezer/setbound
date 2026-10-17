@@ -12,7 +12,7 @@ const FORMAT_MAP = new Map(FORMAT_FIELDS.map(([key,label,order])=>[key,{label,or
 
 export async function load({ platform }) {
   const database = db(platform);
-  const [productRows, formatRows] = await Promise.all([
+  const [productRows, formatRows, affiliationRows] = await Promise.all([
     database.prepare(`
       SELECT p.id, p.slug, p.year, p.name, p.release_date, p.image_key,
              p.published, p.product_notes,
@@ -27,7 +27,8 @@ export async function load({ platform }) {
       JOIN sports s ON s.id=p.sport_id
       ORDER BY p.year DESC,p.name
     `).all(),
-    database.prepare(`SELECT product_id,format_key,label,details FROM product_formats ORDER BY sort_order,id`).all()
+    database.prepare(`SELECT product_id,format_key,label,details FROM product_formats ORDER BY sort_order,id`).all(),
+    database.prepare(`SELECT id,name,aliases_json FROM affiliations ORDER BY length(name) DESC`).all()
   ]);
   const byProduct = new Map();
   for (const row of formatRows.results || []) {
@@ -38,7 +39,8 @@ export async function load({ platform }) {
     products: (productRows.results || []).map((p)=>({
       ...p, formats: byProduct.get(p.id) || []
     })),
-    formatFields: FORMAT_FIELDS.map(([key,label])=>({key,label}))
+    formatFields: FORMAT_FIELDS.map(([key,label])=>({key,label})),
+    affiliations: (affiliationRows.results || []).map(a=>({...a,aliases:JSON.parse(a.aliases_json||'[]')}))
   };
 }
 

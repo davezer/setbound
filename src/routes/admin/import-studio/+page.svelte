@@ -1,5 +1,6 @@
 <script>
   import { enhance } from '$app/forms';
+  import StudioSourceIntake from '$lib/components/StudioSourceIntake.svelte';
   import { invalidateAll } from '$app/navigation';
   let { data, form } = $props();
   let search = $state('');
@@ -34,11 +35,12 @@
     <a href="/admin">← Admin</a>
   </header>
   <div class="workflow" aria-label="Ingestion workflow">
-    <a href="/admin/source-harvester"><strong>01 · Discover & prepare</strong><span>Current source harvester</span></a>
+    <a href="/admin/source-harvester"><strong>01 · Legacy harvester</strong><span>Old workflow available</span></a>
     <a href="/admin/import"><strong>02 · Manual checklist</strong><span>PDF, XLS, XLSX fallback</span></a>
     <a href="/admin/affiliations"><strong>03 · Resolve</strong><span>Teams and aliases</span></a>
     <a href="/admin/sets"><strong>04 · Publish</strong><span>Existing set management</span></a>
   </div>
+  <StudioSourceIntake products={data.products} affiliations={data.affiliations} />
   <div class="intro"><h2>Imported product ledger</h2><p>These are the existing D1 products. No reimports, migrations, or speculative matches.</p></div>
   <div class="metrics">
     <div><strong>{data.products.length}</strong><span>Imported products</span></div>
