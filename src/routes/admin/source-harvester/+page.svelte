@@ -920,8 +920,14 @@ if (/\bteam usa juniors?\b/.test(name)) return 'United States';
 		enrichImage = true;
 
 		try {
+						const params = new URLSearchParams({
+				url: item.pageUrl || '',
+				name: item.name || '',
+				year: String(item.year || ''),
+				checklistUrl: item.checklistUrl || ''
+			});
 			const response = await fetch(
-				`/api/admin/source-harvester/enrich?url=${encodeURIComponent(item.pageUrl)}&name=${encodeURIComponent(item.name || '')}`
+				`/api/admin/source-harvester/enrich?${params.toString()}`
 			);
 			const result = await response.json();
 			if (!response.ok) throw new Error(result.message || 'Could not enrich this product.');
