@@ -85,87 +85,87 @@
 		}
 	}
 
-\tasync function runToppsBackfill(targets, label = 'Topps backfill') {
-\t\tif (!targets.length) {
-\t\t\tmessage = 'No Topps products need this backfill.';
-\t\t\treturn;
-\t\t}
+	async function runToppsBackfill(targets, label = 'Topps backfill') {
+		if (!targets.length) {
+			message = 'No Topps products need this backfill.';
+			return;
+		}
 
-\t\tbackfillBusy = true;
-\t\tmessage = '';
-\t\tbackfillIssues = [];
-\t\tlastFailedProductIds = [];
-\t\tbackfillProgress = {
-\t\t\ttotal: targets.length,
-\t\t\tprocessed: 0,
-\t\t\tharvested: 0,
-\t\t\tcached: 0,
-\t\t\tunmatched: 0,
-\t\t\tfailed: 0
-\t\t};
+		backfillBusy = true;
+		message = '';
+		backfillIssues = [];
+		lastFailedProductIds = [];
+		backfillProgress = {
+			total: targets.length,
+			processed: 0,
+			harvested: 0,
+			cached: 0,
+			unmatched: 0,
+			failed: 0
+		};
 
-\t\ttry {
-\t\t\tfor (let offset = 0; offset < targets.length; offset += 8) {
-\t\t\t\tconst batch = targets.slice(offset, offset + 8);
-\t\t\t\tconst response = await fetch('/api/admin/topps-launch-backfill', {
-\t\t\t\t\tmethod: 'POST',
-\t\t\t\t\theaders: { 'content-type': 'application/json' },
-\t\t\t\t\tbody: JSON.stringify({ mode: 'backfill', productIds: batch.map((product) => product.id) })
-\t\t\t\t});
-\t\t\t\tconst result = await response.json();
-\t\t\t\tif (!response.ok) throw new Error(readableApiError(result.message || result.error || result, 'Topps metadata batch failed.'));
+		try {
+			for (let offset = 0; offset < targets.length; offset += 8) {
+				const batch = targets.slice(offset, offset + 8);
+				const response = await fetch('/api/admin/topps-launch-backfill', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({ mode: 'backfill', productIds: batch.map((product) => product.id) })
+				});
+				const result = await response.json();
+				if (!response.ok) throw new Error(readableApiError(result.message || result.error || result, 'Topps metadata batch failed.'));
 
-\t\t\t\tfor (const row of result.results || []) {
-\t\t\t\t\tconst product = products.find((item) => Number(item.id) === Number(row.productId));
-\t\t\t\t\tif (row.status === 'harvested') {
-\t\t\t\t\t\tbackfillProgress.harvested += 1;
-\t\t\t\t\t\tif (product) product.has_topps_backfill = 1;
-\t\t\t\t\t} else if (row.status === 'cached') {
-\t\t\t\t\t\tbackfillProgress.cached += 1;
-\t\t\t\t\t\tif (product) product.has_topps_backfill = 1;
-\t\t\t\t\t} else if (row.status === 'unmatched') {
-\t\t\t\t\t\tbackfillProgress.unmatched += 1;
-\t\t\t\t\t\tbackfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Unmatched', reason: row.reason || 'No safe launch match.', candidate: row.candidate || null });
-\t\t\t\t\t} else if (row.status === 'failed') {
-\t\t\t\t\t\tbackfillProgress.failed += 1;
-\t\t\t\t\t\tlastFailedProductIds = [...lastFailedProductIds, Number(row.productId)];
-\t\t\t\t\t\tbackfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Failed', reason: row.reason || 'Launch detail failed.', candidate: row.candidate || null });
-\t\t\t\t\t}
-\t\t\t\t}
+				for (const row of result.results || []) {
+					const product = products.find((item) => Number(item.id) === Number(row.productId));
+					if (row.status === 'harvested') {
+						backfillProgress.harvested += 1;
+						if (product) product.has_topps_backfill = 1;
+					} else if (row.status === 'cached') {
+						backfillProgress.cached += 1;
+						if (product) product.has_topps_backfill = 1;
+					} else if (row.status === 'unmatched') {
+						backfillProgress.unmatched += 1;
+						backfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Unmatched', reason: row.reason || 'No safe launch match.', candidate: row.candidate || null });
+					} else if (row.status === 'failed') {
+						backfillProgress.failed += 1;
+						lastFailedProductIds = [...lastFailedProductIds, Number(row.productId)];
+						backfillIssues.push({ productId: row.productId, product: product?.name || 'Product ' + row.productId, status: 'Failed', reason: row.reason || 'Launch detail failed.', candidate: row.candidate || null });
+					}
+				}
 
-\t\t\t\tproducts = [...products];
-\t\t\t\tbackfillIssues = [...backfillIssues];
-\t\t\t\tbackfillProgress.processed += batch.length;
-\t\t\t\tbackfillProgress = { ...backfillProgress };
-\t\t\t}
+				products = [...products];
+				backfillIssues = [...backfillIssues];
+				backfillProgress.processed += batch.length;
+				backfillProgress = { ...backfillProgress };
+			}
 
-\t\t\tmessage = label + ' complete: ' + backfillProgress.harvested + ' harvested · ' + backfillProgress.cached + ' already cached · ' + backfillProgress.unmatched + ' unmatched · ' + backfillProgress.failed + ' failed.';
-\t\t} catch (error) {
-\t\t\tmessage = error?.message || 'Topps enrichment backfill failed.';
-\t\t} finally {
-\t\t\tbackfillBusy = false;
-\t\t}
-\t}
+			message = label + ' complete: ' + backfillProgress.harvested + ' harvested · ' + backfillProgress.cached + ' already cached · ' + backfillProgress.unmatched + ' unmatched · ' + backfillProgress.failed + ' failed.';
+		} catch (error) {
+			message = error?.message || 'Topps enrichment backfill failed.';
+		} finally {
+			backfillBusy = false;
+		}
+	}
 
-\tasync function backfillToppsVisible() {
-\t\tconst targets = visible.filter((product) => String(product.manufacturer_name || '').toLowerCase() === 'topps' && !product.has_topps_backfill);
-\t\tif (!targets.length) {
-\t\t\tmessage = 'All visible Topps products with available backfill are already cached.';
-\t\t\treturn;
-\t\t}
-\t\tif (!confirm('Backfill Topps enrichment metadata for ' + targets.length + ' visible product' + (targets.length === 1 ? '' : 's') + '?\\n\\nThis harvests and caches metadata only. It does not overwrite product details.')) return;
-\t\tawait runToppsBackfill(targets, 'Topps backfill');
-\t}
+	async function backfillToppsVisible() {
+		const targets = visible.filter((product) => String(product.manufacturer_name || '').toLowerCase() === 'topps' && !product.has_topps_backfill);
+		if (!targets.length) {
+			message = 'All visible Topps products with available backfill are already cached.';
+			return;
+		}
+		if (!confirm('Backfill Topps enrichment metadata for ' + targets.length + ' visible product' + (targets.length === 1 ? '' : 's') + '?\\n\\nThis harvests and caches metadata only. It does not overwrite product details.')) return;
+		await runToppsBackfill(targets, 'Topps backfill');
+	}
 
-\tasync function retryFailedTopps() {
-\t\tconst failedIds = new Set(lastFailedProductIds.map(Number));
-\t\tconst targets = products.filter((product) => failedIds.has(Number(product.id)));
-\t\tif (!targets.length) {
-\t\t\tmessage = 'There are no failed Topps backfill products to retry.';
-\t\t\treturn;
-\t\t}
-\t\tawait runToppsBackfill(targets, 'Topps failed retry');
-\t}
+	async function retryFailedTopps() {
+		const failedIds = new Set(lastFailedProductIds.map(Number));
+		const targets = products.filter((product) => failedIds.has(Number(product.id)));
+		if (!targets.length) {
+			message = 'There are no failed Topps backfill products to retry.';
+			return;
+		}
+		await runToppsBackfill(targets, 'Topps failed retry');
+	}
 
 	async function toggleVisibility(product) {
 		const nextPublished = product.published ? 0 : 1;
