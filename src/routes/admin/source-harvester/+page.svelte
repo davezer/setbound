@@ -234,8 +234,42 @@
 		const response = await fetch('/api/admin/source-harvester/discover?source=topps');
 		const result = await response.json();
 		if (!response.ok) throw new Error(result.message || 'Topps discovery failed.');
-		mergeCatalog(result.entries || []);
-		return result.note || `Loaded ${(result.entries || []).length} Topps files.`;
+
+		const entries = result.entries || [];
+		mergeCatalog(entries);
+
+		const yearEntries = entries.filter(
+			(item) => Number(item.year) === Number(year) && item.checklistUrl
+		);
+
+		let metadataCached = 0;
+		let metadataHarvested = 0;
+		let metadataMissed = 0;
+
+		for (let index = 0; index < yearEntries.length; index += 2) {
+			const batch = yearEntries.slice(index, index + 2);
+			const metadataResults = await Promise.all(batch.map(async (item) => {
+				try {
+					const params = new URLSearchParams({ name: item.name || '', year: String(item.year || ''), checklistUrl: item.checklistUrl || '' });
+					const metadataResponse = await fetch(`/api/admin/source-harvester/topps-metadata?${params.toString()}`);
+					const metadataResult = await metadataResponse.json();
+					if (!metadataResponse.ok || !metadataResult.metadata) return null;
+					return { item, metadata: metadataResult.metadata, cached: Boolean(metadataResult.cached) };
+				} catch { return null; }
+			}));
+
+			for (const metadataResult of metadataResults) {
+				if (!metadataResult) { metadataMissed += 1; continue; }
+				if (metadataResult.cached) metadataCached += 1; else metadataHarvested += 1;
+				mergeCatalog([{ ...metadataResult.item, toppsMetadata: metadataResult.metadata, toppsMetadataCached: true }]);
+			}
+
+			message = `Topps metadata: ${metadataCached} cached · ${metadataHarvested} newly harvested · ${metadataMissed} unavailable`;
+			if (index + 2 < yearEntries.length) await new Promise((resolve) => setTimeout(resolve, 350));
+		}
+
+		const metadataNote = yearEntries.length ? ` Topps metadata: ${metadataCached} cached · ${metadataHarvested} newly harvested · ${metadataMissed} unavailable.` : '';
+		return `${result.note || `Loaded ${entries.length} Topps files.`}${metadataNote}`;
 	}
 
 	async function discoverCI() {

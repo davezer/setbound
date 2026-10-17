@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { discoverChecklistInsiderUrls, allowedArticleUrl } from '$lib/server/source-harvester.js';
 import { parseChecklistInsiderEnrichment } from '$lib/server/checklist-insider-enrichment.js';
+import { findCachedToppsMetadata, fetchAndCacheToppsMetadata, toppsMetadataToEnrichment } from '$lib/server/topps-product-metadata.js';
 
 function normalize(value = '') {
 	return String(value)
@@ -61,6 +62,34 @@ async function discoverSourcePage(fetch, product) {
 	return best?.score >= 65 ? best.url : null;
 }
 
+
+async function cachedToppsLaunchEnrichment(database, product) {
+	try {
+		const rows = await database.prepare(`
+			SELECT entry_json
+			FROM source_harvester_cache
+			WHERE source = 'topps-launch-metadata'
+		`).all();
+
+		for (const row of rows.results || []) {
+			let entry;
+			try { entry = JSON.parse(row.entry_json || '{}'); } catch { continue; }
+			if (Number(entry?.productId) !== Number(product.id) || !entry?.overview) continue;
+
+			return {
+				source: 'Topps Launches',
+				sourceUrl: entry.sourceUrl || '',
+				releaseDate: product.release_date || '',
+				overview: entry.overview,
+				formats: [],
+				images: []
+			};
+		}
+	} catch {}
+
+	return null;
+}
+
 export async function GET({ platform, params, fetch }) {
 	const database = db(platform);
 	const productId = Number(params.id);
@@ -73,6 +102,18 @@ export async function GET({ platform, params, fetch }) {
 		WHERE p.id = ?
 	`).bind(productId).first();
 	if (!product) return json({ message: 'Product not found.' }, { status: 404 });
+
+	const launchEnrichment = await cachedToppsLaunchEnrichment(database, product);
+	if (launchEnrichment) return json({ ok: true, enrichment: launchEnrichment });
+
+	let toppsMetadata = await findCachedToppsMetadata(database, { name: product.name, year: product.year, checklistUrl: product.source_url || '' });
+	if (!toppsMetadata) {
+		try {
+			const toppsResult = await fetchAndCacheToppsMetadata(database, fetch, { name: product.name, year: product.year, checklistUrl: product.source_url || '' });
+			toppsMetadata = toppsResult.metadata;
+		} catch {}
+	}
+	if (toppsMetadata) return json({ ok: true, enrichment: toppsMetadataToEnrichment(toppsMetadata) });
 
 	let pageUrl = await cachedSourcePage(database, product, product.source_url || '');
 	if (!pageUrl) {

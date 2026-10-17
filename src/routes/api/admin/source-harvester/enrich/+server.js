@@ -5,6 +5,7 @@ import {
 	discoverChecklistInsiderUrls
 } from '$lib/server/source-harvester.js';
 import { parseChecklistInsiderEnrichment } from '$lib/server/checklist-insider-enrichment.js';
+import { findCachedToppsMetadata, toppsMetadataToEnrichment } from '$lib/server/topps-product-metadata.js';
 
 function normalize(value = '') {
 	return String(value)
@@ -72,10 +73,13 @@ export async function GET({ url, fetch, platform }) {
 	const requestedYear = Number.isInteger(requestedYearRaw) ? requestedYearRaw : null;
 	const checklistUrl = String(url.searchParams.get('checklistUrl') || '').trim();
 
+	const database = db(platform);
+	const toppsMetadata = await findCachedToppsMetadata(database, { name: requestedName, year: requestedYear, checklistUrl });
+	if (toppsMetadata) return json({ ok: true, enrichment: toppsMetadataToEnrichment(toppsMetadata) });
+
 	let pageUrl = allowedArticleUrl(requestedUrl);
 
 	if (!pageUrl && requestedName) {
-		const database = db(platform);
 		let matchedUrl = await cachedChecklistInsiderPage(database, requestedName, requestedYear, checklistUrl);
 		if (!matchedUrl) {
 			try { matchedUrl = await discoverChecklistInsiderPage(fetch, requestedName, requestedYear); }

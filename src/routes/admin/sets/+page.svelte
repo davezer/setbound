@@ -13,6 +13,9 @@
 	let message = $state('');
 	let enrichmentProduct = $state(null);
 
+	let backfillBusy = $state(false);
+	let backfillProgress = $state(null);
+
 	const sports = $derived(['All sports', ...[...new Set(products.map((p) => p.sport_name).filter(Boolean))].sort()]);
 	const years = $derived(['All years', ...[...new Set(products.map((p) => String(p.year)).filter(Boolean))].sort((a, b) => Number(b) - Number(a))]);
 	const manufacturers = $derived(['All manufacturers', ...[...new Set(products.map((p) => p.manufacturer_name).filter(Boolean))].sort()]);
@@ -51,6 +54,71 @@
 		manufacturerFilter = 'All manufacturers';
 		statusFilter = 'All';
 		query = '';
+	}
+
+
+	async function backfillToppsVisible() {
+		const targets = visible.filter(
+			(product) => String(product.manufacturer_name || '').toLowerCase() === 'topps'
+		);
+
+		if (!targets.length) {
+			message = 'No visible Topps products to backfill.';
+			return;
+		}
+
+		if (!confirm(`Backfill Topps enrichment metadata for ${targets.length} visible product${targets.length === 1 ? '' : 's'}?\n\nThis harvests and caches metadata only. It does not overwrite product details.`)) return;
+
+		backfillBusy = true;
+		message = '';
+		backfillProgress = {
+			total: targets.length,
+			processed: 0,
+			harvested: 0,
+			cached: 0,
+			unmatched: 0,
+			failed: 0
+		};
+
+		try {
+			const indexResponse = await fetch('/api/admin/topps-launch-backfill', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ mode: 'index' })
+			});
+			const indexResult = await indexResponse.json();
+			if (!indexResponse.ok) throw new Error(indexResult.message || 'Could not load Topps launch history.');
+
+			for (let offset = 0; offset < targets.length; offset += 8) {
+				const batch = targets.slice(offset, offset + 8);
+				const response = await fetch('/api/admin/topps-launch-backfill', {
+					method: 'POST',
+					headers: { 'content-type': 'application/json' },
+					body: JSON.stringify({
+						mode: 'backfill',
+						productIds: batch.map((product) => product.id)
+					})
+				});
+				const result = await response.json();
+				if (!response.ok) throw new Error(result.message || 'Topps metadata batch failed.');
+
+				for (const row of result.results || []) {
+					if (row.status === 'harvested') backfillProgress.harvested += 1;
+					else if (row.status === 'cached') backfillProgress.cached += 1;
+					else if (row.status === 'unmatched') backfillProgress.unmatched += 1;
+					else if (row.status === 'failed') backfillProgress.failed += 1;
+				}
+
+				backfillProgress.processed += batch.length;
+				backfillProgress = { ...backfillProgress };
+			}
+
+			message = `Topps backfill complete: ${backfillProgress.harvested} harvested · ${backfillProgress.cached} already cached · ${backfillProgress.unmatched} unmatched · ${backfillProgress.failed} failed.`;
+		} catch (error) {
+			message = error?.message || 'Topps enrichment backfill failed.';
+		} finally {
+			backfillBusy = false;
+		}
 	}
 
 	async function toggleVisibility(product) {
@@ -176,10 +244,19 @@
 		<button class="reset" onclick={resetFilters}>Clear</button>
 	</div>
 
-	<div class="filter-summary">
-		<strong>{visible.length.toLocaleString()}</strong>
-		<span>of {products.length.toLocaleString()} sets</span>
+	<div class="filter-summary backfill-summary">
+		<div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div>
+		<button class="backfill" type="button" onclick={backfillToppsVisible} disabled={backfillBusy}>
+			{backfillBusy ? 'Backfilling Topps…' : 'Backfill Topps metadata'}
+		</button>
 	</div>
+
+	{#if backfillProgress}
+		<div class="backfill-panel">
+			<div><strong>{backfillProgress.processed}</strong> / {backfillProgress.total} checked</div>
+			<div>{backfillProgress.harvested} harvested · {backfillProgress.cached} cached · {backfillProgress.unmatched} unmatched · {backfillProgress.failed} failed</div>
+		</div>
+	{/if}
 
 	<div class="list">
 		{#each visible as product (product.id)}
@@ -282,6 +359,11 @@
 	.reset{height:44px;border:1px solid var(--line-strong);border-radius:.65rem;background:white;padding:0 .85rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
 	.filter-summary{display:flex;gap:.35rem;align-items:baseline;padding:.8rem 0;color:var(--muted);font-size:.72rem}
 	.filter-summary strong{color:var(--ink)}
+	.backfill-summary{justify-content:space-between}
+	.backfill{border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:.65rem;padding:.58rem .8rem;font:inherit;font-size:.7rem;font-weight:850;cursor:pointer}
+	.backfill:disabled{opacity:.55;cursor:not-allowed}
+	.backfill-panel{display:flex;justify-content:space-between;gap:1rem;margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--line);border-radius:.65rem;background:#faf9f7;color:var(--muted);font-size:.7rem}
+	.backfill-panel strong{color:var(--ink)}
 	.list{border-top:1px solid var(--line)}
 	.row{display:grid;grid-template-columns:130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
 	.preview{width:130px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:.65rem;background:#f4f3f1;overflow:hidden;display:grid;place-items:center}
