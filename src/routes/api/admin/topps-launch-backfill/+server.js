@@ -29,7 +29,7 @@ function normalize(value = '') {
 		.toLowerCase()
 		.normalize('NFKD')
 		.replace(/[\u0300-\u036f]/g, '')
-		.replace(/^\s*\d{4}\s+/, '')
+		.replace(/^\s*\d{4}(?:[-–]\d{2})?\s+/, '')
 		.replace(/\bformula\s*1r?\b/g, 'formula 1')
 		.replace(/\bbowman university\b/g, 'bowman u')
 		.replace(/\bu best\b/g, 'u best')
@@ -108,20 +108,88 @@ function launchLabel(launch) {
 	return clean(launch.product || launch.subtitle || launch.slug || '');
 }
 
+
+const HARD_VARIANTS = [
+  'sapphire', 'black', 'logofractor', 'cosmic', 'galaxy', 'pristine',
+  'finest', 'sterling', 'midnight', 'definitive', 'dynasty', 'museum',
+  'heritage', 'inception', 'tribute', 'gilded', 'chrome', 'paper',
+  'series 1', 'series 2', 'update'
+];
+
+function hasPhrase(value, phrase) {
+  const normalized = clean(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const target = phrase.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return new RegExp('(?:^|\\\\s)' + target.replace(/\\\\s+/g, '\\\\s+') + '(?:$|\\\\s)', 'i').test(normalized);
+}
+
+function hardVariantConflict(productName, launchName) {
+  for (const variant of HARD_VARIANTS) {
+    if (hasPhrase(productName, variant) !== hasPhrase(launchName, variant)) return variant;
+  }
+  return null;
+}
+
+function identityTokens(value = '') {
+  const generic = new Set([
+    'topps', 'bowman', 'baseball', 'basketball', 'football', 'soccer', 'hockey',
+    'racing', 'cards', 'card', 'trading', 'hobby', 'box', 'sealed', 'case',
+    'pre', 'order', 'preorder', 'edition', 'configuration', 'display', 'mega',
+    'jumbo', 'blaster', 'breaker', 'lite'
+  ]);
+  return new Set(
+    normalize(value)
+      .split(/\\s+/)
+      .filter(Boolean)
+      .filter((token) => !generic.has(token))
+  );
+}
+
+function hasIdentityOverlap(productName, launchName) {
+  const a = identityTokens(productName);
+  const b = identityTokens(launchName);
+  if (!a.size || !b.size) return true;
+  for (const token of a) if (b.has(token)) return true;
+  return false;
+}
+
+function safeCachedLaunch(product, entry) {
+  const launchName = entry?.launchProduct || entry?.matchedProduct || '';
+  if (!launchName) return false;
+  if (hardVariantConflict(product.name, launchName)) return false;
+  if (!hasIdentityOverlap(product.name, launchName)) return false;
+  const stats = tokenStats(product.name, launchName);
+  const score = scoreNames(product.name, launchName);
+  return score >= 64 || (score >= 56 && stats.shared >= 3 && stats.coverage >= 0.8);
+}
+
+function stripToppsLegalCopy(value = '') {
+  let text = String(value || '').replace(/\\r/g, '').trim();
+  const legal = /\\b(?:all sales are final|art subject to change|not responsible for (?:typographical|printing|printer) errors?|product(?:s)? subject to change|images? subject to change)\\b/i;
+  const match = text.match(legal);
+  if (match?.index >= 0) text = text.slice(0, match.index).trim();
+  return text
+    .replace(/\\s+/g, ' ')
+    .replace(/\\s+([,.;!?])/g, '$1')
+    .trim();
+}
+
 function candidateFor(product, launch) {
-	const label = launchLabel(launch);
-	const launchYear = yearFrom(`${launch.product || ''} ${launch.slug || ''}`);
-	if (launchYear && Number(product.year) !== launchYear) return null;
+  const label = launchLabel(launch);
+  const launchYear = yearFrom(
+    (launch.product || '') + ' ' + (launch.slug || '')
+  );
+  if (launchYear && Number(product.year) !== launchYear) return null;
 
-	const stats = tokenStats(product.name, label);
-	let score = scoreNames(product.name, label) - packagingPenalty(product, launch);
+  // A sibling product is not the same product. These are hard blockers, not
+  // score penalties: Chrome != Sapphire, Chrome != Black, Hoops != Pristine, etc.
+  const variantConflict = hardVariantConflict(product.name, label);
+  if (variantConflict) return null;
+  if (!hasIdentityOverlap(product.name, label)) return null;
 
-	return {
-		score,
-		stats,
-		launch,
-		label
-	};
+  const stats = tokenStats(product.name, label);
+  const score = scoreNames(product.name, label) - packagingPenalty(product, launch);
+
+  return { score, stats, launch, label };
 }
 
 function findBestLaunch(product, launches) {
@@ -157,19 +225,19 @@ function parsePayload(payload) {
 }
 
 function overviewFromDescription(value = '') {
-	const lines = String(value || '')
-		.replace(/\r/g, '')
-		.split(/\n+/)
-		.map((line) => clean(line))
-		.filter(Boolean)
-		.filter((line) => !/^\d+\s+cards?\s+per\s+pack/i.test(line))
-		.filter((line) => !/^\d+\s+packs?\s+per\s+box/i.test(line))
-		.filter((line) => !/^\d+\s+(?:chrome\s+)?autographs?\s+per\s+box/i.test(line))
-		.filter((line) => !/^download\s+(?:checklist|odds)/i.test(line))
-		.filter((line) => !/^sku\s*:/i.test(line))
-		.filter((line) => !/^ships?\s+in\b/i.test(line));
+  const lines = String(value || '')
+    .replace(/\\r/g, '')
+    .split(/\\n+/)
+    .map((line) => clean(line))
+    .filter(Boolean)
+    .filter((line) => !/^\\d+\\s+cards?\\s+per\\s+pack/i.test(line))
+    .filter((line) => !/^\\d+\\s+packs?\\s+per\\s+box/i.test(line))
+    .filter((line) => !/^\\d+\\s+(?:chrome\\s+)?autographs?\\s+per\\s+box/i.test(line))
+    .filter((line) => !/^download\\s+(?:checklist|odds)/i.test(line))
+    .filter((line) => !/^sku\\s*:/i.test(line))
+    .filter((line) => !/^ships?\\s+in\\b/i.test(line));
 
-	return lines.join(' ').replace(/\s+/g, ' ').trim();
+  return stripToppsLegalCopy(lines.join(' '));
 }
 
 function errorText(value, fallback = 'Unknown error.') {
@@ -322,18 +390,25 @@ async function refreshLaunchIndex(database, fetch, apiKey) {
 	return launches;
 }
 
-async function existingMetadata(database, productId) {
-	const rows = await database.prepare(`
-		SELECT entry_json
-		FROM source_harvester_cache
-		WHERE source = ?
-	`).bind(META_SOURCE).all();
+async async function existingMetadata(database, product) {
+  const rows = await database.prepare(`
+    SELECT page_url, entry_json
+    FROM source_harvester_cache
+    WHERE source = ?
+  `).bind(META_SOURCE).all();
 
-	for (const row of rows.results || []) {
-		const entry = safeJson(row.entry_json);
-		if (Number(entry?.productId) === Number(productId) && entry?.overview) return entry;
-	}
-	return null;
+  for (const row of rows.results || []) {
+    const entry = safeJson(row.entry_json);
+    if (Number(entry?.productId) !== Number(product.id) || !entry?.overview) continue;
+
+    if (safeCachedLaunch(product, entry)) return entry;
+
+    // Remove old false-positive cache entries created by the looser matcher.
+    await database.prepare(
+      'DELETE FROM source_harvester_cache WHERE source = ? AND page_url = ?'
+    ).bind(META_SOURCE, row.page_url).run();
+  }
+  return null;
 }
 
 async function saveMetadata(database, product, match, detail) {
@@ -441,7 +516,7 @@ export async function POST({ request, platform, fetch }) {
 			continue;
 		}
 
-		const cached = await existingMetadata(database, product.id);
+		const cached = await existingMetadata(database, product);
 		if (cached) {
 			results.push({ productId: product.id, status: 'cached', score: cached.matchScore || null, sourceUrl: cached.sourceUrl || null });
 			continue;

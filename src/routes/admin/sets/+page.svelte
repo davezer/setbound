@@ -148,7 +148,9 @@
 	}
 
 	async function backfillToppsVisible() {
-		const targets = visible.filter((product) => String(product.manufacturer_name || '').toLowerCase() === 'topps' && !product.has_topps_backfill);
+		const targets = visible.filter(
+			(product) => String(product.manufacturer_name || '').toLowerCase() === 'topps'
+		);
 		if (!targets.length) {
 			message = 'All visible Topps products with available backfill are already cached.';
 			return;

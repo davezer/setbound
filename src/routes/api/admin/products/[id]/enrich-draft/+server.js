@@ -63,31 +63,78 @@ async function discoverSourcePage(fetch, product) {
 }
 
 
-async function cachedToppsLaunchEnrichment(database, product) {
-	try {
-		const rows = await database.prepare(`
-			SELECT entry_json
-			FROM source_harvester_cache
-			WHERE source = 'topps-launch-metadata'
-		`).all();
 
-		for (const row of rows.results || []) {
-			let entry;
-			try { entry = JSON.parse(row.entry_json || '{}'); } catch { continue; }
-			if (Number(entry?.productId) !== Number(product.id) || !entry?.overview) continue;
+function cleanToppsName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/^\\s*\\d{4}(?:[-–]\\d{2})?\\s+/, '')
+    .replace(/®|™/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
 
-			return {
-				source: 'Topps Launches',
-				sourceUrl: entry.sourceUrl || '',
-				releaseDate: product.release_date || '',
-				overview: entry.overview,
-				formats: [],
-				images: []
-			};
-		}
-	} catch {}
+const TOPPS_HARD_VARIANTS = [
+  'sapphire', 'black', 'logofractor', 'cosmic', 'galaxy', 'pristine',
+  'finest', 'sterling', 'midnight', 'definitive', 'dynasty', 'museum',
+  'heritage', 'inception', 'tribute', 'gilded', 'chrome', 'paper',
+  'series 1', 'series 2', 'update'
+];
 
-	return null;
+function phrasePresent(value, phrase) {
+  const a = cleanToppsName(value);
+  const b = cleanToppsName(phrase);
+  return new RegExp('(?:^|\\\\s)' + b.replace(/\\\\s+/g, '\\\\s+') + '(?:$|\\\\s)', 'i').test(a);
+}
+
+function cachedToppsMatchLooksSafe(productName, launchName) {
+  if (!launchName) return false;
+  for (const variant of TOPPS_HARD_VARIANTS) {
+    if (phrasePresent(productName, variant) !== phrasePresent(launchName, variant)) return false;
+  }
+
+  const generic = new Set(['topps','bowman','baseball','basketball','football','soccer','hockey','racing','cards','card','trading','hobby','box','sealed','case','edition']);
+  const a = new Set(cleanToppsName(productName).split(/\\s+/).filter((x) => x && !generic.has(x)));
+  const b = new Set(cleanToppsName(launchName).split(/\\s+/).filter((x) => x && !generic.has(x)));
+  if (a.size && b.size && ![...a].some((token) => b.has(token))) return false;
+  return true;
+}
+
+function stripToppsFooter(value = '') {
+  let text = String(value || '').trim();
+  const match = text.match(/\\b(?:all sales are final|art subject to change|not responsible for (?:typographical|printing|printer) errors?|product(?:s)? subject to change|images? subject to change)\\b/i);
+  if (match?.index >= 0) text = text.slice(0, match.index);
+  return text.replace(/\\s+/g, ' ').trim();
+}
+
+async async function cachedToppsLaunchEnrichment(database, product) {
+  try {
+    const rows = await database.prepare(`
+      SELECT entry_json
+      FROM source_harvester_cache
+      WHERE source = 'topps-launch-metadata'
+    `).all();
+
+    for (const row of rows.results || []) {
+      let entry;
+      try { entry = JSON.parse(row.entry_json || '{}'); } catch { continue; }
+      if (Number(entry?.productId) !== Number(product.id) || !entry?.overview) continue;
+      if (!cachedToppsMatchLooksSafe(product.name, entry.launchProduct || '')) continue;
+
+      return {
+        source: 'Topps Launches',
+        sourceUrl: entry.sourceUrl || '',
+        releaseDate: product.release_date || '',
+        overview: stripToppsFooter(entry.overview),
+        formats: [],
+        images: []
+      };
+    }
+  } catch {}
+  return null;
 }
 
 export async function GET({ platform, params, fetch }) {
