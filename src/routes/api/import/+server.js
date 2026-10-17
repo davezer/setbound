@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { productDisplayName } from '$lib/product-display.js';
+import { canonicalCollegeAffiliation } from '$lib/college-affiliations.js';
 
 function slugify(value) {
 	return value
@@ -354,31 +355,50 @@ export async function POST({ request, platform }) {
 							? historicalName
 							: null;
 				} else {
-					const affiliationName = clean(card.affiliation);
+					const sourceAffiliationName = clean(card.affiliation);
+					const collegeAffiliationName = canonicalCollegeAffiliation(sourceAffiliationName);
+					const affiliationName = collegeAffiliationName || sourceAffiliationName;
 					const affiliationKey = normalized(affiliationName);
 	
 					affiliationId = affiliationIds.get(affiliationKey) || null;
 	
 					if (!affiliationId) {
-						let row = await database
-							.prepare(`
-								SELECT id, sport_id
-								FROM affiliations
-								WHERE (
-									normalized_name = ?
-									OR lower(trim(name)) = lower(trim(?))
+						let row;
+
+						if (collegeAffiliationName) {
+							// College affiliations are school identities, not sport-specific franchises.
+							// Reuse the same Penn State / Alabama / Notre Dame row across sports.
+							row = await database
+								.prepare(`
+									SELECT id, sport_id
+									FROM affiliations
+									WHERE normalized_name = ?
+									   OR lower(trim(name)) = lower(trim(?))
+									LIMIT 1
+								`)
+								.bind(affiliationKey, affiliationName)
+								.first();
+						} else {
+							row = await database
+								.prepare(`
+									SELECT id, sport_id
+									FROM affiliations
+									WHERE (
+										normalized_name = ?
+										OR lower(trim(name)) = lower(trim(?))
+									)
+									  AND (sport_id = ? OR sport_id IS NULL)
+									ORDER BY CASE WHEN sport_id = ? THEN 0 ELSE 1 END, id
+									LIMIT 1
+								`)
+								.bind(
+									affiliationKey,
+									affiliationName,
+									Number(body.sportId),
+									Number(body.sportId)
 								)
-								  AND (sport_id = ? OR sport_id IS NULL)
-								ORDER BY CASE WHEN sport_id = ? THEN 0 ELSE 1 END, id
-								LIMIT 1
-							`)
-							.bind(
-								affiliationKey,
-								affiliationName,
-								Number(body.sportId),
-								Number(body.sportId)
-							)
-							.first();
+								.first();
+						}
 
 						if (!row) {
 							// The affiliations table still has a global name uniqueness rule.
