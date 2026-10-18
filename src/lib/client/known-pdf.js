@@ -367,43 +367,42 @@ export async function parseToppsModernChecklistPdf(file) {
 	// PDF text fragments have irregular spacing. Detect each page separately.
 	// Geometry-inferred modern Topps columns (no header required).
 	// Reuse page-wide text start positions, not a different largest gap on every card.
+	// SETBOUND_SPACING_COLUMNS_V3: infer stable visual columns from repeated row positions.
+	// Never treat an isolated Rookie/RC marker as the team. This uses measured PDF
+	// text coordinates, because PDF.js does not preserve literal run-length spaces.
 	function findModernToppsColumns(rows) {
+		const samples=[];
 		for (const row of rows) {
-			const items = row.items.map(item => ({ ...item, value: text(item.text).toLowerCase() }));
-			const name = items.find(item => /^(?:name|player(?: name)?|subject)$/.test(item.value));
-			const team = items.find(item => /^(?:team|club|affiliation)$/.test(item.value));
-			const rookie = items.find(item => /^(?:rookie|rc)$/.test(item.value));
-			if (name && team && Number(team.x) > Number(name.x) + 12) {
-				return { team: Number(team.x), rookie: rookie && Number(rookie.x) > Number(team.x) ? Number(rookie.x) : null };
-			}
+			const items=row.items.filter(item=>text(item.text));
+			if(items.length<3 || !cardNumber(items[0].text)) continue;
+			const first=Number(items[0].x);
+			const data=items.slice(1).filter(item=>!/^\s*(?:rookie|rc)\s*$/i.test(text(item.text)) && Number(item.x)>first+18);
+			if(data.length>=2) samples.push({row,items:data});
 		}
-		// Headerless PDFs: find consistently aligned NAME and TEAM starts.
-		const starts = [];
-		let candidates = 0;
-		for (const row of rows) {
-			const items = row.items;
-			if (items.length < 3 || !cardNumber(items[0].text)) continue;
-			const meaningful = items.slice(1).filter(item => !/^(rookie|rc)$/i.test(text(item.text)));
-			if (meaningful.length < 2) continue;
-			candidates++;
-			for (const item of meaningful) {
-				const x = Number(item.x);
-				if (!Number.isFinite(x) || x <= Number(items[0].x) + 20) continue;
-				let cluster = starts.find(c => Math.abs(c.x - x) <= 4);
-				if (!cluster) { cluster = { x, hits: 0, rows: new Set() }; starts.push(cluster); }
-				if (!cluster.rows.has(row)) { cluster.rows.add(row); cluster.hits++; }
-			}
+		if(samples.length<5) return null;
+		const clusters=[];
+		for (const sample of samples) for (const item of sample.items) {
+			const x=Number(item.x);
+			if(!Number.isFinite(x))continue;
+			let cluster=clusters.find(c=>Math.abs(c.x-x)<=5);
+			if(!cluster){cluster={x,count:0,rows:new Set()};clusters.push(cluster);}
+			if(!cluster.rows.has(sample.row)){cluster.rows.add(sample.row);cluster.count++;cluster.x+=(x-cluster.x)/cluster.count;}
 		}
-		if (candidates < 6) return null;
-		const reliable = starts.filter(c => c.hits >= Math.max(4, Math.ceil(candidates * 0.35)))
-			.sort((a,b) => a.x - b.x);
-		if (reliable.length < 2 || reliable[1].x - reliable[0].x < 35) return null;
-		return { team: reliable[1].x, rookie: null };
+		const threshold=Math.max(4,Math.ceil(samples.length*0.18));
+		const candidates=clusters.filter(c=>c.count>=threshold).sort((a,b)=>a.x-b.x);
+		if(candidates.length<2)return null;
+		// First two well-supported, well-separated anchors are subject and team.
+		const subject=candidates[0];
+		const team=candidates.find(c=>c.x>=subject.x+45);
+		if(!team)return null;
+		return {team:team.x,rookie:null,source:'aligned-spaces'};
 	}
+	const allModernRows=pages.flatMap(page=>groupRows(page.items,3));
+	const documentColumns=findModernToppsColumns(allModernRows);
 
 	for (const page of pages) {
 		const rows = groupRows(page.items, 3);
-		const columnPositions = findModernToppsColumns(rows);
+		const columnPositions = findModernToppsColumns(rows) || documentColumns;
 
 		for (const row of rows) {
 			const rowText = text(row.text);
@@ -452,10 +451,10 @@ export async function parseToppsModernChecklistPdf(file) {
 				const teamParts = [];
 				const rookieParts = [];
 				for (const item of rest) {
-					const x = Number(item.x);
+					const x=Number(item.x);
 					if (/^(?:rookie|rc)$/i.test(item.text)) rookieParts.push(item.text);
-					else if (columnPositions.rookie != null && x >= columnPositions.rookie - 4) rookieParts.push(item.text);
-					else if (x >= columnPositions.team - 4) teamParts.push(item.text);
+					else if (columnPositions.rookie != null && x >= columnPositions.rookie-4) rookieParts.push(item.text);
+					else if (x >= columnPositions.team-5) teamParts.push(item.text);
 					else nameParts.push(item.text);
 				}
 				isRookie ||= rookieParts.some((part) => /\b(?:rookie|rc)\b/i.test(part));
