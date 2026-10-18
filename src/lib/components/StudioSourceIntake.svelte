@@ -38,6 +38,58 @@
   let bulkAffiliation = $state('');
   let issueOnly = $state(true);
   let showAllCards = $state(false);
+  let aiBusy = $state('');
+  let aiMessages = $state({});
+  let aiSuggestions = $state({});
+  let manualDrafts = $state({});
+  let aiSelected = $state({});
+  function reviewMessage(row) { return aiMessages[identity(row)] || ''; }
+  function proposalsFor(row) { return aiSuggestions[identity(row)] || []; }
+  function updateManual(row,index,field,value) {
+    const k=identity(row)+':'+index;
+    const original=row.cards[index];
+    manualDrafts={...manualDrafts,[k]:{...original,...manualDrafts[k],[field]:value}};
+  }
+  function rowDraft(row,index) { return manualDrafts[identity(row)+':'+index] || row.cards[index]; }
+  async function applyCard(row,index,changes) {
+    const cards=row.cards.map((c,i)=>i===index?{...c,...changes,
+      affiliation_status:changes.affiliation && changes.affiliation!=='UNRESOLVED' ? 'manual-review' : c.affiliation_status,
+      confidence:changes.affiliation ? 1 : c.confidence}:c);
+    const parsed={...row.parsed,cards};
+    const { sanityCheckParsed }=await import('$lib/parser-layouts.js');
+    const safety=sanityCheckParsed(parsed,row.parsed.layoutDetection||{}, {name:row.name,manufacturer:row.manufacturer,sport:row.sport});
+    parsed.safety={...safety,blocked:!!safety.blocked};
+    const audit=validateChecklistImport(cards,parsed.checklist_meta,parsed.sections);
+    const unresolved=cards.filter(unresolvedCard).length;
+    const issues=rowSafetyIssues(parsed,audit,unresolved);
+    const updated={...row,cards,parsed,audit,unresolved,issues,status:issues.length?'Needs review':'Prepared'};
+    prepared=prepared.map(x=>identity(x)===identity(row)?updated:x);
+    await saveSnapshot(updated);
+  }
+  async function suggestAiCorrections(row) {
+    const id=identity(row);
+    if(!confirm('Send up to 25 selected card rows, including raw source text, to OpenAI for suggestions? Nothing will be changed automatically.')) return;
+    const picks=(row.cards||[]).map((card,index)=>({index,card})).filter(x=>aiSelected[id+':'+x.index]).slice(0,25);
+    if(!picks.length){aiMessages={...aiMessages,[id]:'Select at least one card for AI review.'};return;}
+    aiBusy=id;aiMessages={...aiMessages,[id]:'Requesting AI suggestions…'};
+    try {
+      const res=await fetch('/api/admin/import-studio/ai-review',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product:row.name,cards:picks})});
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.message||'AI request failed');
+      aiSuggestions={...aiSuggestions,[id]:data.suggestions||[]};
+      aiMessages={...aiMessages,[id]:data.suggestions?.length?data.suggestions.length+' suggestions ready for individual review.':'No confident corrections suggested. Edit manually as needed.'};
+    }catch(e){aiMessages={...aiMessages,[id]:e.message};}
+    finally{aiBusy='';}
+  }
+  async function acceptAiSuggestion(row,proposal) {
+    await applyCard(row,proposal.index,proposal.changes);
+    const id=identity(row);
+    aiSuggestions={...aiSuggestions,[id]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
+    aiMessages={...aiMessages,[id]:'Correction accepted and saved to review queue.'};
+  }
+  function rejectAiSuggestion(row,proposal) {
+    aiSuggestions={...aiSuggestions,[identity(row)]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
+  }
   const selectedEligible = $derived(catalog.filter(item => chosen.includes(identity(item)) && !existing(item)));
   const hiddenSelection = $derived(chosen.length - selectedEligible.length);
   const remainingAfterBatch = $derived(Math.max(0, selectedEligible.length - PREPARE_BATCH_SIZE));
@@ -138,7 +190,7 @@
   function visibleReviewCards(row) {
     if (!row?.cards) return [];
     const q=reviewSearch.trim().toLowerCase();
-    return row.cards.map((card,index)=>({card,index})).filter(({card})=>(!issueOnly||unresolvedCard(card)) && (!q || `${card.subject||''} ${card.card_number||card.number||''} ${card.affiliation||''} ${card.checklist_name||''}`.toLowerCase().includes(q))).slice(0,showAllCards?200:35);
+    return row.cards.map((card,index)=>({card,index})).filter(({card})=>(!issueOnly||unresolvedCard(card)||/^(rookie|rc|auto|autograph|legend)$/i.test(String(card.affiliation||''))) && (!q || `${card.subject||''} ${card.card_number||card.number||''} ${card.affiliation||''} ${card.checklist_name||''}`.toLowerCase().includes(q))).slice(0,showAllCards?200:35);
   }
   function toggleReview(row) {
     const id=identity(row); expandedReview=expandedReview===id?'':id;
@@ -338,12 +390,29 @@
           {/if}
           {#if row.parsed.safety}<details><summary>Parser safety details</summary><pre>{JSON.stringify(row.parsed.safety,null,2)}</pre></details>{/if}
           {#if row.audit}<details><summary>Validation details</summary><pre>{JSON.stringify(row.audit,null,2)}</pre></details>{/if}
-          <div class="review-tools"><input placeholder="Search cards or affiliations" bind:value={reviewSearch}/><label class="check"><input type="checkbox" bind:checked={issueOnly}/> Unresolved only</label></div>
+          <div class="review-tools"><input placeholder="Search cards or affiliations" bind:value={reviewSearch}/><label class="check"><input type="checkbox" bind:checked={issueOnly}/> Issues only</label><button type="button" disabled={aiBusy===identity(row)} onclick={()=>suggestAiCorrections(row)}>{aiBusy===identity(row)?'Asking AI…':'Suggest AI fixes (up to 25 selected)'}</button></div>
+          <p class="muted">AI is optional and uses selected rows plus extracted raw source text. It does not see the rendered PDF. It never applies changes without your approval.</p>
+          {#if reviewMessage(row)}<p role="status" class="muted">{reviewMessage(row)}</p>{/if}
+          {#each proposalsFor(row) as proposal (proposal.index)}
+            <div class="ai-proposal"><strong>Card {row.cards[proposal.index]?.card_number} — suggested changes</strong><p>{proposal.reason}</p>
+              {#each Object.entries(proposal.changes) as [field,value]}<div><strong>{field}:</strong> {String(row.cards[proposal.index]?.[field]??'')} → {String(value)}</div>{/each}
+              <div class="card-fix"><button type="button" onclick={()=>acceptAiSuggestion(row,proposal)}>Accept and save</button><button type="button" onclick={()=>rejectAiSuggestion(row,proposal)}>Reject</button></div>
+            </div>
+          {/each}
           {#if row.unresolved}<div class="bulk-fix"><input placeholder="One verified team/school for all unresolved" bind:value={bulkAffiliation}/><button type="button" disabled={!bulkAffiliation.trim()} onclick={()=>bulkResolve(row)}>Apply to all unresolved</button><button type="button" class="nil-button" onclick={()=>applyAllAffiliations(row,'NIL')}>Mark all NIL (only if source has no affiliations)</button></div>{/if}
           <div class="cards-list">
             {#each visibleReviewCards(row) as entry (entry.index)}
               <div class="card-line">
                 <div><strong>{entry.card.card_number||entry.card.number||'—'} · {entry.card.subject||entry.card.name||'Unspecified subject'}</strong><small>{entry.card.checklist_name||''} · {entry.card.affiliation||'No affiliation'} · {entry.card.affiliation_status||'Unknown status'}</small></div>
+                <label class="ai-select"><input type="checkbox" checked={!!aiSelected[identity(row)+':'+entry.index]} onchange={e=>aiSelected={...aiSelected,[identity(row)+':'+entry.index]:e.currentTarget.checked}}/> AI</label>
+                <details class="inline-edit"><summary>Edit card</summary><div class="editor-fields">
+                  {#each ['card_number','subject','affiliation','checklist_name'] as field}
+                    <label>{field}<input value={rowDraft(row,entry.index)[field]??''} oninput={e=>updateManual(row,entry.index,field,e.currentTarget.value)}/></label>
+                  {/each}
+                  {#each ['rookie','autograph','memorabilia'] as field}
+                    <label><input type="checkbox" checked={!!rowDraft(row,entry.index)[field]} onchange={e=>updateManual(row,entry.index,field,e.currentTarget.checked)}/>{field}</label>
+                  {/each}
+                </div><button type="button" onclick={()=>applyCard(row,entry.index,rowDraft(row,entry.index))}>Save correction</button></details>
                 {#if unresolvedCard(entry.card)}
                   <div class="card-fix"><input placeholder="Verified team/school or NIL" value={affiliationDrafts[`${identity(row)}:${entry.index}`]||''} oninput={(event)=>updateAffiliation(row,entry.index,event.currentTarget.value)}/><button type="button" disabled={!String(affiliationDrafts[`${identity(row)}:${entry.index}`]||'').trim()} onclick={()=>applyAffiliation(row,entry.index)}>Apply</button></div>
                 {/if}
@@ -359,6 +428,7 @@
   {/if}
 </section>
 <style>
+  .ai-proposal{padding:1rem;border:1px solid var(--line-strong);border-radius:.5rem;background:white;margin:.7rem 0;font-size:.78rem}.ai-proposal p{color:var(--muted)}.ai-select{display:flex;gap:.2rem;align-items:center;font-size:.7rem}.inline-edit{min-width:90px}.inline-edit summary{cursor:pointer}.editor-fields{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:.5rem;margin:.5rem 0}.editor-fields label{font-size:.7rem;display:grid;gap:.2rem}.editor-fields input:not([type=checkbox]){min-width:0;padding:.35rem;border:1px solid var(--line-strong);border-radius:.3rem} 
   .classify-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;padding:.4rem 0 1rem}
   .classify-row label{display:grid;gap:.25rem;font-size:.69rem;font-weight:700}
   .classify-row select{min-width:165px;max-width:100%;padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem;background:white}
