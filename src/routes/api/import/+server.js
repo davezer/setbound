@@ -14,6 +14,28 @@ function slugify(value) {
 		.slice(0, 120);
 }
 
+// Keep checklist names intact while guaranteeing distinct URL slugs within a product.
+// Examples: "Artist's Picks" and "Artists Picks" are different checklist names,
+// but slugify to the same slug. They must never collide in D1.
+function uniqueChecklistSlugs(cards) {
+  const assigned = new Map();
+  const used = new Set();
+  for (const card of cards) {
+    const name = String(card.checklist_name || '').trim();
+    if (assigned.has(name)) continue;
+    const base = slugify(name) || 'checklist';
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      const ending = '-' + suffix++;
+      candidate = base.slice(0, 120 - ending.length).replace(/-+$/, '') + ending;
+    }
+    assigned.set(name, candidate);
+    used.add(candidate);
+  }
+  return assigned;
+}
+
 function sortKey(cardNumber) {
 	const match = String(cardNumber).match(/^(\D*)(\d+)(.*)$/);
 
@@ -259,6 +281,7 @@ export async function POST({ request, platform }) {
 			}
 		}
 
+		const checklistSlugs = uniqueChecklistSlugs(body.cards);
 		let sort = 0;
 
 		for (const card of body.cards) {
@@ -280,7 +303,7 @@ export async function POST({ request, platform }) {
 					.bind(
 						product.id,
 						card.checklist_name,
-						slugify(card.checklist_name),
+						checklistSlugs.get(String(card.checklist_name || '').trim()),
 						'checklist',
 						sort++
 					)
