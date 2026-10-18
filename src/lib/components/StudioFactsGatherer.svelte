@@ -67,7 +67,7 @@
   <div class="controls"><input aria-label="Find products for facts gathering" placeholder="Search products…" bind:value={search}/>
     <label><input type="checkbox" bind:checked={onlyMissing}/> Missing facts only</label>
     <button type="button" disabled={working || !visible.length} onclick={gatherBatch}>{working?'Gathering…':'Gather facts (up to 20)'}</button></div>
-  <p class="muted">{visible.length} eligible products. Runs are capped at 20 per click; filter by year/name to work through batches. Existing Topps metadata is read from cache first. Only an exact checklist-file URL permits cross-source matching.</p>
+  <p class="muted">{visible.length} eligible products. Runs are capped at 20 per click; filter by year/name to work through batches. Checklist Insider is preferred when product identity is verified, even for official Topps imports. Official metadata fills missing fields; ambiguous matches are blocked.</p>
   {#if progress}<p class="progress" role="status">{progress}</p>{/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
   {#if drafts.length}

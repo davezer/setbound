@@ -69,8 +69,8 @@ function formatFromLaunch(name='') {
 }
 async function productRow(database,id) {
   return database.prepare(`SELECT p.id,p.name,p.year,p.slug,p.release_date,p.image_key,
-    m.name manufacturer_name,s.source_url checklist_url
-    FROM products p JOIN manufacturers m ON m.id=p.manufacturer_id
+    m.name manufacturer_name, sp.name sport_name, s.source_url checklist_url
+    FROM products p JOIN manufacturers m ON m.id=p.manufacturer_id JOIN sports sp ON sp.id=p.sport_id
     LEFT JOIN sources s ON s.id=p.primary_source_id WHERE p.id=?`).bind(id).first();
 }
 async function buildDraft(database,fetch,id) {
@@ -81,7 +81,7 @@ async function buildDraft(database,fetch,id) {
   const proposals=[];const sources=[];
   const cache=await database.prepare(`SELECT source,page_url,entry_json FROM source_harvester_cache
     WHERE source IN ('topps-launch-metadata','topps-metadata','checklistinsider') AND (year=? OR year IS NULL)
-    LIMIT 1200`).bind(Number(p.year)).all();
+    LIMIT 5000`).bind(Number(p.year)).all();
   const entries=(cache.results||[]).map(r=>({...r,entry:parseJson(r.entry_json)})).filter(x=>x.entry);
   const manufacturer=String(p.manufacturer_name||'').toLowerCase();
   if (manufacturer==='topps'||manufacturer==='bowman') {
@@ -99,31 +99,110 @@ async function buildDraft(database,fetch,id) {
       sources.push({name:'Topps product cache',url:e.pageUrl||'',status:'overview only; no box figures approved'});
     }
   }
-  // Exact checklist URL is the only automatic cross-site identity bridge.
-  // Name similarity alone previously mixed up variants and is intentionally forbidden here.
-  const ci=entries.find(r=>r.source==='checklistinsider' && p.checklist_url && r.entry.checklistUrl===p.checklist_url);
-  if(ci) {
-    const page=ci.entry.pageUrl||ci.page_url;
-    try {
-      const u=new URL(page);
-      if(u.protocol==='https:' && /(^|\.)checklistinsider\.com$/.test(u.hostname)) {
-        const response=await fetch(u.href,{headers:{accept:'text/html','user-agent':'Setbound/1.0'}});
-        if(response.ok) {
-          const parsed=parseChecklistInsiderEnrichment(await response.text(),u.href,p.name);
-          if (safeMatch(p.name,parsed.title||p.name)) {
-            for(const f of parsed.formats||[]) {
-              const key=String(f.key||'');
-              const details=explicitConfiguration(f.details||'');
-              if(FORMAT[key] && !existing.has(key) && details && !proposals.some(x=>x.key===key)) proposals.push({key,details,source:'Checklist Insider source',sourceUrl:u.href,sourceName:p.name});
-            }
-            const date=String(parsed.releaseDate||'');
-            if(!p.release_date && /^\d{4}-\d{2}-\d{2}$/.test(date)) proposals.push({key:'release_date',details:date,source:'Checklist Insider source',sourceUrl:u.href,sourceName:p.name});
-            sources.push({name:'Checklist Insider source',url:u.href,status:'exact checklist URL match'});
-          } else sources.push({name:'Checklist Insider',url:u.href,status:'product title mismatch; rejected'});
-        } else sources.push({name:'Checklist Insider',url:u.href,status:`HTTP ${response.status}`});
-      }
-    } catch { sources.push({name:'Checklist Insider',url:'',status:'unavailable'}); }
+// Preferred facts source: Checklist Insider, even when the checklist was imported
+// from a manufacturer's own download URL. Only high-certainty identity matches
+// are cached. An uncertain match is not a match.
+const ciRows = entries.filter((row) => row.source === 'checklistinsider');
+const stable = (value = '') => canonical(value)
+  .replace(/\b(checklist|guide|download|review|cards|trading|card)\b/g, ' ')
+  .replace(/\s+/g, ' ').trim();
+const sourceIdentity = (row) => row.entry.name || row.entry.title || '';
+const expectedIdentity = stable(p.name);
+const expectedTokens = expectedIdentity.split(' ').filter(Boolean);
+const identityIsSafe = (name) => {
+  const got = stable(name);
+  if (!got || !expectedIdentity) return false;
+  // Never confuse product families or special variants. Require all meaningful
+  // tokens to agree, not substring/Jaccard matching.
+  if (!safeMatch(expectedIdentity, got) || !safeMatch(got, expectedIdentity)) return false;
+  const actualTokens = got.split(' ').filter(Boolean);
+  return expectedTokens.length === actualTokens.length &&
+    expectedTokens.every((token, i) => token === actualTokens[i]);
+};
+const sourceManufacturerMatches = (row) => {
+  const stated = canonical(row.entry.manufacturer || row.entry.brand || '');
+  if (!stated) return true; // Unspecified is not evidence of a mismatch.
+  const expected = canonical(p.manufacturer_name || '');
+  if (stated === expected) return true;
+  return (expected === 'bowman' && stated === 'topps') ||
+    (expected === 'topps' && stated === 'bowman' && /\bbowman\b/i.test(p.name));
+};
+const sourceSportMatches = (row) => {
+  const stated = canonical(row.entry.sport || '');
+  if (!stated || !p.sport_name || stated === 'unknown sport') return true;
+  return stated === canonical(p.sport_name);
+};
+const ciCandidates = ciRows.filter((row) => {
+  const entry = row.entry;
+  if (Number(entry.year || p.year) !== Number(p.year)) return false;
+  if (!sourceManufacturerMatches(row) || !sourceSportMatches(row)) return false;
+  if (p.checklist_url && entry.checklistUrl === p.checklist_url) {
+    return identityIsSafe(sourceIdentity(row));
   }
+  return identityIsSafe(sourceIdentity(row));
+});
+const uniqueCi = [...new Map(ciCandidates.map((row) => [row.entry.pageUrl || row.page_url, row])).values()];
+let ci = uniqueCi.length === 1 ? uniqueCi[0] : null;
+// A previously confirmed connection can be reused when the source catalog
+// has rotated. Validate the stored product identity and fetched H1 again.
+if (!ci && uniqueCi.length === 0) {
+  const linked = await database.prepare(`SELECT entry_json FROM source_harvester_cache
+    WHERE source='studio-ci-link' AND page_url=? LIMIT 1`)
+    .bind(`studio-ci:${p.id}`).first();
+  const saved = parseJson(linked?.entry_json);
+  if (Number(saved?.productId) === Number(p.id) &&
+      identityIsSafe(saved?.productName) && identityIsSafe(saved?.sourceTitle)) {
+    ci = {page_url:saved.pageUrl,entry:{pageUrl:saved.pageUrl,name:saved.sourceTitle,year:p.year}};
+  }
+}
+if (uniqueCi.length > 1) sources.push({
+  name: 'Checklist Insider', url: '', status: `${uniqueCi.length} matching article candidates; manual source review required`
+});
+if (ci) {
+  const page = ci.entry.pageUrl || ci.page_url;
+  try {
+    const u = new URL(page);
+    if (u.protocol === 'https:' && /(^|\.)checklistinsider\.com$/.test(u.hostname)) {
+      const response = await fetch(u.href, {headers:{accept:'text/html','user-agent':'Setbound/1.0'}});
+      if (response.ok) {
+        const html = await response.text();
+        const parsed = parseChecklistInsiderEnrichment(html, u.href, p.name);
+        // The article H1 must independently confirm identity. Do not trust the
+        // parser's fallback to the requested product name if no H1 exists.
+        const pageTitlePresent = /<h1\b/i.test(html);
+        if (identityIsSafe(parsed.title) && pageTitlePresent) {
+          for (const f of parsed.formats || []) {
+            const key = String(f.key || '');
+            const details = explicitConfiguration(f.details || '');
+            if (FORMAT[key] && !existing.has(key) && details) {
+              const previous = proposals.findIndex(x => x.key === key);
+              if (previous >= 0) proposals.splice(previous, 1); // CI wins a field-level tie.
+              proposals.push({key,details,source:'Checklist Insider',sourceUrl:u.href,sourceName:parsed.title});
+            }
+          }
+          const date = String(parsed.releaseDate || '');
+          if (!p.release_date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+            proposals.push({key:'release_date',details:date,source:'Checklist Insider',sourceUrl:u.href,sourceName:parsed.title});
+          }
+          sources.push({name:'Checklist Insider',url:u.href,status:'verified product identity'});
+          // Save a product-ID-specific source bridge. Never changes the source
+          // associated with the imported checklist.
+          await database.prepare(`INSERT INTO source_harvester_cache
+            (page_url,source,year,title,entry_json,scanned_at,updated_at)
+            VALUES (?,'studio-ci-link',?,?,?,datetime('now'),datetime('now'))
+            ON CONFLICT(page_url) DO UPDATE SET
+              entry_json=excluded.entry_json,updated_at=datetime('now')`)
+            .bind(`studio-ci:${p.id}`,Number(p.year),p.name,
+              JSON.stringify({productId:p.id,productName:p.name,pageUrl:u.href,sourceTitle:parsed.title}))
+            .run();
+        } else {
+          sources.push({name:'Checklist Insider',url:u.href,status:'article identity mismatch; rejected'});
+        }
+      } else sources.push({name:'Checklist Insider',url:u.href,status:`HTTP ${response.status}`});
+    }
+  } catch { sources.push({name:'Checklist Insider',url:'',status:'article unavailable'}); }
+}
+
   return {id,product:p.name,status:proposals.length?'review':'no-facts',proposals,sources,
     existing:{releaseDate:p.release_date,artwork:!!p.image_key,formats:[...existing]},
     message:proposals.length?`${proposals.length} missing factual fields proposed`:'No safely matched missing configurations found.'};
