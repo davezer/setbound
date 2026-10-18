@@ -17,6 +17,17 @@
   let persisting = $state(false);
   let saveError = $state('');
   let importing = $state('');
+  let importResults = $state({});
+  let classifications = $state({});
+  let importedIds = $state([]);
+  function importResult(row) { return importResults[identity(row)] || null; }
+  function reportImport(row, type, text) { importResults = {...importResults, [identity(row)]: {type, text}}; }
+  function selectedValue(row, key) { return classifications[identity(row)]?.[key] || String(row[key] || ''); }
+  function setClassification(row, key, value) {
+    const id=identity(row);
+    classifications={...classifications,[id]:{...classifications[id],[key]:value}};
+    reportImport(row,'','');
+  }
   let search = $state('');
   let onlyNew = $state(true);
   let scanLimit = $state(20);
@@ -80,28 +91,41 @@
     await refreshSaved();
   }
   async function importApproved(row) {
-    if(row.status!=='Prepared'||row.issues?.length||row.parsed?.safety?.blocked||row.unresolved) return;
+    if (importing) return;
+    if (importedIds.includes(identity(row))) return;
+    if(row.status!=='Prepared'||row.issues?.length||row.parsed?.safety?.blocked||row.unresolved) {
+      reportImport(row,'error','This product is not ready to import. Resolve the parser or validation issues first.'); return;
+    }
     const audit=validateChecklistImport(row.cards||[],row.parsed?.checklist_meta,row.parsed?.sections);
-    if(audit?.blocked||audit?.valid===false||row.cards?.some(unresolvedCard)){saveError='Checklist failed validation on import; fix it before proceeding.';return;}
-    if(existing(row)){saveError=`${row.name} already appears imported. No overwrite allowed.`;return;}
-    // Import uses the same canonical writers as the existing Harvester.
-    const selectedSport = sports.find(x=>x.name.toLowerCase()===String(row.sport||'').toLowerCase());
-    const selectedManufacturer = manufacturers.find(x=>x.name.toLowerCase()===String(row.manufacturer||'').toLowerCase());
-    if(!selectedSport || !selectedManufacturer){saveError=`Unknown sport/manufacturer mapping for ${row.name}. Correct source classification before importing.`;return;}
-    if(!confirm(`Import ${row.cards.length} validated cards for ${row.name} as a DRAFT? This creates a product; it does not publish.`))return;
-    importing=identity(row);saveError='';
-    try{
+    if(audit?.blocked||audit?.valid===false||row.cards?.some(unresolvedCard)) {
+      reportImport(row,'error','Checklist failed validation. Review the source cards before importing.'); return;
+    }
+    if(existing(row)) { reportImport(row,'error',`${row.name} already appears imported. No overwrite allowed.`); return; }
+    const sport=selectedValue(row,'sport');
+    const manufacturer=selectedValue(row,'manufacturer');
+    const selectedSport=sports.find(x=>x.name.toLowerCase()===sport.toLowerCase());
+    const selectedManufacturer=manufacturers.find(x=>x.name.toLowerCase()===manufacturer.toLowerCase());
+    if(!selectedSport || !selectedManufacturer) {
+      reportImport(row,'error','Select a recognized sport and manufacturer below, then retry the import.'); return;
+    }
+    if(!confirm(`Import ${row.cards.length} validated cards for ${row.name} as a DRAFT? This creates a product; it does not publish.`)) return;
+    importing=identity(row);
+    reportImport(row,'','');
+    try {
       const response=await fetch('/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
         name:row.name,year:row.year,sportId:selectedSport.id,manufacturerId:selectedManufacturer.id,
         sourceUrl:row.checklistUrl,sourceFilename:row.checklistFilename||'',cards:row.cards,
         checklist_meta:row.parsed.checklist_meta,sections:row.parsed.sections,
         replaceDraft:false
       })});
-      const result=await response.json();
-      if(!response.ok)throw new Error(result.message || `Import failed (${response.status})`);
-      message=`Imported ${row.name} as a draft. Refresh Studio to view it in the ledger.`;
-    }catch(error){saveError=`Import failed: ${error.message}`;}
-    finally{importing='';}
+      let result;
+      try { result=await response.json(); } catch { result={}; }
+      if(!response.ok) throw new Error(result.message || result.error || `Import failed (HTTP ${response.status})`);
+      importedIds=[...importedIds,identity(row)];
+      reportImport(row,'success',`${row.name} imported as a draft (${row.cards.length} cards). It has not been published.`);
+      await refreshSaved();
+    } catch(error) { reportImport(row,'error',`Import failed: ${error.message}`); }
+    finally { importing=''; }
   }
   function unresolvedCard(card) { return card.affiliation === 'UNRESOLVED' || card.affiliation_status === 'unresolved'; }
   function rowSafetyIssues(parsed, audit, unresolved) {
@@ -287,10 +311,24 @@
         <div><strong>{row.name}</strong><small>{row.count.toLocaleString()} cards · {row.sectionCount||0} sections · {row.status}</small></div>
         <div class="row-actions">
           {#if row.issues?.length}<span class="warn">{row.issues.join(' · ')}</span>{:else if row.error}<span class="warn">{row.error}</span>{:else if row.status==='Prepared'}<span class="good">Checklist validated</span>{/if}
-          {#if row.status==='Prepared'}<button type="button" disabled={Boolean(importing)} onclick={()=>importApproved(row)}>{importing===identity(row)?'Importing…':'Import draft'}</button>{/if}
+          {#if row.status==='Prepared' && !importedIds.includes(identity(row))}<button type="button" disabled={Boolean(importing)} onclick={()=>importApproved(row)}>{importing===identity(row)?'Importing…':'Import draft'}</button>{/if}
+          {#if importedIds.includes(identity(row))}<span class="good">Imported as draft ✓</span>{/if}
           {#if row.parsed}<button type="button" onclick={()=>toggleReview(row)}>{expandedReview===identity(row)?'Close details':'Inspect cards / parser'}</button>{/if}
         </div>
       </div>
+      {#if row.status==='Prepared' && !importedIds.includes(identity(row))}
+        <div class="classify-row">
+          <label>Sport <select value={selectedValue(row,'sport')} onchange={(e)=>setClassification(row,'sport',e.currentTarget.value)}>
+            <option value="">Select sport</option>
+            {#each sports as sport}<option value={sport.name}>{sport.name}</option>{/each}
+          </select></label>
+          <label>Manufacturer <select value={selectedValue(row,'manufacturer')} onchange={(e)=>setClassification(row,'manufacturer',e.currentTarget.value)}>
+            <option value="">Select manufacturer</option>
+            {#each manufacturers as manufacturer}<option value={manufacturer.name}>{manufacturer.name}</option>{/each}
+          </select></label>
+        </div>
+      {/if}
+      {#if importResult(row)?.text}<p class:good={importResult(row).type==='success'} class:warn={importResult(row).type==='error'} role="status">{importResult(row).text}</p>{/if}
       {#if row.parsed && expandedReview===identity(row)}
         <div class="review-pane">
           <div class="review-meta"><strong>Parser and validation</strong><span>{row.parser || 'Unspecified strategy'}</span></div>
@@ -321,6 +359,9 @@
   {/if}
 </section>
 <style>
+  .classify-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;padding:.4rem 0 1rem}
+  .classify-row label{display:grid;gap:.25rem;font-size:.69rem;font-weight:700}
+  .classify-row select{min-width:165px;max-width:100%;padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem;background:white}
   .bulk-fix{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.bulk-fix input{padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem;min-width:260px}
   .saved-queue{margin:1rem 0;padding:.75rem;border:1px solid var(--line);border-radius:.55rem}.saved-row{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.4rem 0;border-bottom:1px solid var(--line);font-size:.73rem}.saved-row span{flex:1}
   .acquire{border:1px solid var(--line);padding:1.25rem;border-radius:.8rem;margin:1.5rem 0 2rem;background:#fff}.head h2{font-size:1.5rem;margin:.25rem 0}.head p,.muted{color:var(--muted);font-size:.78rem}.eyebrow{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--blue)}.bar,.tools{display:flex;flex-wrap:wrap;align-items:end;gap:.85rem;margin:1rem 0}.bar label{display:grid;gap:.3rem;font-size:.7rem;font-weight:700}.bar .check,.tools .check{display:flex;align-items:center;gap:.35rem}.bar input[type=number]{width:100px}.bar input,.bar select,.tools input{border:1px solid var(--line-strong);border-radius:.4rem;padding:.55rem;font:inherit}.bar input[type=checkbox],.tools input[type=checkbox]{width:auto}.acquire button{background:#fff;border:1px solid var(--line-strong);padding:.65rem .8rem;border-radius:.45rem;cursor:pointer;font:inherit;font-size:.7rem;font-weight:750}.acquire .primary{color:#fff;background:#171717}.acquire button:disabled{opacity:.5;cursor:not-allowed}.notice{background:#f5f7f8;border:1px solid var(--line);padding:.7rem;border-radius:.5rem;font-size:.76rem}.tools strong{font-size:.76rem;margin-right:auto}.source-list{max-height:430px;overflow:auto;border:1px solid var(--line);border-radius:.5rem}.source-row{display:flex;gap:.8rem;align-items:center;padding:.7rem;border-bottom:1px solid var(--line);font-size:.78rem}.source-row span{display:grid;gap:.2rem;flex:1}.source-row small,.prepared small{font-size:.67rem;color:var(--muted)}.source-row a{font-size:.68rem;white-space:nowrap;color:var(--blue)}.prepared{border-top:1px solid var(--line);padding:.8rem 0;display:flex;justify-content:space-between;gap:1rem;font-size:.8rem}.prepared>div:first-child{display:grid;gap:.25rem}.warn{color:#9b3d21;font-size:.75rem}.good{color:#276644;font-size:.75rem}
