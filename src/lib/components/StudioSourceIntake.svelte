@@ -97,7 +97,14 @@
       aiSuggestions={...aiSuggestions,[id]:data.suggestions||[]};
       clearAiSelection(row);
       aiMessages={...aiMessages,[id]:(data.suggestions||[]).length+' suggestions received. Approve fields individually. Selection cleared.'};
-    }catch(error){aiMessages={...aiMessages,[id]:'AI request failed: '+(error?.message||'Unknown error')+'. Selection retained.';}
+    } catch (error) {
+  aiMessages = {
+    ...aiMessages,
+    [id]: 'AI request failed: ' +
+      (error?.message || 'Unknown error') +
+      '. Selection retained.'
+  };
+}
     finally{aiBusy='';}
   }
   async function acceptAiSuggestion(row,proposal) {
