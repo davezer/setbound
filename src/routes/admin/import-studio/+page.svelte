@@ -40,7 +40,7 @@
     <a href="/admin/affiliations"><strong>03 · Resolve</strong><span>Teams and aliases</span></a>
     <a href="/admin/sets"><strong>04 · Publish</strong><span>Existing set management</span></a>
   </div>
-  <StudioSourceIntake products={data.products} affiliations={data.affiliations} />
+  <StudioSourceIntake products={data.products} affiliations={data.affiliations} sports={data.sports} manufacturers={data.manufacturers} />
   <div class="intro"><h2>Imported product ledger</h2><p>These are the existing D1 products. No reimports, migrations, or speculative matches.</p></div>
   <div class="metrics">
     <div><strong>{data.products.length}</strong><span>Imported products</span></div>

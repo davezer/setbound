@@ -1,7 +1,8 @@
 <script>
   import { parseChecklistSource } from '$lib/client/checklist-engine.js';
   import { validateChecklistImport } from '$lib/checklist-validation.js';
-  let { products = [], affiliations = [] } = $props();
+  import { onMount } from 'svelte';
+  let { products = [], affiliations = [], sports = [], manufacturers = [] } = $props();
   let releaseYear = $state(String(new Date().getFullYear()));
   let useTopps = $state(true);
   let useCI = $state(true);
@@ -11,6 +12,10 @@
   let catalog = $state([]);
   let chosen = $state([]);
   let prepared = $state([]);
+  let savedRecords = $state([]);
+  let persisting = $state(false);
+  let saveError = $state('');
+  let importing = $state('');
   let search = $state('');
   let onlyNew = $state(true);
   let scanLimit = $state(20);
@@ -18,6 +23,7 @@
   let expandedReview = $state('');
   let affiliationDrafts = $state({});
   let reviewSearch = $state('');
+  let bulkAffiliation = $state('');
   let issueOnly = $state(true);
   let showAllCards = $state(false);
   const selectedEligible = $derived(catalog.filter(item => chosen.includes(identity(item)) && !existing(item)));
@@ -26,6 +32,76 @@
   const preparedCount = $derived(prepared.filter(row => row.status === 'Prepared').length);
   const reviewedCount = $derived(prepared.filter(row => row.status === 'Needs review').length);
   const failedCount = $derived(prepared.filter(row => row.status === 'Failed').length);
+  async function queueId(row) {
+    const bytes = new TextEncoder().encode(identity(row));
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2,'0')).join('');
+  }
+  function serializable(row) {
+    // Avoid duplicated card arrays: the parsed snapshot already contains them.
+    const { cards, ...withoutCards } = row;
+    const parsed = { ...(row.parsed || {}), cards: row.cards || row.parsed?.cards || [] };
+    return { ...withoutCards, parsed, cards: parsed.cards };
+  }
+  async function refreshSaved() {
+    try { const data = await readJson('/api/admin/import-studio/queue'); savedRecords = data.rows || []; }
+    catch (error) { saveError = `Could not read saved queue: ${error.message}`; }
+  }
+  onMount(refreshSaved);
+  async function saveSnapshot(row) {
+    if (row.status==='Preparing') return;
+    persisting = true; saveError='';
+    try {
+      const id = await queueId(row);
+      const response = await fetch('/api/admin/import-studio/queue', {
+        method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({id,row:serializable(row)})
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || `Save failed (${response.status})`);
+      await refreshSaved();
+    } catch(error) { saveError=`Snapshot NOT saved: ${error.message}`; }
+    finally { persisting=false; }
+  }
+  async function restoreSnapshot(record) {
+    try {
+      const result=await readJson(`/api/admin/import-studio/queue?id=${record.id}`);
+      const row=result.row.row;
+      const cards=row.cards || row.parsed?.cards || [];
+      prepared=[...prepared.filter(x=>identity(x)!==identity(row)),{...row,cards,parsed:{...row.parsed,cards}}];
+      message=`Restored ${row.name} with saved corrections.`;
+    } catch(error) { saveError=error.message; }
+  }
+  async function removeSnapshot(row) {
+    if(!confirm(`Remove saved review snapshot for ${row.product_name}? This will not delete an imported product.`))return;
+    const response=await fetch(`/api/admin/import-studio/queue?id=${row.id}`,{method:'DELETE'});
+    if(!response.ok){saveError='Could not remove snapshot.';return;}
+    await refreshSaved();
+  }
+  async function importApproved(row) {
+    if(row.status!=='Prepared'||row.issues?.length||row.parsed?.safety?.blocked||row.unresolved) return;
+    const audit=validateChecklistImport(row.cards||[],row.parsed?.checklist_meta,row.parsed?.sections);
+    if(audit?.blocked||audit?.valid===false||row.cards?.some(unresolvedCard)){saveError='Checklist failed validation on import; fix it before proceeding.';return;}
+    if(existing(row)){saveError=`${row.name} already appears imported. No overwrite allowed.`;return;}
+    // Import uses the same canonical writers as the existing Harvester.
+    const selectedSport = sports.find(x=>x.name.toLowerCase()===String(row.sport||'').toLowerCase());
+    const selectedManufacturer = manufacturers.find(x=>x.name.toLowerCase()===String(row.manufacturer||'').toLowerCase());
+    if(!selectedSport || !selectedManufacturer){saveError=`Unknown sport/manufacturer mapping for ${row.name}. Correct source classification before importing.`;return;}
+    if(!confirm(`Import ${row.cards.length} validated cards for ${row.name} as a DRAFT? This creates a product; it does not publish.`))return;
+    importing=identity(row);saveError='';
+    try{
+      const response=await fetch('/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({
+        name:row.name,year:row.year,sportId:selectedSport.id,manufacturerId:selectedManufacturer.id,
+        sourceUrl:row.checklistUrl,sourceFilename:row.checklistFilename||'',cards:row.cards,
+        checklist_meta:row.parsed.checklist_meta,sections:row.parsed.sections,
+        replaceDraft:false
+      })});
+      const result=await response.json();
+      if(!response.ok)throw new Error(result.message || `Import failed (${response.status})`);
+      message=`Imported ${row.name} as a draft. Refresh Studio to view it in the ledger.`;
+    }catch(error){saveError=`Import failed: ${error.message}`;}
+    finally{importing='';}
+  }
   function unresolvedCard(card) { return card.affiliation === 'UNRESOLVED' || card.affiliation_status === 'unresolved'; }
   function rowSafetyIssues(parsed, audit, unresolved) {
     const issues=[];
@@ -60,6 +136,7 @@
     const updated={...row,cards,parsed:{...row.parsed,cards},audit,unresolved,issues:rowSafetyIssues(row.parsed,audit,unresolved),status:''};
     updated.status=updated.issues.length?'Needs review':'Prepared';
     prepared=prepared.map(item=>identity(item)===id?updated:item);
+    void saveSnapshot(updated);
   }
   function applyAllAffiliations(row, value) {
     if(value!=='NIL')return;
@@ -69,6 +146,23 @@
     const updated={...row,cards,parsed:{...row.parsed,cards},audit,unresolved:0,issues:rowSafetyIssues(row.parsed,audit,0)};
     updated.status=updated.issues.length?'Needs review':'Prepared';
     prepared=prepared.map(item=>identity(item)===identity(row)?updated:item);
+    void saveSnapshot(updated);
+  }
+  function bulkResolve(row) {
+    const value=bulkAffiliation.trim();
+    if(!value || value==='UNRESOLVED')return;
+    if(!confirm(`Set ${row.unresolved} unresolved affiliations to "${value}"? Only proceed if every affected row actually belongs to this team/school.`))return;
+    const cards=row.cards.map(card=>unresolvedCard(card)?{
+      ...card,affiliation:value,affiliation_id:null,
+      affiliation_status:value==='NIL'?'source-nil':'manual-review',confidence:1
+    }:card);
+    const unresolved=cards.filter(unresolvedCard).length;
+    const audit=validateChecklistImport(cards,row.parsed.checklist_meta,row.parsed.sections);
+    const updated={...row,cards,parsed:{...row.parsed,cards},audit,unresolved,issues:rowSafetyIssues(row.parsed,audit,unresolved)};
+    updated.status=updated.issues.length?'Needs review':'Prepared';
+    prepared=prepared.map(item=>identity(item)===identity(row)?updated:item);
+    bulkAffiliation='';
+    void saveSnapshot(updated);
   }
   const normalized = (value) => String(value || '').toLowerCase().replace(/®|™/g, '').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
   const withoutYear = (value) => normalized(value).replace(/^(?:19|20)\d{2} /, '');
@@ -144,6 +238,7 @@
           result={...item,status:issues.length?'Needs review':'Prepared',count:cards.length,sectionCount:(parsed.sections||[]).length,issues,parser:parsed.safety?.strategy||parsed.parserFamily||'',audit,parsed,cards,unresolved};
         }catch(error){result={...item,status:'Failed',count:0,issues:[],error:error?.message||'Unknown parser error'};}
         prepared=prepared.map(x=>identity(x)===identity(item)?result:x);
+        await saveSnapshot(result);
         message=`Processed ${prepared.length}/${items.length} in this batch · ${selectedEligible.length} eligible selected · ${Math.max(0,selectedEligible.length-items.length)} queued for another batch`; 
       }
       // Consume only the attempted batch. Selections beyond 30 remain queued.
@@ -163,6 +258,15 @@
     <button class="primary" disabled={scanning||preparing} onclick={discover}>{scanning?'Discovering…':'Discover files'}</button>
   </div>
   {#if message}<p class="notice" role="status">{message}</p>{/if}
+  <div class="saved-queue">
+    <div class="review-meta"><strong>Saved review queue · {savedRecords.length} records</strong><button type="button" onclick={refreshSaved}>Refresh saved queue</button></div>
+    <p class="muted">Stored in R2 with a D1 index. Reload saved products after a browser refresh. No automatic imports.</p>
+    {#each savedRecords as record (record.id)}
+      <div class="saved-row"><span>{record.product_name} · {record.card_count} cards · {record.status} · {record.updated_at}</span><button type="button" onclick={()=>restoreSnapshot(record)}>Resume review</button><button type="button" onclick={()=>removeSnapshot(record)}>Remove</button></div>
+    {/each}
+    {#if persisting}<p class="muted">Saving review checkpoint…</p>{/if}
+    {#if saveError}<p class="warn" role="alert">{saveError}</p>{/if}
+  </div>
   {#if catalog.length}
     <div class="tools"><strong>{filtered.length} visible · {selectedEligible.length} eligible selected{#if hiddenSelection>0} · {hiddenSelection} excluded{/if}</strong><input placeholder="Search discovered files" bind:value={search}/><label class="check"><input type="checkbox" bind:checked={onlyNew}/> Exclude known exact-name imports</label><button onclick={selectVisible} disabled={scanning||preparing}>Select visible new</button><button onclick={()=>chosen=[]} disabled={scanning||preparing}>Clear selection</button><button class="primary" onclick={prepare} disabled={!selectedEligible.length||scanning||preparing}>{preparing?'Preparing…':`Prepare next ${Math.min(selectedEligible.length,PREPARE_BATCH_SIZE)}`}</button></div>
     {#if remainingAfterBatch}<p class="muted">Batch size: {PREPARE_BATCH_SIZE}. {remainingAfterBatch} eligible selections will remain selected for the next batch. Nothing is silently discarded.</p>{/if}
@@ -174,12 +278,13 @@
   {/if}
   {#if prepared.length}
     <h3>Prepared file review</h3>
-    <p class="muted">{preparedCount} validated · {reviewedCount} needs review · {failedCount} failed. This queue remains in your browser session only. No imports or database writes occur here.</p>
+    <p class="muted">{preparedCount} validated · {reviewedCount} needs review · {failedCount} failed. Prepared results are checkpointed in R2/D1. Imports require the explicit Import draft action.</p>
     {#each prepared as row (identity(row))}
       <div class="prepared">
         <div><strong>{row.name}</strong><small>{row.count.toLocaleString()} cards · {row.sectionCount||0} sections · {row.status}</small></div>
         <div class="row-actions">
           {#if row.issues?.length}<span class="warn">{row.issues.join(' · ')}</span>{:else if row.error}<span class="warn">{row.error}</span>{:else if row.status==='Prepared'}<span class="good">Checklist validated</span>{/if}
+          {#if row.status==='Prepared'}<button type="button" disabled={Boolean(importing)} onclick={()=>importApproved(row)}>{importing===identity(row)?'Importing…':'Import draft'}</button>{/if}
           {#if row.parsed}<button type="button" onclick={()=>toggleReview(row)}>{expandedReview===identity(row)?'Close details':'Inspect cards / parser'}</button>{/if}
         </div>
       </div>
@@ -193,7 +298,7 @@
           {#if row.parsed.safety}<details><summary>Parser safety details</summary><pre>{JSON.stringify(row.parsed.safety,null,2)}</pre></details>{/if}
           {#if row.audit}<details><summary>Validation details</summary><pre>{JSON.stringify(row.audit,null,2)}</pre></details>{/if}
           <div class="review-tools"><input placeholder="Search cards or affiliations" bind:value={reviewSearch}/><label class="check"><input type="checkbox" bind:checked={issueOnly}/> Unresolved only</label></div>
-          {#if row.unresolved}<button type="button" class="nil-button" onclick={()=>applyAllAffiliations(row,'NIL')}>Mark all unresolved as NIL (only if source has no affiliations)</button>{/if}
+          {#if row.unresolved}<div class="bulk-fix"><input placeholder="One verified team/school for all unresolved" bind:value={bulkAffiliation}/><button type="button" disabled={!bulkAffiliation.trim()} onclick={()=>bulkResolve(row)}>Apply to all unresolved</button><button type="button" class="nil-button" onclick={()=>applyAllAffiliations(row,'NIL')}>Mark all NIL (only if source has no affiliations)</button></div>{/if}
           <div class="cards-list">
             {#each visibleReviewCards(row) as entry (entry.index)}
               <div class="card-line">
@@ -209,10 +314,12 @@
         </div>
       {/if}
     {/each}
-    <p class="muted">Import/apply is intentionally disabled in Phase 2. Existing Harvester import remains available until Phase 3 adds durable review and safe writes.</p>
+    <p class="muted">Only validated products may be imported as drafts. Unsupported parsers, unresolved affiliations, and failed validation remain blocked.</p>
   {/if}
 </section>
 <style>
+  .bulk-fix{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0}.bulk-fix input{padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem;min-width:260px}
+  .saved-queue{margin:1rem 0;padding:.75rem;border:1px solid var(--line);border-radius:.55rem}.saved-row{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;padding:.4rem 0;border-bottom:1px solid var(--line);font-size:.73rem}.saved-row span{flex:1}
   .acquire{border:1px solid var(--line);padding:1.25rem;border-radius:.8rem;margin:1.5rem 0 2rem;background:#fff}.head h2{font-size:1.5rem;margin:.25rem 0}.head p,.muted{color:var(--muted);font-size:.78rem}.eyebrow{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--blue)}.bar,.tools{display:flex;flex-wrap:wrap;align-items:end;gap:.85rem;margin:1rem 0}.bar label{display:grid;gap:.3rem;font-size:.7rem;font-weight:700}.bar .check,.tools .check{display:flex;align-items:center;gap:.35rem}.bar input[type=number]{width:100px}.bar input,.bar select,.tools input{border:1px solid var(--line-strong);border-radius:.4rem;padding:.55rem;font:inherit}.bar input[type=checkbox],.tools input[type=checkbox]{width:auto}.acquire button{background:#fff;border:1px solid var(--line-strong);padding:.65rem .8rem;border-radius:.45rem;cursor:pointer;font:inherit;font-size:.7rem;font-weight:750}.acquire .primary{color:#fff;background:#171717}.acquire button:disabled{opacity:.5;cursor:not-allowed}.notice{background:#f5f7f8;border:1px solid var(--line);padding:.7rem;border-radius:.5rem;font-size:.76rem}.tools strong{font-size:.76rem;margin-right:auto}.source-list{max-height:430px;overflow:auto;border:1px solid var(--line);border-radius:.5rem}.source-row{display:flex;gap:.8rem;align-items:center;padding:.7rem;border-bottom:1px solid var(--line);font-size:.78rem}.source-row span{display:grid;gap:.2rem;flex:1}.source-row small,.prepared small{font-size:.67rem;color:var(--muted)}.source-row a{font-size:.68rem;white-space:nowrap;color:var(--blue)}.prepared{border-top:1px solid var(--line);padding:.8rem 0;display:flex;justify-content:space-between;gap:1rem;font-size:.8rem}.prepared>div:first-child{display:grid;gap:.25rem}.warn{color:#9b3d21;font-size:.75rem}.good{color:#276644;font-size:.75rem}
   .row-actions{display:flex;align-items:center;justify-content:flex-end;gap:.5rem;flex-wrap:wrap}.review-pane{border:1px solid var(--line);background:#fafafa;border-radius:.65rem;padding:1rem;margin:.5rem 0 1.1rem}.review-meta{display:flex;gap:1rem;justify-content:space-between;font-size:.78rem}.review-tools{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin:.8rem 0}.review-tools input,.card-fix input{padding:.5rem;border:1px solid var(--line-strong);border-radius:.4rem}.review-tools .check{font-size:.72rem}.review-tools input[type=checkbox]{margin-right:.4rem}.cards-list{max-height:380px;overflow:auto}.card-line{display:flex;align-items:center;gap:.75rem;justify-content:space-between;border-bottom:1px solid var(--line);padding:.65rem 0;font-size:.75rem}.card-line>div:first-child{display:grid;gap:.2rem}.card-line small{color:var(--muted);font-size:.66rem}.card-fix{display:flex;gap:.35rem;flex-wrap:wrap}.review-pane pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.69rem;max-height:300px;overflow:auto}.review-pane details{margin:.55rem 0;font-size:.74rem}.nil-button{margin:.4rem 0;color:#873719}
 </style>
