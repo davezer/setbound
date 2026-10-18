@@ -1,6 +1,7 @@
 <script>
   import { enhance } from '$app/forms';
   import StudioSourceIntake from '$lib/components/StudioSourceIntake.svelte';
+  import StudioFactsGatherer from '$lib/components/StudioFactsGatherer.svelte';
   import { invalidateAll } from '$app/navigation';
   let { data, form } = $props();
   let search = $state('');
@@ -41,6 +42,7 @@
     <a href="/admin/sets"><strong>04 · Publish</strong><span>Existing set management</span></a>
   </div>
   <StudioSourceIntake products={data.products} affiliations={data.affiliations} sports={data.sports} manufacturers={data.manufacturers} />
+  <StudioFactsGatherer products={data.products} />
   <div class="intro"><h2>Imported product ledger</h2><p>These are the existing D1 products. No reimports, migrations, or speculative matches.</p></div>
   <div class="metrics">
     <div><strong>{data.products.length}</strong><span>Imported products</span></div>
