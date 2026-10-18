@@ -363,8 +363,24 @@ export async function parseToppsModernChecklistPdf(file) {
 		return /^(?:\d{1,4}[A-Z]?|[A-Z0-9]{1,12}(?:-[A-Z0-9]{1,16})+)$/i.test(v) ? v : null;
 	}
 
+	// Header x positions are consistent across data rows even when individual
+	// PDF text fragments have irregular spacing. Detect each page separately.
+	function findModernToppsColumns(rows) {
+		for (const row of rows) {
+			const candidates = row.items.map((item) => ({ ...item, value: text(item.text).toLowerCase() }));
+			const name = candidates.find((item) => /^(?:name|player(?: name)?|subject)$/.test(item.value));
+			const team = candidates.find((item) => /^(?:team|club|affiliation)$/.test(item.value));
+			const rookie = candidates.find((item) => /^(?:rookie|rc)$/.test(item.value));
+			if (name && team && Number(team.x) > Number(name.x) + 12) {
+				return { team: Number(team.x), rookie: rookie && Number(rookie.x) > Number(team.x) ? Number(rookie.x) : null };
+			}
+		}
+		return null;
+	}
+
 	for (const page of pages) {
 		const rows = groupRows(page.items, 3);
+		const columnPositions = findModernToppsColumns(rows);
 
 		for (const row of rows) {
 			const rowText = text(row.text);
@@ -406,35 +422,42 @@ export async function parseToppsModernChecklistPdf(file) {
 
 			let subject = '';
 			let affiliation = '';
+			let isRookie = /\(RC\)|\brookie\b/i.test(rowText);
 
-			if (rest.length >= 2) {
-				// The modern Topps PDFs are laid out as visual columns. Find the largest
-				// horizontal gap after the card number; that boundary separates the
-				// subject column from the affiliation column even when either contains
-				// multiple PDF text fragments.
+			if (columnPositions) {
+				const nameParts = [];
+				const teamParts = [];
+				const rookieParts = [];
+				for (const item of rest) {
+					const x = Number(item.x);
+					if (columnPositions.rookie != null && x >= columnPositions.rookie - 4) rookieParts.push(item.text);
+					else if (x >= columnPositions.team - 4) teamParts.push(item.text);
+					else nameParts.push(item.text);
+				}
+				isRookie ||= rookieParts.some((part) => /\b(?:rookie|rc)\b/i.test(part));
+				subject = text(nameParts.join(' '));
+				affiliation = cleanAffiliation(teamParts.join(' '));
+			}
+
+			if (!subject && !columnPositions && rest.length >= 2) {
+				// Older formats without headers: use spacing, but do not treat an
+				// isolated rookie marker as the affiliation column.
+				const meaningful = rest.filter((item) => !/^(?:rookie|rc)$/i.test(item.text));
 				let splitAt = -1;
 				let largestGap = -Infinity;
-				for (let i = 1; i < rest.length; i++) {
-					const previous = rest[i - 1];
-					const gap = Number(rest[i].x || 0) - Number(previous.right || previous.x || 0);
-					if (gap > largestGap) {
-						largestGap = gap;
-						splitAt = i;
-					}
+				for (let i = 1; i < meaningful.length; i++) {
+					const previous = meaningful[i - 1];
+					const gap = Number(meaningful[i].x || 0) - Number(previous.right || previous.x || 0);
+					if (gap > largestGap) { largestGap = gap; splitAt = i; }
 				}
-
-				// Require some visual separation; otherwise we know a card exists but
-				// refuse to invent where the subject ends and affiliation begins.
 				if (splitAt > 0 && largestGap >= 8) {
-					subject = text(rest.slice(0, splitAt).map((item) => item.text).join(' '));
-					affiliation = cleanAffiliation(rest.slice(splitAt).map((item) => item.text).join(' '));
+					subject = text(meaningful.slice(0, splitAt).map((item) => item.text).join(' '));
+					affiliation = cleanAffiliation(meaningful.slice(splitAt).map((item) => item.text).join(' '));
 				}
 			}
 
 			if (!subject) {
-				// Some PDFs emit the subject as one item and omit a distinct affiliation
-				// cell. Keep the card reviewable rather than guessing an affiliation.
-				subject = text(rest.map((item) => item.text).join(' '));
+				subject = text(rest.filter((item) => !/^(?:rookie|rc)$/i.test(item.text)).map((item) => item.text).join(' '));
 				affiliation = 'UNRESOLVED';
 			}
 
@@ -446,7 +469,7 @@ export async function parseToppsModernChecklistPdf(file) {
 				subject: subject.replace(/\s*\(RC\)\s*/gi, ' ').trim(),
 				affiliation: affiliation || 'UNRESOLVED',
 				checklist: checklist || majorSection || 'Checklist',
-				rookie: /\(RC\)|\brookie\b/i.test(rowText),
+				rookie: isRookie,
 				autograph: /\bauto(?:graph)?s?\b|signature/i.test(sectionText),
 				memorabilia: /\brelic\b|memorabilia|patch|swatch|material/i.test(sectionText),
 				raw: rowText
