@@ -235,6 +235,8 @@ export async function POST({ request, platform }) {
 		const checklistIds = new Map();
 		const subjectIds = new Map();
 		const affiliationIds = new Map();
+		// Printed but unlinked affiliations are preserved for later admin review.
+		const reviewAffiliations = new Set();
 
 		const existingAff = await database
 			.prepare(`
@@ -494,13 +496,14 @@ export async function POST({ request, platform }) {
 						}
 	
 						if (!row?.id) {
-							throw new Error(
-								`Could not resolve affiliation "${affiliationName}".`
-							);
+							// Never invent a canonical team/school/country or borrow one from another sport.
+							// The printed value remains visible on the card, with no linked affiliation.
+							affiliationLabel = sourceAffiliationName;
+							reviewAffiliations.add(sourceAffiliationName);
+						} else {
+							affiliationId = row.id;
+							affiliationIds.set(affiliationKey, affiliationId);
 						}
-	
-						affiliationId = row.id;
-						affiliationIds.set(affiliationKey, affiliationId);
 					}
 				}
 			}
@@ -585,7 +588,9 @@ export async function POST({ request, platform }) {
 			ok: true,
 			slug,
 			name: canonicalName,
-			imported: body.cards.length
+			imported: body.cards.length,
+			reviewAffiliations: [...reviewAffiliations],
+			reviewCount: reviewAffiliations.size
 		});
 	} catch (e) {
 		try {
