@@ -2,6 +2,7 @@
   import { parseChecklistSource } from '$lib/client/checklist-engine.js';
   import { validateChecklistImport } from '$lib/checklist-validation.js';
   import { onMount } from 'svelte';
+  import { classifyDiscovery } from '$lib/studio-duplicate-match.js';
   let { products = [], affiliations = [], sports = [], manufacturers = [] } = $props();
   let releaseYear = $state(String(new Date().getFullYear()));
   let useTopps = $state(true);
@@ -164,13 +165,14 @@
     bulkAffiliation='';
     void saveSnapshot(updated);
   }
-  const normalized = (value) => String(value || '').toLowerCase().replace(/®|™/g, '').replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim();
-  const withoutYear = (value) => normalized(value).replace(/^(?:19|20)\d{2} /, '');
-  function existing(item) {
-    // Deliberately conservative. Avoid allowing an apparent name match to overwrite imports.
-    return products.some(p => Number(p.year) === Number(item.year) && withoutYear(p.name) === withoutYear(item.name));
-  }
-  const filtered = $derived(catalog.filter(item => (!search || `${item.name} ${item.year} ${item.manufacturer} ${item.sport}`.toLowerCase().includes(search.toLowerCase())) && (!onlyNew || !existing(item))));
+  function classification(item) { return classifyDiscovery(item,products); }
+  function existing(item) { return classification(item).status !== 'new'; }
+  const filtered = $derived(catalog.filter(item =>
+    (!search || `${item.name} ${item.year} ${item.manufacturer} ${item.sport}`.toLowerCase().includes(search.toLowerCase())) &&
+    (!onlyNew || classification(item).status !== 'imported')));
+  const importedTotal = $derived(catalog.filter(item=>classification(item).status==='imported').length);
+  const possibleTotal = $derived(catalog.filter(item=>classification(item).status==='possible').length);
+  const newTotal = $derived(catalog.filter(item=>classification(item).status==='new').length);
   function identity(item) {return `${item.source || ''}|${item.checklistUrl || ''}|${item.year || ''}|${item.name || ''}`;}
   function addEntries(items) {
     const byKey = new Map(catalog.map(item=>[identity(item),item]));
@@ -268,11 +270,12 @@
     {#if saveError}<p class="warn" role="alert">{saveError}</p>{/if}
   </div>
   {#if catalog.length}
-    <div class="tools"><strong>{filtered.length} visible · {selectedEligible.length} eligible selected{#if hiddenSelection>0} · {hiddenSelection} excluded{/if}</strong><input placeholder="Search discovered files" bind:value={search}/><label class="check"><input type="checkbox" bind:checked={onlyNew}/> Exclude known exact-name imports</label><button onclick={selectVisible} disabled={scanning||preparing}>Select visible new</button><button onclick={()=>chosen=[]} disabled={scanning||preparing}>Clear selection</button><button class="primary" onclick={prepare} disabled={!selectedEligible.length||scanning||preparing}>{preparing?'Preparing…':`Prepare next ${Math.min(selectedEligible.length,PREPARE_BATCH_SIZE)}`}</button></div>
+    <div class="tools"><strong>{filtered.length} visible · {selectedEligible.length} eligible selected{#if hiddenSelection>0} · {hiddenSelection} excluded{/if}</strong><input placeholder="Search discovered files" bind:value={search}/><label class="check"><input type="checkbox" bind:checked={onlyNew}/> Hide already imported</label><button onclick={selectVisible} disabled={scanning||preparing}>Select visible new</button><button onclick={()=>chosen=[]} disabled={scanning||preparing}>Clear selection</button><button class="primary" onclick={prepare} disabled={!selectedEligible.length||scanning||preparing}>{preparing?'Preparing…':`Prepare next ${Math.min(selectedEligible.length,PREPARE_BATCH_SIZE)}`}</button></div>
     {#if remainingAfterBatch}<p class="muted">Batch size: {PREPARE_BATCH_SIZE}. {remainingAfterBatch} eligible selections will remain selected for the next batch. Nothing is silently discarded.</p>{/if}
+    <p class="muted">{importedTotal} already imported · {possibleTotal} possible duplicates (held for review) · {newTotal} new. Distinct editions are kept separate. Toggle “Hide already imported” to inspect matches.</p>
     <div class="source-list">
     {#each filtered as item (identity(item))}
-      <label class="source-row"><input type="checkbox" checked={chosen.includes(identity(item))} disabled={existing(item)||preparing} onchange={()=>toggle(item)}/><span><strong>{item.name}</strong><small>{item.year} · {item.sport||'Unknown sport'} · {item.manufacturer||'Unknown brand'} · {item.source||'Source'} {existing(item)?' · Already imported (exact-name candidate)':''}</small></span><a href={item.checklistUrl} target="_blank" rel="noreferrer">Source ↗</a></label>
+      <label class="source-row"><input type="checkbox" checked={chosen.includes(identity(item))} disabled={existing(item)||preparing} onchange={()=>toggle(item)}/><span><strong>{item.name}</strong><small>{item.year} · {item.sport||'Unknown sport'} · {item.manufacturer||'Unknown brand'} · {item.source||'Source'} {classification(item).status==='imported'?' · Already imported':classification(item).status==='possible'?' · Possible duplicate · Review required':' · New'} {#if classification(item).match} · Matches: {classification(item).match.name} ({classification(item).reason}){/if}</small></span><a href={item.checklistUrl} target="_blank" rel="noreferrer">Source ↗</a></label>
     {/each}
     </div>
   {/if}
