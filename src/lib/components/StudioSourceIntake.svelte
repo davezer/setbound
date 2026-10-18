@@ -43,6 +43,20 @@
   let aiSuggestions = $state({});
   let manualDrafts = $state({});
   let aiSelected = $state({});
+  let aiApprovedFields = $state({});
+  function proposalFieldKey(row,proposal,field) {return identity(row)+':'+proposal.index+':'+field;}
+  function fieldEnabled(row,proposal,field) {return aiApprovedFields[proposalFieldKey(row,proposal,field)] !== false;}
+  function toggleProposalField(row,proposal,field,checked) {aiApprovedFields={...aiApprovedFields,[proposalFieldKey(row,proposal,field)]:checked};}
+  function selectedCount(row) {const prefix=identity(row)+':';return Object.entries(aiSelected).filter(([k,v])=>k.startsWith(prefix)&&v).length;}
+  function clearAiSelection(row) {const prefix=identity(row)+':';aiSelected=Object.fromEntries(Object.entries(aiSelected).filter(([k])=>!k.startsWith(prefix)));}
+  function selectNextAiIssues(row) {
+    const picks=(row.cards||[]).map((card,index)=>({card,index})).filter(({card})=>
+      unresolvedCard(card)||/^(rookie|rc|auto|autograph|legend|legends|relic)$/i.test(String(card.affiliation||'').trim())).slice(0,25);
+    clearAiSelection(row);
+    aiSelected={...aiSelected,...Object.fromEntries(picks.map(({index})=>[identity(row)+':'+index,true]))};
+    aiMessages={...aiMessages,[identity(row)]:picks.length?picks.length+' flagged cards selected. Review selections before sending.':'No automatically flagged cards. Select rows manually.'};
+  }
+
   function reviewMessage(row) { return aiMessages[identity(row)] || ''; }
   function proposalsFor(row) { return aiSuggestions[identity(row)] || []; }
   function updateManual(row,index,field,value) {
@@ -68,27 +82,38 @@
   }
   async function suggestAiCorrections(row) {
     const id=identity(row);
-    if(!confirm('Send up to 25 selected card rows, including raw source text, to OpenAI for suggestions? Nothing will be changed automatically.')) return;
-    const picks=(row.cards||[]).map((card,index)=>({index,card})).filter(x=>aiSelected[id+':'+x.index]).slice(0,25);
+    if(aiBusy)return;
+    const picks=(row.cards||[]).map((card,index)=>({index,card})).filter(x=>aiSelected[id+':'+x.index]);
     if(!picks.length){aiMessages={...aiMessages,[id]:'Select at least one card for AI review.'};return;}
-    aiBusy=id;aiMessages={...aiMessages,[id]:'Requesting AI suggestions…'};
+    if(picks.length>25){aiMessages={...aiMessages,[id]:'More than 25 selected. Select 25 or fewer.'};return;}
+    if(proposalsFor(row).length){aiMessages={...aiMessages,[id]:'Finish reviewing the current proposals before another request.'};return;}
+    if(!confirm('Send '+picks.length+' selected source rows to OpenAI? Suggestions must be approved.'))return;
+    aiBusy=id;
+    aiMessages={...aiMessages,[id]:'Asking AI to review '+picks.length+' cards…'};
     try {
       const res=await fetch('/api/admin/import-studio/ai-review',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product:row.name,cards:picks})});
-      const data=await res.json();
-      if(!res.ok)throw new Error(data.message||'AI request failed');
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(data.message||'HTTP '+res.status);
       aiSuggestions={...aiSuggestions,[id]:data.suggestions||[]};
-      aiMessages={...aiMessages,[id]:data.suggestions?.length?data.suggestions.length+' suggestions ready for individual review.':'No confident corrections suggested. Edit manually as needed.'};
-    }catch(e){aiMessages={...aiMessages,[id]:e.message};}
+      clearAiSelection(row);
+      aiMessages={...aiMessages,[id]:(data.suggestions||[]).length+' suggestions received. Approve fields individually. Selection cleared.'};
+    }catch(error){aiMessages={...aiMessages,[id]:'AI request failed: '+(error?.message||'Unknown error')+'. Selection retained.';}
     finally{aiBusy='';}
   }
   async function acceptAiSuggestion(row,proposal) {
-    await applyCard(row,proposal.index,proposal.changes);
     const id=identity(row);
-    aiSuggestions={...aiSuggestions,[id]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
-    aiMessages={...aiMessages,[id]:'Correction accepted and saved to review queue.'};
+    const chosen=Object.fromEntries(Object.entries(proposal.changes).filter(([field])=>fieldEnabled(row,proposal,field)));
+    if(!Object.keys(chosen).length){aiMessages={...aiMessages,[id]:'Select at least one field or reject the proposal.'};return;}
+    try {
+      await applyCard(row,proposal.index,chosen);
+      aiSuggestions={...aiSuggestions,[id]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
+      aiMessages={...aiMessages,[id]:'Saved '+Object.keys(chosen).length+' approved change(s).'};
+    }catch(error){aiMessages={...aiMessages,[id]:'Save failed: '+(error?.message||'Unknown error')};}
   }
   function rejectAiSuggestion(row,proposal) {
-    aiSuggestions={...aiSuggestions,[identity(row)]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
+    const id=identity(row);
+    aiSuggestions={...aiSuggestions,[id]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
+    aiMessages={...aiMessages,[id]:'Suggestion rejected; nothing changed.'};
   }
   const selectedEligible = $derived(catalog.filter(item => chosen.includes(identity(item)) && !existing(item)));
   const hiddenSelection = $derived(chosen.length - selectedEligible.length);
@@ -390,12 +415,12 @@
           {/if}
           {#if row.parsed.safety}<details><summary>Parser safety details</summary><pre>{JSON.stringify(row.parsed.safety,null,2)}</pre></details>{/if}
           {#if row.audit}<details><summary>Validation details</summary><pre>{JSON.stringify(row.audit,null,2)}</pre></details>{/if}
-          <div class="review-tools"><input placeholder="Search cards or affiliations" bind:value={reviewSearch}/><label class="check"><input type="checkbox" bind:checked={issueOnly}/> Issues only</label><button type="button" disabled={aiBusy===identity(row)} onclick={()=>suggestAiCorrections(row)}>{aiBusy===identity(row)?'Asking AI…':'Suggest AI fixes (up to 25 selected)'}</button></div>
+          <div class="review-tools"><input placeholder="Search cards or affiliations" bind:value={reviewSearch}/><label class="check"><input type="checkbox" bind:checked={issueOnly}/> Issues only</label><span class="muted">{selectedCount(row)} selected</span><button type="button" disabled={Boolean(aiBusy)} onclick={()=>selectNextAiIssues(row)}>Select 25 flagged cards</button><button type="button" disabled={Boolean(aiBusy)||!selectedCount(row)||proposalsFor(row).length>0} onclick={()=>suggestAiCorrections(row)}>{aiBusy===identity(row)?'Asking AI…':'Suggest AI fixes'}</button></div>
           <p class="muted">AI is optional and uses selected rows plus extracted raw source text. It does not see the rendered PDF. It never applies changes without your approval.</p>
           {#if reviewMessage(row)}<p role="status" class="muted">{reviewMessage(row)}</p>{/if}
           {#each proposalsFor(row) as proposal (proposal.index)}
             <div class="ai-proposal"><strong>Card {row.cards[proposal.index]?.card_number} — suggested changes</strong><p>{proposal.reason}</p>
-              {#each Object.entries(proposal.changes) as [field,value]}<div><strong>{field}:</strong> {String(row.cards[proposal.index]?.[field]??'')} → {String(value)}</div>{/each}
+              {#each Object.entries(proposal.changes) as [field,value]}<label class="ai-field"><input type="checkbox" checked={fieldEnabled(row,proposal,field)} onchange={event=>toggleProposalField(row,proposal,field,event.currentTarget.checked)}/><span><strong>{field}:</strong> {String(row.cards[proposal.index]?.[field]??'')} → {String(value)}</span></label>{/each}
               <div class="card-fix"><button type="button" onclick={()=>acceptAiSuggestion(row,proposal)}>Accept and save</button><button type="button" onclick={()=>rejectAiSuggestion(row,proposal)}>Reject</button></div>
             </div>
           {/each}
@@ -428,6 +453,7 @@
   {/if}
 </section>
 <style>
+  .ai-field{display:flex;align-items:flex-start;gap:.5rem;margin:.4rem 0;font-size:.75rem}
   .ai-proposal{padding:1rem;border:1px solid var(--line-strong);border-radius:.5rem;background:white;margin:.7rem 0;font-size:.78rem}.ai-proposal p{color:var(--muted)}.ai-select{display:flex;gap:.2rem;align-items:center;font-size:.7rem}.inline-edit{min-width:90px}.inline-edit summary{cursor:pointer}.editor-fields{display:grid;grid-template-columns:repeat(2,minmax(150px,1fr));gap:.5rem;margin:.5rem 0}.editor-fields label{font-size:.7rem;display:grid;gap:.2rem}.editor-fields input:not([type=checkbox]){min-width:0;padding:.35rem;border:1px solid var(--line-strong);border-radius:.3rem} 
   .classify-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:end;padding:.4rem 0 1rem}
   .classify-row label{display:grid;gap:.25rem;font-size:.69rem;font-weight:700}
