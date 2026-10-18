@@ -79,6 +79,7 @@
     const updated={...row,cards,parsed,audit,unresolved,issues,status:issues.length?'Needs review':'Prepared'};
     prepared=prepared.map(x=>identity(x)===identity(row)?updated:x);
     await saveSnapshot(updated);
+    return updated;
   }
   async function suggestAiCorrections(row) {
     const id=identity(row);
@@ -107,14 +108,45 @@
 }
     finally{aiBusy='';}
   }
+  // A common extraction fault pushes a printed team into subject and puts
+  // the Rookie designation in affiliation. Never silently accept half that fix.
+  function coordinateAiChanges(original, changes) {
+    const next = { ...changes };
+    const oldSubject = String(original.subject || '').trim();
+    const newAffiliation = String(next.affiliation || '').trim();
+    const currentAffiliation = String(original.affiliation || '').trim();
+    const teamWasDesignation = /^(rookie|rc|auto|autograph|legend|legends|relic)$/i.test(currentAffiliation);
+    if (teamWasDesignation && newAffiliation && newAffiliation !== currentAffiliation && !('subject' in next)) {
+      const atEnd = oldSubject.toLowerCase().endsWith(newAffiliation.toLowerCase());
+      if (atEnd) {
+        const trimmed = oldSubject.slice(0, oldSubject.length-newAffiliation.length).trim();
+        if (trimmed) next.subject = trimmed;
+      }
+    }
+    // A questionable boolean change must be reviewed independently. Do not
+    // automatically flip an already-true Rookie field when repairing columns.
+    return next;
+  }
   async function acceptAiSuggestion(row,proposal) {
     const id=identity(row);
-    const chosen=Object.fromEntries(Object.entries(proposal.changes).filter(([field])=>fieldEnabled(row,proposal,field)));
+    const selected=Object.fromEntries(Object.entries(proposal.changes).filter(([field])=>fieldEnabled(row,proposal,field)));
+    const original=row.cards?.[proposal.index];
+    if(!original){aiMessages={...aiMessages,[id]:'Card no longer exists. Reload its saved snapshot.'};return;}
+    const chosen=coordinateAiChanges(original,selected);
+    const proposedTeam=String(chosen.affiliation||'').trim();
+    if (proposedTeam && /^(rookie|rc|auto|autograph|legend|legends|relic)$/i.test(String(original.affiliation||'').trim()) &&
+        String(chosen.subject??original.subject??'').toLowerCase().endsWith(proposedTeam.toLowerCase())) {
+      aiMessages={...aiMessages,[id]:'Partial AI correction detected: team remains inside the player name. Edit both fields before saving.'};return;
+    }
     if(!Object.keys(chosen).length){aiMessages={...aiMessages,[id]:'Select at least one field or reject the proposal.'};return;}
     try {
-      await applyCard(row,proposal.index,chosen);
+      const updated=await applyCard(row,proposal.index,chosen);
+      // Clear the stale open edit form so reopening reads the corrected card.
+      const draftKey=id+':'+proposal.index;
+      manualDrafts=Object.fromEntries(Object.entries(manualDrafts).filter(([key])=>key!==draftKey));
       aiSuggestions={...aiSuggestions,[id]:proposalsFor(row).filter(p=>p.index!==proposal.index)};
-      aiMessages={...aiMessages,[id]:'Saved '+Object.keys(chosen).length+' approved change(s).'};
+      const saved=updated.cards[proposal.index];
+      aiMessages={...aiMessages,[id]:'Applied '+Object.keys(chosen).length+' approved field(s): '+saved.subject+' · '+saved.affiliation+'. Confirm the R2 snapshot is saved.'};
     }catch(error){aiMessages={...aiMessages,[id]:'Save failed: '+(error?.message||'Unknown error')};}
   }
   function rejectAiSuggestion(row,proposal) {
