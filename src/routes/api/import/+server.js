@@ -281,6 +281,30 @@ export async function POST({ request, platform }) {
 			}
 		}
 
+		// SETBOUND_FAST_IMPORT_V1
+		// Preload only the subjects needed for this checklist, in bounded chunks.
+		// This avoids SELECT per card while retaining the existing insert path.
+		const existingSubjectIds = new Map();
+		const subjectNames = [...new Set(body.cards.map(card => resolvedSubject(card).toLowerCase()))];
+		for (let offset = 0; offset < subjectNames.length; offset += 75) {
+			const names = subjectNames.slice(offset, offset + 75);
+			const found = await database.prepare(
+				`SELECT id, normalized_name FROM subjects WHERE normalized_name IN (${names.map(() => '?').join(',')})`
+			).bind(...names).all();
+			for (const subject of found.results || []) existingSubjectIds.set(subject.normalized_name, subject.id);
+		}
+		const aliasRows = await database.prepare(
+			'SELECT alias_normalized, canonical_affiliation_id, preserve_source_label FROM affiliation_franchise_aliases WHERE sport_id = ?'
+		).bind(Number(body.sportId)).all();
+		const aliasByKey = new Map((aliasRows.results || []).map(alias => [alias.alias_normalized, alias]));
+		const cardStatements = [];
+		const CARD_BATCH_SIZE = 60;
+		async function flushCardStatements() {
+			if (!cardStatements.length) return;
+			const results = await database.batch(cardStatements.splice(0));
+			if (results.some(result => result?.success === false)) throw new Error('Card insert batch failed.');
+		}
+
 		const checklistSlugs = uniqueChecklistSlugs(body.cards);
 		let sort = 0;
 
@@ -319,14 +343,9 @@ export async function POST({ request, platform }) {
 			const subjectKey = subjectName.toLowerCase();
 
 			if (!subjectIds.has(subjectKey)) {
-				let row = await database
-					.prepare(`
-						SELECT id
-						FROM subjects
-						WHERE normalized_name = ?
-					`)
-					.bind(subjectKey)
-					.first();
+				let row = existingSubjectIds.has(subjectKey)
+					? { id: existingSubjectIds.get(subjectKey) }
+					: null;
 
 				if (!row) {
 					row = await database
@@ -364,10 +383,7 @@ export async function POST({ request, platform }) {
 				const historicalName = String(card.affiliation || '').trim();
 				const aliasKey = franchiseLookupKey(historicalName);
 
-				const franchiseAlias = await database
-					.prepare('SELECT canonical_affiliation_id, preserve_source_label FROM affiliation_franchise_aliases WHERE sport_id = ? AND alias_normalized = ? LIMIT 1')
-					.bind(Number(body.sportId), aliasKey)
-					.first();
+				const franchiseAlias = aliasByKey.get(aliasKey) || null;
 
 				if (franchiseAlias?.canonical_affiliation_id) {
 					affiliationId = franchiseAlias.canonical_affiliation_id;
@@ -531,7 +547,7 @@ export async function POST({ request, platform }) {
 				}
 			}
 
-			await database
+			cardStatements.push(database
 				.prepare(`
 					INSERT OR IGNORE INTO cards
 						(
@@ -567,8 +583,11 @@ export async function POST({ request, platform }) {
 					card.confidence || null,
 					card.raw || null
 				)
-				.run();
+			);
+			if (cardStatements.length >= CARD_BATCH_SIZE) await flushCardStatements();
 		}
+
+		await flushCardStatements();
 
 		const checklistMeta =
 			body.checklistMeta || {};
