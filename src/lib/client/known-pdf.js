@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { parseToppsEntertainmentPdfText } from './topps-entertainment-pdf.js';
 
 function text(value) {
 	return String(value ?? '').replace(/\s+/g, ' ').trim();
@@ -476,32 +477,9 @@ export function parseKnownPdfText(source, layout) {
 		.filter(Boolean);
 	const cards = [];
 
-	if (layout === 'topps-simple-table-pdf') {
-		let section = 'Base';
-
-		for (const line of lines) {
-			if (/^(base|autographs?|inserts?)$/i.test(line)) {
-				section = line;
-				continue;
-			}
-
-			const match = line.match(/^(\d{1,4}[A-Z]?)\s+(.+)$/);
-
-			if (!match || /^card no/i.test(line)) continue;
-
-			const rookie = /\(RC\)/i.test(match[2]);
-
-			cards.push(
-				card({
-					number: match[1],
-					subject: match[2].replace(/\s*\(RC\)\s*/i, '').trim(),
-					checklist: section,
-					rookie,
-					raw: line
-				})
-			);
-		}
-	}
+	if (layout === 'topps-entertainment-pdf') {
+  return parseToppsEntertainmentPdfText(source);
+}
 
 	if (layout === 'topps-rugby-list-pdf') {
 		let section = 'Checklist';
