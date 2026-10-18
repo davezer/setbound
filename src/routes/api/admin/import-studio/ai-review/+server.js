@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 
-const ALLOWED = ['subject','affiliation','card_number','checklist_name','rookie','autograph','memorabilia'];
+const ALLOWED = [
+  'subject',
+  'affiliation',
+  'card_number',
+  'checklist_name'
+];
 const MODEL = 'gpt-4.1-mini';
 const MAX_ROWS = 25;
 

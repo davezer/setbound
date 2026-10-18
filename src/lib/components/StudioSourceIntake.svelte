@@ -129,7 +129,13 @@
   }
   async function acceptAiSuggestion(row,proposal) {
     const id=identity(row);
-    const selected=Object.fromEntries(Object.entries(proposal.changes).filter(([field])=>fieldEnabled(row,proposal,field)));
+    const selected = Object.fromEntries(
+  Object.entries(proposal.changes || {}).filter(
+    ([field]) =>
+      ['subject', 'affiliation', 'card_number', 'checklist_name'].includes(field) &&
+      fieldEnabled(row, proposal, field)
+  )
+);
     const original=row.cards?.[proposal.index];
     if(!original){aiMessages={...aiMessages,[id]:'Card no longer exists. Reload its saved snapshot.'};return;}
     const chosen=coordinateAiChanges(original,selected);
