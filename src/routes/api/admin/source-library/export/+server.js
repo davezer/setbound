@@ -6,8 +6,8 @@ import { extractCsv } from '$lib/server/source-table-extractor.js';
 const SOURCE = 'cardsmithsbreaks';
 const HOSTS = new Set(['cardsmithsbreaks.com', 'www.cardsmithsbreaks.com']);
 const MAX_HTML = 3_000_000;
-const MAX_ITEMS = 12;
-const MAX_ARCHIVE = 12_000_000;
+const MAX_ITEMS = 20;
+const MAX_ARCHIVE = 28_000_000;
 const enc = new TextEncoder();
 
 function permitted(value) {
@@ -79,6 +79,10 @@ export async function POST({ request, platform, fetch }) {
     } catch (e) { failures.push({ pageUrl, reason: e?.message || 'Could not generate CSV.' }); }
   }
   if (!files.length) return json({ message: 'No pages contained extractable card tables. Use their browser CSV buttons.', failures }, { status: 422 });
+  const headers = { 'cache-control': 'no-store', 'x-generated-urls': encodeURIComponent(JSON.stringify(report.map(item => item.pageUrl))) };
+  if (files.length === 1 && failures.length === 0) {
+    return new Response(files[0].bytes, { headers: { ...headers, 'content-type':'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="' + files[0].name + '"' } });
+  }
   files.push({ name: 'export-report.json', bytes: enc.encode(JSON.stringify({ report, failures }, null, 2)) });
-  return new Response(zip(files), { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="source-library-generated-csv.zip"', 'cache-control': 'no-store', 'x-generated-urls': encodeURIComponent(JSON.stringify(report.map(item => item.pageUrl))) } });
+  return new Response(zip(files), { headers: { ...headers, 'content-type':'application/zip', 'content-disposition':'attachment; filename="setbound-checklists.zip"' } });
 }
