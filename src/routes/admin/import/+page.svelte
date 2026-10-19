@@ -1,4 +1,5 @@
 <script>
+	import { parseSourceCsv } from '$lib/client/source-csv.js';
 	import { extractPdfText } from '$lib/client/pdf.js';
 	import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
 	import { parseChecklistText, groupByChecklist } from '$lib/client/checklist-parser.js';
@@ -53,6 +54,9 @@
 				text = await extractPdfText(file);
 				status = 'Parsing checklist…';
 				finishParse(parseChecklistText(text, data.affiliations));
+			} else if (ext === 'csv') {
+				sourceKind = 'CSV';
+				finishParse(await parseSourceCsv(file));
 			} else if (ext === 'xls' || ext === 'xlsx') {
 				sourceKind = ext.toUpperCase();
 				status = `Reading ${ext.toUpperCase()} workbook…`;
@@ -109,7 +113,11 @@
 		try {
 			const ext = extension(file.name);
 
-			if (ext === 'pdf') {
+			if (ext === 'csv') {
+				sourceKind = 'CSV';
+				status = 'Reading CSV…';
+				finishParse(await parseSourceCsv(file));
+			} else if (ext === 'pdf') {
 				sourceKind = 'PDF';
 				status = 'Reading PDF…';
 				text = await extractPdfText(file);
@@ -125,7 +133,7 @@
 				status = 'Parsing spreadsheet…';
 				finishParse(result);
 			} else {
-				throw new Error('Use a PDF, XLS, or XLSX checklist.');
+				throw new Error('Use a CSV, CSV, PDF, XLS, or XLSX checklist.');
 			}
 
 			status = '';
@@ -372,7 +380,7 @@
 		<input
 			id="checklist-file"
 			type="file"
-			accept=".pdf,.xls,.xlsx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+			accept=".csv,.pdf,.xls,.xlsx,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 			onchange={fileChanged}
 		/>
 
@@ -384,7 +392,7 @@
 				{:else if sourceFilename}
 					{sourceKind} loaded locally before import.
 				{:else}
-					PDF, XLS, or XLSX
+					CSV, PDF, XLS, or XLSX
 				{/if}
 			</span>
 		</label>
