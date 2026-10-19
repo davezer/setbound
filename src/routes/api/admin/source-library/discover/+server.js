@@ -106,8 +106,8 @@ export async function POST({ request, platform, fetch }) {
   if (!catalog && body.catalog !== 'homepage-parents') return json({message:'Invalid catalog.'},{status:400});
 
   if (body.catalog === 'homepage-parents') {
-    const year=Number(body.year);
-    if(!Number.isInteger(year)||year<2000||year>new Date().getFullYear()+1)
+    const year=String(body.year);
+    if(!['2026','2025','2024','2023','older'].includes(year))
       return json({message:'Choose a valid archive year.'},{status:400});
     try {
       const entries=await fetchArchiveYear(fetch,year);
