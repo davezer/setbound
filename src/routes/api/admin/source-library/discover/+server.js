@@ -111,7 +111,7 @@ export async function POST({ request, platform, fetch }) {
       return json({message:'Choose a valid archive year.'},{status:400});
     try {
       const entries=await fetchArchiveYear(fetch,year);
-      if(body.save!==true)return json({ok:true,preview:true,year,found:entries.length,samples:entries.slice(0,15)});
+      if(body.save!==true)return json({ok:true,preview:true,year,found:entries.length,samples:entries});
       const database=db(platform);
       let added=0,updated=0;
       for(let i=0;i<entries.length;i+=50){
