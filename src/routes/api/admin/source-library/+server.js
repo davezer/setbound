@@ -68,7 +68,7 @@ function titleFrom(html, url) {
 }
 async function cached(database) {
   const rows = await database.prepare(`SELECT entry_json, scanned_at FROM source_harvester_cache WHERE source = ? ORDER BY scanned_at DESC LIMIT 2500`).bind(SOURCE).all();
-  return (rows.results || []).flatMap(row => { try { return [{...JSON.parse(row.entry_json), sourceKind:sourceCategory(JSON.parse(row.entry_json).pageUrl).kind, scannedAt:row.scanned_at}]; } catch { return []; } });
+  return (rows.results || []).flatMap(row => { try { return [{...JSON.parse(row.entry_json), sourceKind:JSON.parse(row.entry_json).archiveParent===true?'candidate':sourceCategory(JSON.parse(row.entry_json).pageUrl).kind, scannedAt:row.scanned_at}]; } catch { return []; } });
 }
 export async function GET({ platform }) {
   return json({ ok:true, entries:await cached(db(platform)) });
@@ -83,12 +83,16 @@ export async function POST({request, platform, fetch}) {
     try {
       const {html, resolvedUrl} = await checklistResponse(fetch, url);
       const links = downloadLinks(html,resolvedUrl);
-      const category = sourceCategory(url);
+      const previousEntry = await database.prepare('SELECT entry_json FROM source_harvester_cache WHERE page_url=? AND source=?').bind(url,SOURCE).first();
+      let archiveParent=false, downloadedAt=null, archiveYear=null;
+      try{const old=JSON.parse(previousEntry?.entry_json||'{}');archiveParent=old.archiveParent===true;downloadedAt=old.downloadedAt||null;archiveYear=old.archiveYear||null;}catch{}
+      const rawCategory=sourceCategory(url);
+      const category=archiveParent ? {kind:'candidate',masterUrl:null} : rawCategory;
       const extraction = category.kind === 'candidate' ? extractCsv(html) : {ok:false,reason:'Format-specific source'};
       const extractionStatus = category.kind !== 'candidate' ? 'excluded' : extraction.ok ? 'ready' : 'unavailable';
       const verifiedMaster = extractionStatus === 'ready';
       const entry = {pageUrl:url,name:titleFrom(html,url),year:Number(String(url).match(/\b20\d{2}\b/)?.[0] || 0) || null,
-        resolvedUrl, csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
+        resolvedUrl, archiveParent, archiveYear, downloadedAt, csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
       const previous = await database.prepare('SELECT entry_json FROM source_harvester_cache WHERE page_url=? AND source=?').bind(url,SOURCE).first();
       if (previous) { try { const prior=JSON.parse(previous.entry_json); if (prior.downloadedAt) entry.downloadedAt=prior.downloadedAt; } catch {} }
       await database.prepare(`INSERT INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'),datetime('now')) ON CONFLICT(page_url) DO UPDATE SET source=excluded.source,year=excluded.year,title=excluded.title,entry_json=excluded.entry_json,scanned_at=datetime('now'),updated_at=datetime('now')`).bind(url,SOURCE,entry.year,entry.name,JSON.stringify(entry)).run();

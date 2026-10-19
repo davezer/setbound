@@ -69,7 +69,7 @@ export async function POST({ request, platform, fetch }) {
   for (const pageUrl of requested) {
     const entry = await getEntry(platform, pageUrl);
     if (!entry) { failures.push({ pageUrl, reason: 'Page has not been cached.' }); continue; }
-    if (sourceCategory(pageUrl).kind !== 'candidate' || entry.extractionStatus !== 'ready') { failures.push({pageUrl,reason:'Select an inspected and verified master checklist.'}); continue; }
+    if ((sourceCategory(pageUrl).kind !== 'candidate' && entry.archiveParent !== true) || entry.extractionStatus !== 'ready') { failures.push({pageUrl,reason:'Select an inspected and verified master checklist.'}); continue; }
     try {
       const file = await makeFile(fetch, pageUrl);
       if (size + file.bytes.length > MAX_ARCHIVE) throw new Error('Combined CSV size limit reached.');
