@@ -20,7 +20,9 @@ function allowedImageUrl(value) {
 	let url;
 	try { url = new URL(value); } catch { return null; }
 	if (url.protocol !== 'https:') return null;
-	return url.hostname === 'xcdn.checklistinsider.com' ? url : null;
+	const hosts=['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com'];
+	if(url.port || url.username || url.password) return null;
+	return hosts.some(host=>url.hostname===host||url.hostname.endsWith('.'+host))?url:null;
 }
 
 function extensionForType(type) {
@@ -89,9 +91,9 @@ export async function POST({ platform, request, fetch }) {
 		let imageKey = product.image_key || null;
 		if (applyImage) {
 			const remote = allowedImageUrl(imageUrl);
-			if (!remote) return json({ message: 'Only Checklist Insider CDN images can be imported.' }, { status: 400 });
+			if (!remote) return json({ message: 'Image host is not on the approved manufacturer/CDN allowlist.' }, { status: 400 });
 
-			const response = await fetch(remote.href, { headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'user-agent': 'Mozilla/5.0 Setbound/1.0' } });
+			const response = await fetch(remote.href, { redirect: 'manual', headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'user-agent': 'Mozilla/5.0 Setbound/1.0' } });
 			if (!response.ok) return json({ message: `Product image download failed with HTTP ${response.status}.` }, { status: 502 });
 
 			const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();

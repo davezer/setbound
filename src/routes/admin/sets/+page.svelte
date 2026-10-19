@@ -302,43 +302,7 @@
 		<button class="reset" onclick={resetFilters}>Clear</button>
 	</div>
 
-	<div class="filter-summary backfill-summary">
-		<div>
-			<strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span>
-			<span class="topps-ready-summary">· {toppsReadyCount.toLocaleString()} Topps backfill ready</span>
-		</div>
-		<button class="backfill" type="button" onclick={backfillToppsVisible} disabled={backfillBusy}>
-			{backfillBusy ? 'Backfilling Topps…' : 'Backfill Topps metadata'}
-		</button>
-		{#if lastFailedProductIds.length}
-			<button class="retry-failed" type="button" onclick={retryFailedTopps} disabled={backfillBusy}>Retry {lastFailedProductIds.length} failed only</button>
-		{/if}
-	</div>
-
-	{#if backfillProgress}
-		<div class="backfill-panel">
-			<div><strong>{backfillProgress.processed}</strong> / {backfillProgress.total} checked</div>
-			<div>{backfillProgress.harvested} harvested · {backfillProgress.cached} cached · {backfillProgress.unmatched} unmatched · {backfillProgress.failed} failed</div>
-		</div>
-	{/if}
-
-	{#if backfillIssues.length}
-		<details class="backfill-issues">
-			<summary>Review {backfillIssues.length} unmatched / failed result{backfillIssues.length === 1 ? '' : 's'}</summary>
-			<div class="issue-list">
-				{#each backfillIssues.slice(0, 40) as issue}
-					<div class="issue-row">
-						<strong>{issue.product}</strong>
-						<span>{issue.status}: {issue.reason}</span>
-						{#if issue.candidate}
-							<small>Best launch: {issue.candidate.product} · score {issue.candidate.score}{issue.candidate.coverage ? ` · ${issue.candidate.coverage}% coverage` : ''}</small>
-						{/if}
-					</div>
-				{/each}
-				{#if backfillIssues.length > 40}<small>Showing first 40 results.</small>{/if}
-			</div>
-		</details>
-	{/if}
+	<div class="filter-summary backfill-summary"><div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div><span class="topps-ready-summary">Research products individually before saving details.</span></div>
 
 	<div class="list">
 		{#each visible as product (product.id)}
@@ -390,8 +354,8 @@
 								: 'Go live'}
 					</button>
 
-					<button class:topps-enrich={product.has_topps_backfill} class="edit" type="button" onclick={() => enrichmentProduct = product}>
-						{product.has_product_details ? 'Review enrichment' : (product.has_topps_backfill ? 'Enrich with Topps' : 'Enrich details')}
+					<button class="edit" type="button" onclick={() => enrichmentProduct = product}>
+						{'Research product'}
 					</button>
 					<a class="edit" href={`/admin/sets/preview/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
