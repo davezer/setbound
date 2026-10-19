@@ -100,7 +100,7 @@ export async function POST({request, platform, fetch}) {
         // Preserve a previously successful extraction if a later network request fails.
         if(prior.extractionStatus!=='ready'){
           const entry={...prior,extractionStatus:'attention',verifiedMaster:false,extractionReason:reason,checkedAt:new Date().toISOString()};
-          await database.prepare('UPDATE source_harvester_cache SET entry_json = ?, updated_at = datetime('now') WHERE page_url = ? AND source = ?').bind(JSON.stringify(entry),url,SOURCE).run();
+        await database.prepare("UPDATE source_harvester_cache SET entry_json = ?, updated_at = datetime('now') WHERE page_url = ? AND source = ?").bind(JSON.stringify(entry),url,SOURCE).run();
         }
       }
       results.push({pageUrl:url,ok:false,extractionStatus:'attention',error:reason});
