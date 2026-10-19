@@ -1,6 +1,6 @@
 <script>
  import { onMount } from 'svelte';
- let discoveryQueue = $state([]), discoveryBusy = $state(false), discoveredPages = $state(0), newPages = $state(0), discoveryScanned = $state(0);
+ let discoveryNextPage = $state(1), discoveryTotalPages = $state(180), discoveryBusy = $state(false), discoveredPages = $state(0), newPages = $state(0), discoveryScanned = $state(0);
  let links = $state('https://cardsmithsbreaks.com/full-checklist/2026-topps-holiday-baseball/');
  let entries = $state([]), chosen = $state([]), error = $state(''), note = $state(''), busy = $state(false), search = $state('');
  let showing = $derived(entries.filter(x=>`${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
@@ -9,22 +9,23 @@
    if (discoveryBusy) return;
    discoveryBusy = true; error = ''; note = '';
    try {
-     if (reset) { discoveryQueue = []; discoveredPages = 0; newPages = 0; discoveryScanned = 0; }
-     const cursor = reset || !discoveryQueue.length ? null : discoveryQueue[0];
-     const r = await fetch('/api/admin/source-library/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cursor }) });
+     const next = reset ? 1 : discoveryNextPage;
+     if (!next) { note = 'Catalog scan is complete.'; return; }
+     const r = await fetch('/api/admin/source-library/discover', {
+       method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ reset, nextPage:next, totalPages:discoveryTotalPages })
+     });
      const j = await r.json();
      if (!r.ok) throw new Error(j.message || 'Catalog discovery failed.');
-     if (j.kind === 'index') {
-       discoveryQueue = [...new Set([...(reset ? [] : discoveryQueue.slice(1)), ...(j.sitemaps || [])])];
-       note = `Catalog index loaded. ${discoveryQueue.length} sitemap(s) queued. Click Scan next batch to continue.`;
-     } else {
-       discoveryQueue = cursor ? discoveryQueue.slice(1) : [];
-       discoveredPages += j.pages || 0; newPages += j.added || 0; discoveryScanned += 1;
-       note = `Scanned ${discoveryScanned} sitemap(s): ${discoveredPages} checklist link(s), ${newPages} newly cached. ${discoveryQueue.length} sitemap(s) remain.`;
-       const list = await fetch('/api/admin/source-library');
-       if (list.ok) entries = (await list.json()).entries || [];
-     }
-   } catch(e) { error = e?.message || 'Discovery failed.'; }
+     if (reset) { discoveredPages=0; newPages=0; discoveryScanned=0; }
+     discoveryScanned += j.pagesScanned || 0;
+     discoveredPages += j.links || 0;
+     newPages += j.added || 0;
+     discoveryTotalPages = j.totalPages || discoveryTotalPages;
+     discoveryNextPage = j.nextPage;
+     note = 'Scanned ' + discoveryScanned + ' archive pages · ' + discoveredPages + ' links seen · ' + newPages + ' new entries. ' + (discoveryNextPage ? 'Next page: '+discoveryNextPage+'.' : 'Archive scan complete.');
+     const list = await fetch('/api/admin/source-library');
+     if (list.ok) entries = (await list.json()).entries || [];
+   } catch(e) { error = e?.message || 'Catalog discovery failed. You can retry the same page.'; }
    finally { discoveryBusy = false; }
  }
  async function inspectVisible(){
@@ -55,7 +56,7 @@
 <svelte:head><title>Checklist sources — Setbound</title></svelte:head>
 <section class="shell page">
  <div class="heading"><div><div class="eyebrow">Admin / Harvester pilot</div><h1>Checklist sources</h1><p>Cache checklist pages and download directly available original CSV/PDF files. No AI, parsing or publishing.</p></div><a href="/admin/import-studio">Open manual Import Studio ↗</a></div>
-<div class="panel discovery"><strong>Catalog discovery</strong><p>Discover releases from published sitemap indexes. One index is processed per click and discoveries are saved without overwriting inspected sources.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Discovering…' : 'Discover catalog'}</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryQueue.length}>Scan next batch ({discoveryQueue.length})</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !showing.some(x=>x.discoveredOnly)}>Inspect next 12 visible ({showing.filter(x=>x.discoveredOnly).length})</button></div><small>{discoveredPages} links scanned · {newPages} new · {discoveryQueue.length} pending sitemap(s). Newly discovered links must be inspected before generating CSV.</small></div>
+<div class="panel discovery"><strong>Catalog discovery</strong><p>Find releases from the published archive, three pages per scan. Results are cached as uninspected sources and existing reviews are preserved.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Scanning…' : 'Start archive scan'}</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryNextPage}>Scan next 3 pages {discoveryNextPage ? '(' + discoveryNextPage + ')' : ''}</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !showing.some(x=>x.discoveredOnly)}>Inspect next 12 visible ({showing.filter(x=>x.discoveredOnly).length})</button></div><small>{discoveryScanned} archive pages scanned · {discoveredPages} links seen · {newPages} new entries · {discoveryNextPage ? 'next page '+discoveryNextPage : 'scan complete'}. Discovered links must be inspected before CSV export.</small></div>
  <div class="panel"><label for="urls">Checklist page URLs (up to 12 per scan)</label><textarea id="urls" bind:value={links} rows="4" placeholder="Paste one source checklist URL per line"></textarea><div class="tools"><button onclick={scan} disabled={busy}>{busy?'Working…':'Inspect & cache pages'}</button><span>Pages with JavaScript-generated download buttons may not expose direct file URLs. Those stay marked unavailable.</span></div></div>
  {#if error}<p class="error" role="alert">{error}</p>{/if}{#if note}<p class="note" role="status">{note}</p>{/if}
  <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><button class="secondary" type="button" onclick={generateCsvZip} disabled={busy||!chosen.some(x=>x.endsWith('|csv-generated'))}>Generate selected CSV ({chosen.filter(x=>x.endsWith('|csv-generated')).length})</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>
