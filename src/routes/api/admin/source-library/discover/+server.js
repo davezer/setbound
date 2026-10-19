@@ -6,6 +6,7 @@ import { sourceCategory } from '$lib/server/master-source.js';
 const HOST = 'cardsmithsbreaks.com';
 const SOURCE = 'cardsmithsbreaks';
 const ROOT = `https://${HOST}`;
+const ARCHIVES = { past: 'past-releases', upcoming: 'upcoming-releases' };
 const PAGE_BATCH = 3;
 const MAX_PAGE = 180;
 const MAX_HTML = 2_000_000;
@@ -42,8 +43,8 @@ function discoverLinks(html, base) {
   }
   return [...found.values()];
 }
-async function getPage(fetchFn, page) {
-  const url = `${ROOT}/past-releases/?product-page=${page}`;
+async function getPage(fetchFn, page, catalog) {
+  const url = `${ROOT}/${ARCHIVES[catalog]}/?product-page=${page}`;
   const response = await fetchFn(url, { redirect: 'manual', headers: { accept: 'text/html' } });
   if (!response.ok) throw new Error(`Catalog page ${page}: HTTP ${response.status}`);
   if (!String(response.headers.get('content-type') || '').toLowerCase().includes('text/html')) throw new Error(`Catalog page ${page}: not HTML`);
@@ -52,13 +53,13 @@ async function getPage(fetchFn, page) {
   if (html.length > MAX_HTML) throw new Error(`Catalog page ${page}: too large`);
   return { url, html };
 }
-async function save(database, entries) {
+async function save(database, entries, catalog) {
   let inserted = 0;
   for (let n = 0; n < entries.length; n += WRITE_CHUNK) {
     const statements = entries.slice(n, n + WRITE_CHUNK).map(({pageUrl, name}) => {
       const year = Number(new URL(pageUrl).pathname.match(/\b20\d{2}\b/)?.[0] || 0) || null;
       const category=sourceCategory(pageUrl);
-      const entry = {pageUrl, name, year, csvUrl: null, pdfUrl: null, csvButton: false, pdfButton: false, discoveredOnly: true, sourceKind:category.kind, masterUrl:category.masterUrl||null, verifiedMaster:false};
+      const entry = {pageUrl, name, year, csvUrl: null, pdfUrl: null, csvButton: false, pdfButton: false, discoveredOnly: true, sourceKind:category.kind, masterUrl:category.masterUrl||null, verifiedMaster:false, discoveredIn:catalog};
       return database.prepare(`INSERT OR IGNORE INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`)
         .bind(pageUrl, SOURCE, year, name, JSON.stringify(entry));
     });
@@ -69,6 +70,8 @@ async function save(database, entries) {
 }
 export async function POST({ request, platform, fetch }) {
   const body = await request.json().catch(() => ({}));
+  const catalog = body.catalog === 'upcoming' ? 'upcoming' : body.catalog === 'past' || body.catalog == null ? 'past' : null;
+  if (!catalog) return json({message:'Invalid catalog.'},{status:400});
   const first = body.reset === true ? 1 : Number(body.nextPage);
   if (!Number.isSafeInteger(first) || first < 1 || first > MAX_PAGE) return json({message:'Invalid archive page.'},{status:400});
   const database = db(platform);
@@ -79,7 +82,7 @@ export async function POST({ request, platform, fetch }) {
   let lastPage = first - 1;
   for (let page = first; page <= Math.min(totalPages, first + batchSize - 1); page++) {
     try {
-      const { url, html } = await getPage(fetch, page);
+      const { url, html } = await getPage(fetch, page, catalog);
       if (page === 1) {
         const match = html.match(/Showing\s+\d+[\s\S]{0,200}?of\s+([\d,]+)\s+results/i);
         if (match) totalPages = Math.min(MAX_PAGE, Math.max(1, Math.ceil(Number(match[1].replace(/,/g, '')) / 12)));
@@ -97,7 +100,7 @@ export async function POST({ request, platform, fetch }) {
       return json({message:e?.message || 'Could not inspect catalog page.',page,checked:pageResults},{status:502});
     }
   }
-  const added = await save(database, [...seen.values()]);
-  return json({ok:true,kind:'archive',pagesScanned:pageResults.length,links:seen.size,added,existing:seen.size-added,
+  const added = await save(database, [...seen.values()], catalog);
+  return json({ok:true,kind:'archive',catalog,pagesScanned:pageResults.length,links:seen.size,added,existing:seen.size-added,
     nextPage:lastPage < totalPages ? lastPage+1 : null,totalPages,details:pageResults});
 }

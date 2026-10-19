@@ -1,6 +1,7 @@
 <script>
  import { onMount } from 'svelte';
  let discoveryNextPage = $state(1), discoveryTotalPages = $state(180), discoveryBusy = $state(false), discoveredPages = $state(0), newPages = $state(0), discoveryScanned = $state(0);
+ let upcomingNextPage = $state(1), upcomingTotalPages = $state(10), upcomingScanned = $state(0), upcomingAdded = $state(0);
  let links = $state('');
  let entries = $state([]), chosen = $state([]), error = $state(''), note = $state(''), busy = $state(false), search = $state('');
  let statusFilter = $state('ready');
@@ -9,8 +10,8 @@
  let generatedSelected = $derived(chosen.filter(x=>x.endsWith('|csv-generated') && entries.some(e=>e.pageUrl===x.slice(0,-14) && e.sourceKind==='candidate' && e.extractionStatus==='ready')));
  let showing = $derived(entries.filter(x => x.sourceKind !== 'format' && (statusFilter === 'all' || (statusFilter === 'ready' && x.extractionStatus === 'ready') || (statusFilter === 'pending' && !x.extractionStatus) || (statusFilter === 'unavailable' && x.extractionStatus === 'unavailable')) && `${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
  let masterCount = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='ready').length);
- let unavailable = $derived(entries.filter(x=>x.sourceKind!=='format' && x.extractionStatus==='unavailable').length);
- let awaiting = $derived(entries.filter(x=>x.sourceKind!=='format' && !x.extractionStatus).length);
+ let unavailable = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='unavailable').length);
+ let awaiting = $derived(entries.filter(x=>x.sourceKind==='candidate' && !x.extractionStatus).length);
  let excluded = $derived(entries.filter(x=>x.sourceKind==='format').length);
  onMount(async()=>{try{const r=await fetch('/api/admin/source-library');const j=await r.json();entries=j.entries||[];}catch{}});
  async function refreshSources(){
@@ -27,7 +28,7 @@
    try{
      while(checked<20 && discoveryNextPage && !stopRequested){
        const left=20-checked;
-       const r=await fetch('/api/admin/source-library/discover',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({nextPage:discoveryNextPage,totalPages:discoveryTotalPages,limit:Math.min(3,left)})});
+       const r=await fetch('/api/admin/source-library/discover',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({catalog:'past',nextPage:discoveryNextPage,totalPages:discoveryTotalPages,limit:Math.min(3,left)})});
        const j=await r.json();if(!r.ok)throw Error(j.message||'Catalog scan failed.');
        const n=j.pagesScanned||0;if(!n)throw Error('No pages returned. Stopped to prevent repeating the same page.');
        checked+=n;added+=j.added||0;discoveryScanned+=n;discoveredPages+=j.links||0;newPages+=j.added||0;
@@ -84,6 +85,32 @@
    }catch(e){error=(e?.message||'Download failed')+'. '+done+' selected sources already downloaded.';}
    finally{bulkBusy=false;stopRequested=false;}
  }
+ async function scanUpcoming(reset = false) {
+   if (bulkBusy || busy || discoveryBusy) return;
+   bulkBusy = true; stopRequested = false; error = ''; note = '';
+   let count = 0, added = 0;
+   try {
+     if (reset) { upcomingNextPage = 1; upcomingScanned = 0; upcomingAdded = 0; }
+     while (count < 12 && upcomingNextPage && !stopRequested) {
+       const r = await fetch('/api/admin/source-library/discover', {
+         method: 'POST', headers: {'content-type':'application/json'},
+         body: JSON.stringify({catalog:'upcoming', nextPage:upcomingNextPage, totalPages:upcomingTotalPages, limit:3})
+       });
+       const j = await r.json();
+       if (!r.ok) throw Error(j.message || 'Upcoming archive scan failed.');
+       const n = j.pagesScanned || 0;
+       if (!n) throw Error('No archive pages returned.');
+       count += n; added += j.added || 0;
+       upcomingScanned += n; upcomingAdded += j.added || 0;
+       upcomingNextPage = j.nextPage; upcomingTotalPages = j.totalPages || upcomingTotalPages;
+       bulkProgress = 'Upcoming: ' + upcomingScanned + ' pages scanned · ' + upcomingAdded + ' new sources';
+       if (upcomingNextPage && count < 12 && !stopRequested) await sleep(350);
+     }
+     await refreshSources();
+     note = 'Upcoming archive: ' + count + ' page(s) checked, ' + added + ' new sources. No checklists imported or published.';
+   } catch (e) { error = e?.message || 'Upcoming discovery failed. Retry from the current page.'; }
+   finally { bulkBusy = false; stopRequested = false; }
+ }
  async function catalogStep(reset = false) {
    if (discoveryBusy) return;
    discoveryBusy = true; error = ''; note = '';
@@ -91,7 +118,7 @@
      const next = reset ? 1 : discoveryNextPage;
      if (!next) { note = 'Catalog scan is complete.'; return; }
      const r = await fetch('/api/admin/source-library/discover', {
-       method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ reset, nextPage:next, totalPages:discoveryTotalPages })
+       method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ catalog:'past', reset, nextPage:next, totalPages:discoveryTotalPages })
      });
      const j = await r.json();
      if (!r.ok) throw new Error(j.message || 'Catalog discovery failed.');
@@ -109,7 +136,7 @@
  }
  async function inspectVisible(){
    if(busy)return;
-   const urls = entries.filter(x => x.sourceKind !== 'format' && !x.extractionStatus).slice(0,12).map(x => x.pageUrl);
+   const urls = entries.filter(x => x.sourceKind==='candidate' && !x.extractionStatus).slice(0,12).map(x => x.pageUrl);
    if (!urls.length) { note = 'No uninspected sources in the current filter.'; return; }
    busy=true;error='';note='';
    try { const r=await fetch('/api/admin/source-library',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls})}); const j=await r.json(); if(!r.ok)throw new Error(j.message||'Inspection failed'); entries=j.entries||[]; const failures=(j.results||[]).filter(x=>!x.ok); const ready=(j.results||[]).filter(x=>x.extractionStatus==='ready').length; note=`Checked ${urls.length} source(s): ${ready} extractable, ${(j.results||[]).filter(x=>x.extractionStatus==='unavailable').length} without usable card tables, ${failures.length} request failures.`; if(failures.length)error=failures.map(x=>x.error).join(' · '); } catch(e) { error=e?.message||'Inspection failed'; } finally { busy=false; }
@@ -143,8 +170,9 @@
 <svelte:head><title>Checklist sources — Setbound</title></svelte:head>
 <section class="shell page">
  <div class="heading"><div><div class="eyebrow">Admin / Harvester pilot</div><h1>Checklist sources</h1><p>Cache checklist pages and download directly available original CSV/PDF files. No AI, parsing or publishing.</p></div><a href="/admin/import-studio">Open manual Import Studio ↗</a></div>
-<div class="panel discovery"><strong>Catalog discovery</strong><p>Find releases from the published archive, three pages per scan. Results are cached as uninspected sources and existing reviews are preserved.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Scanning…' : 'Start archive scan'}</button><button type="button" class="secondary" onclick={scanTwenty} disabled={busy || discoveryBusy || bulkBusy || !discoveryNextPage}>Scan next 20 pages</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryNextPage}>Scan next 3 pages {discoveryNextPage ? '(' + discoveryNextPage + ')' : ''}</button><button type="button" class="secondary" onclick={inspectSixty} disabled={busy || discoveryBusy || bulkBusy || !awaiting}>Inspect next 60</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !entries.some(x=>x.sourceKind!=='format' && !x.extractionStatus)}>Inspect next 12 visible ({awaiting})</button></div><small>{discoveryScanned} archive pages scanned · {discoveredPages} links seen · {newPages} new entries · {discoveryNextPage ? 'next page '+discoveryNextPage : 'scan complete'}. Discovered links must be inspected before CSV export.</small></div>
+<div class="panel discovery"><strong>Catalog discovery</strong><p>Find releases from the published archive, three pages per scan. Results are cached as uninspected sources and existing reviews are preserved.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Scanning…' : 'Start archive scan'}</button><button type="button" class="secondary" onclick={scanTwenty} disabled={busy || discoveryBusy || bulkBusy || !discoveryNextPage}>Scan next 20 pages</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryNextPage}>Scan next 3 pages {discoveryNextPage ? '(' + discoveryNextPage + ')' : ''}</button><button type="button" class="secondary" onclick={inspectSixty} disabled={busy || discoveryBusy || bulkBusy || !awaiting}>Inspect next 60</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !entries.some(x=>x.sourceKind==='candidate' && !x.extractionStatus)}>Inspect next 12 visible ({awaiting})</button></div><small>{discoveryScanned} archive pages scanned · {discoveredPages} links seen · {newPages} new entries · {discoveryNextPage ? 'next page '+discoveryNextPage : 'scan complete'}. Discovered links must be inspected before CSV export.</small></div>
  {#if bulkBusy || bulkProgress}<div class="tools"><small role="status">{bulkProgress || 'Working…'}</small>{#if bulkBusy}<button type="button" class="secondary" onclick={stopBulk}>Stop after current batch</button>{/if}</div>{/if}
+ <div class="panel discovery"><strong>Upcoming releases</strong><p>Discover announced releases separately. Listings without a usable checklist stay in the cache for later review; nothing is imported or published.</p><div class="tools"><button type="button" class="secondary" onclick={() => scanUpcoming(true)} disabled={busy || discoveryBusy || bulkBusy}>Start upcoming scan</button><button type="button" class="secondary" onclick={() => scanUpcoming(false)} disabled={busy || discoveryBusy || bulkBusy || !upcomingNextPage}>Continue upcoming scan {upcomingNextPage ? '(page '+upcomingNextPage+')' : ''}</button></div><small>{upcomingScanned} upcoming pages scanned · {upcomingAdded} new sources · {upcomingNextPage ? 'next page '+upcomingNextPage : 'scan complete'}. Discovery alone does not verify a checklist.</small></div>
  <div class="panel"><label for="urls">Checklist page URLs (up to 12 per scan)</label><textarea id="urls" bind:value={links} rows="4" placeholder="Paste one source checklist URL per line"></textarea><div class="tools"><button onclick={scan} disabled={busy}>{busy?'Working…':'Inspect & cache pages'}</button><span>Pages with JavaScript-generated download buttons may not expose direct file URLs. Those stay marked unavailable.</span></div></div>
  {#if error}<p class="error" role="alert">{error}</p>{/if}{#if note}<p class="note" role="status">{note}</p>{/if}
  <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><button class="secondary" type="button" onclick={selectReadyFifty} disabled={busy || bulkBusy || !readyVisible.length}>Select up to 50 CSV-ready</button><button class="secondary" type="button" onclick={downloadFifty} disabled={busy || bulkBusy || !generatedSelected.length}>Download selected CSVs ({Math.min(50,generatedSelected.length)})</button><button class="secondary" type="button" onclick={generateCsvZip} disabled={busy || bulkBusy || !chosen.some(x=>x.endsWith('|csv-generated'))}>Generate first 12 CSVs ({chosen.filter(x=>x.endsWith('|csv-generated')).length} selected)</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>

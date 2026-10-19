@@ -1,5 +1,5 @@
 // Explicit configuration suffixes only. Never trim generic words out of legitimate product names.
-const FORMAT_SUFFIX = /-(?:mega-box|jumbo-box|value-box(?:-(?:ea|se|cee))?|hanger-box|blaster-box|hobby-box|hobby-tins?|advent-calendar|retail-box|fat-packs?|breaker-box|breaker-delight|collector-box|super-box|tins?)(?:-[a-z]{2,3})?$/i;
+const FORMAT_SUFFIX = /-(?:mega-box|jumbo-box|jumbo|value-box|hanger-box|blaster-box|hobby-box|hobby-tins?|advent-calendar|retail-box|fat-packs?|breaker-box|breaker-delight|delight-box|collector-box|super-box|tins?|fanatics-box|fanatics-value-box|japan-exclusive-box|exclusive-box|choice-box|breakaway-box|hobby-preferred-box|preferred-box|fotl-box|first-off-the-line-box|first-day-issue-box|fdi-box|lunar-box|club-super-box|booster-box|elite-trainer-box)(?:-(?:ea|se|cee|[a-z]{2,3}))?$/i;
 const ALLOWED = new Set(['cardsmithsbreaks.com','www.cardsmithsbreaks.com']);
 export function sourceCategory(input) {
   try {
