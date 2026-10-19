@@ -8,6 +8,33 @@ const SOURCE = 'cardsmithsbreaks';
 const MAX_PAGES = 12;
 const MAX_FILE = 12 * 1024 * 1024;
 const normalize = (value) => String(value || '').trim();
+
+// Follow only validated HTTPS checklist redirects on the same approved host.
+async function checklistResponse(fetchFn, start) {
+  let current = start;
+  const seen = new Set();
+  for (let attempt=0; attempt<4; attempt++) {
+    if (!siteUrl(current) || seen.has(current)) throw new Error('Redirect destination is not an approved checklist URL.');
+    seen.add(current);
+    const response = await fetchFn(current, { redirect:'manual', headers:{ accept:'text/html', 'user-agent':'Setbound checklist catalog/1.0' } });
+    if ([301,302,303,307,308].includes(response.status)) {
+      const location=response.headers.get('location');
+      if (!location) throw new Error('Redirect did not include a destination.');
+      const destination=new URL(location,current).href;
+      if (!siteUrl(destination)) throw new Error('Redirect destination is outside approved checklist pages.');
+      current=destination;
+      continue;
+    }
+    if (!response.ok || !String(response.headers.get('content-type')||'').toLowerCase().includes('text/html'))
+      throw new Error('Page returned HTTP '+response.status+' or non-HTML content.');
+    const declaredLength=Number(response.headers.get('content-length')||0);
+    if(declaredLength>1_200_000)throw new Error('Source HTML exceeds the inspection limit.');
+    const html=await response.text();
+    if(html.length>1_200_000)throw new Error('Source HTML exceeds the inspection limit.');
+    return { html, resolvedUrl:current };
+  }
+  throw new Error('Too many checklist redirects.');
+}
 function siteUrl(raw) {
   try {
     const u = new URL(raw);
@@ -54,19 +81,30 @@ export async function POST({request, platform, fetch}) {
   const results = [];
   for (const url of urls) {
     try {
-      const response = await fetch(url, {redirect:'manual', headers:{accept:'text/html', 'user-agent':'Setbound checklist catalog/1.0'}});
-      if (!response.ok || !String(response.headers.get('content-type') || '').includes('text/html')) throw new Error(`Page returned HTTP ${response.status} or non-HTML content.`);
-      const html = (await response.text()).slice(0, 1200000);
-      const links = downloadLinks(html,url);
+      const {html, resolvedUrl} = await checklistResponse(fetch, url);
+      const links = downloadLinks(html,resolvedUrl);
       const category = sourceCategory(url);
       const extraction = category.kind === 'candidate' ? extractCsv(html) : {ok:false,reason:'Format-specific source'};
       const extractionStatus = category.kind !== 'candidate' ? 'excluded' : extraction.ok ? 'ready' : 'unavailable';
       const verifiedMaster = extractionStatus === 'ready';
       const entry = {pageUrl:url,name:titleFrom(html,url),year:Number(String(url).match(/\b20\d{2}\b/)?.[0] || 0) || null,
-        csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
+        resolvedUrl, csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
       await database.prepare(`INSERT INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'),datetime('now')) ON CONFLICT(page_url) DO UPDATE SET source=excluded.source,year=excluded.year,title=excluded.title,entry_json=excluded.entry_json,scanned_at=datetime('now'),updated_at=datetime('now')`).bind(url,SOURCE,entry.year,entry.name,JSON.stringify(entry)).run();
       results.push({ ...entry, ok:true });
-    } catch(e) { results.push({pageUrl:url,ok:false,error:e?.message || 'Page could not be inspected.'}); }
+    } catch(e) {
+      const reason=e?.message || 'Page could not be inspected.';
+      const old=await database.prepare('SELECT entry_json FROM source_harvester_cache WHERE page_url = ? AND source = ?').bind(url,SOURCE).first();
+      if(old){
+        let prior;
+        try{prior=JSON.parse(old.entry_json);}catch{prior={pageUrl:url,name:new URL(url).pathname.split('/').filter(Boolean).at(-1)};}
+        // Preserve a previously successful extraction if a later network request fails.
+        if(prior.extractionStatus!=='ready'){
+          const entry={...prior,extractionStatus:'attention',verifiedMaster:false,extractionReason:reason,checkedAt:new Date().toISOString()};
+          await database.prepare('UPDATE source_harvester_cache SET entry_json = ?, updated_at = datetime('now') WHERE page_url = ? AND source = ?').bind(JSON.stringify(entry),url,SOURCE).run();
+        }
+      }
+      results.push({pageUrl:url,ok:false,extractionStatus:'attention',error:reason});
+    }
   }
   return json({ok:true,results,entries:await cached(database)});
 }
