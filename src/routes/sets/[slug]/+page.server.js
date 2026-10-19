@@ -3,6 +3,8 @@ import { db } from '$lib/server/db';
 import { productDisplayName } from '$lib/product-display.js';
 
 export async function load({ platform, params, locals, url }) {
+	const preview = url.pathname.startsWith('/admin/sets/preview/');
+	if (preview && !locals.isAdmin) throw error(403, 'Admin access required');
 	const database = db(platform);
 
 	const product = await database.prepare(`
@@ -18,8 +20,8 @@ export async function load({ platform, params, locals, url }) {
 		JOIN sports s ON s.id = p.sport_id
 		LEFT JOIN sources src ON src.id = p.primary_source_id
 		WHERE p.slug = ?
-		  AND p.published = 1
-	`).bind(params.slug).first();
+		  AND (p.published = 1 OR ? = 1)
+	`).bind(params.slug, preview ? 1 : 0).first();
 
 	if (!product) throw error(404, 'Set not found');
 
@@ -27,11 +29,11 @@ export async function load({ platform, params, locals, url }) {
 	// name to the public page without a duplicated year prefix.
 	product.name = productDisplayName(product.name, product.year);
 
-	const collectionJoin = locals.user
+	const collectionJoin = !preview && locals.user
 		? `LEFT JOIN collection_cards uc ON uc.card_id = c.id AND uc.user_id = ${Number(locals.user.id)}`
 		: '';
 
-	const collectionSelect = locals.user
+	const collectionSelect = !preview && locals.user
 		? ', uc.status AS collection_status'
 		: ', NULL AS collection_status';
 
@@ -148,6 +150,7 @@ export async function load({ platform, params, locals, url }) {
 	}
 
 	return {
+		preview,
 		product,
 		formats: formats.results || [],
 		oddsSource: oddsSource || null,

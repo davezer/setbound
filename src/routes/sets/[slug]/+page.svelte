@@ -39,7 +39,7 @@
 	let saving = $state(new Set());
 
 	$effect(() => {
-		if (!data.user) guestOwned = getOwned();
+		if (!data.preview && !data.user) guestOwned = getOwned();
 	});
 
 	const teams = $derived([
@@ -51,6 +51,7 @@
 	const filteredChecklists = $derived(data.checklists.filter((checklist) => !checklistQuery || checklist.name.toLowerCase().includes(checklistQuery.toLowerCase())));
 
 	function cardStatus(card) {
+		if (data.preview) return null;
 		if (data.user) return statuses.get(String(card.id)) || null;
 		return guestOwned.has(String(card.id)) ? 'owned' : null;
 	}
@@ -109,6 +110,7 @@
 	}
 
 	async function setStatus(cardId, nextStatus) {
+		if (data.preview) return;
 		const key = String(cardId);
 
 		if (!data.user) {
@@ -152,10 +154,10 @@
 </script>
 
 <svelte:head>
-	<title>{seoTitle}</title>
+	<title>{data.preview ? 'Draft preview | ' + seoTitle : seoTitle}</title>
 	<meta name="description" content={seoDescription} />
-	<meta name="robots" content="index,follow" />
-	<link rel="canonical" href={canonicalUrl} />
+	<meta name="robots" content={data.preview ? "noindex,nofollow,noarchive" : "index,follow"} />
+	{#if !data.preview}<link rel="canonical" href={canonicalUrl} />{/if}
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Setbound" />
 	<meta property="og:title" content={seoTitle} />
@@ -163,11 +165,14 @@
 	<meta property="og:url" content={canonicalUrl} />
 	{#if socialImage}<meta property="og:image" content={socialImage} />{/if}
 	<meta name="twitter:card" content={socialImage ? 'summary_large_image' : 'summary'} />
-	{@html `<script type="application/ld+json">${websiteSchema}</script>`}
+	{#if !data.preview}{@html `<script type="application/ld+json">${websiteSchema}</script>`}{/if}
 </svelte:head>
 <svelte:window bind:scrollY />
 
 <section class="shell page">
+	{#if data.preview}
+		<div class="draft-preview-banner" role="status"><strong>DRAFT PREVIEW · ADMIN ONLY</strong><span>This set is not publicly visible. Collection controls are disabled.</span><a href="/admin/sets">← Back to Manage Sets</a></div>
+	{/if}
 	<div class="crumb"><a href="/sets">Sets</a><span>/</span>{data.product.year} {data.product.name}</div>
 
 	<section class="hero">
@@ -339,8 +344,8 @@
 					{#each group.cards as card}
 						{@const status = cardStatus(card)}
 						<tr class:saving={saving.has(String(card.id))}>
-							<td class="action-col"><button class="track have" class:active={status === 'owned'} onclick={() => setStatus(card.id, status === 'owned' ? null : 'owned')} aria-label="Toggle owned">{status === 'owned' ? '✓' : ''}</button></td>
-							<td class="action-col"><button class="track want" class:active={status === 'wanted'} onclick={() => setStatus(card.id, status === 'wanted' ? null : 'wanted')} aria-label="Toggle wanted">{status === 'wanted' ? '★' : ''}</button></td>
+							<td class="action-col"><button class="track have" class:active={status === 'owned'} disabled={data.preview} onclick={() => setStatus(card.id, status === 'owned' ? null : 'owned')} aria-label="Toggle owned">{status === 'owned' ? '✓' : ''}</button></td>
+							<td class="action-col"><button class="track want" class:active={status === 'wanted'} disabled={data.preview} onclick={() => setStatus(card.id, status === 'wanted' ? null : 'wanted')} aria-label="Toggle wanted">{status === 'wanted' ? '★' : ''}</button></td>
 							<td class="number">{card.card_number}</td>
 							<td><strong>{card.subject_name}</strong></td>
 							<td class:muted={card.affiliation_name === 'NIL'}>{card.affiliation_name}</td>
@@ -367,6 +372,7 @@
 {/if}
 
 <style>
+	.draft-preview-banner{display:flex;flex-wrap:wrap;align-items:center;gap:.65rem 1.1rem;padding:.85rem 1rem;margin-bottom:1.3rem;border:1px solid #baaa87;border-radius:.7rem;background:#fff9ed;font-size:.76rem}.draft-preview-banner strong{color:#674a21}.draft-preview-banner span{color:#695d4d;flex:1}.draft-preview-banner a{font-weight:850;color:#674a21}.track:disabled{cursor:not-allowed;opacity:.5}
 	.page{padding-top:2.65rem;padding-bottom:5rem}
 	.crumb{display:flex;gap:.55rem;color:var(--muted);font-size:.78rem;font-weight:700}
 	.crumb a{text-decoration:none}

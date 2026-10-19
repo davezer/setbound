@@ -393,6 +393,7 @@
 					<button class:topps-enrich={product.has_topps_backfill} class="edit" type="button" onclick={() => enrichmentProduct = product}>
 						{product.has_product_details ? 'Review enrichment' : (product.has_topps_backfill ? 'Enrich with Topps' : 'Enrich details')}
 					</button>
+					<a class="edit" href={`/admin/sets/preview/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
 					<form method="POST" action="?/upload" enctype="multipart/form-data">
