@@ -72,11 +72,12 @@ export async function POST({ request, platform, fetch }) {
   const first = body.reset === true ? 1 : Number(body.nextPage);
   if (!Number.isSafeInteger(first) || first < 1 || first > MAX_PAGE) return json({message:'Invalid archive page.'},{status:400});
   const database = db(platform);
+  const batchSize = Math.min(PAGE_BATCH, Math.max(1, Number.isInteger(body.limit) ? body.limit : PAGE_BATCH));
   let totalPages = Math.min(MAX_PAGE, Math.max(1, Number(body.totalPages) || MAX_PAGE));
   const pageResults = [];
   const seen = new Map();
   let lastPage = first - 1;
-  for (let page = first; page <= Math.min(totalPages, first + PAGE_BATCH - 1); page++) {
+  for (let page = first; page <= Math.min(totalPages, first + batchSize - 1); page++) {
     try {
       const { url, html } = await getPage(fetch, page);
       if (page === 1) {
