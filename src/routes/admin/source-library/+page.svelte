@@ -5,7 +5,7 @@
  let entries = $state([]), chosen = $state([]), error = $state(''), note = $state(''), busy = $state(false), search = $state('');
  let statusFilter = $state('ready');
  let showing = $derived(entries.filter(x => x.sourceKind !== 'format' && (statusFilter === 'all' || (statusFilter === 'ready' && x.extractionStatus === 'ready') || (statusFilter === 'pending' && !x.extractionStatus) || (statusFilter === 'unavailable' && x.extractionStatus === 'unavailable')) && `${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
- let masterCount = $derived(entries.filter(x=>x.extractionStatus==='ready').length);
+ let masterCount = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='ready').length);
  let unavailable = $derived(entries.filter(x=>x.sourceKind!=='format' && x.extractionStatus==='unavailable').length);
  let awaiting = $derived(entries.filter(x=>x.sourceKind!=='format' && !x.extractionStatus).length);
  let excluded = $derived(entries.filter(x=>x.sourceKind==='format').length);
