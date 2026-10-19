@@ -13,16 +13,17 @@ const FORMAT_META = new Map([
 	['fat_pack', ['Fat Pack Breakdown', 70]],
 	['hanger', ['Hanger Box Breakdown', 80]],
 	['collector', ['Collector / Tin Breakdown', 90]],
-	['inserts', ['Notable Inserts', 100]]
+	['inserts', ['Notable Inserts', 100]],
+	['sapphire', ['Sapphire Edition Box Breakdown', 120]],
+	['mania', ['Mania Box Breakdown', 110]]
 ]);
 
 function allowedImageUrl(value) {
-	let url;
-	try { url = new URL(value); } catch { return null; }
-	if (url.protocol !== 'https:') return null;
-	const hosts=['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com'];
-	if(url.port || url.username || url.password) return null;
-	return hosts.some(host=>url.hostname===host||url.hostname.endsWith('.'+host))?url:null;
+  let url;
+  try { url = new URL(value); } catch { return null; }
+  if (url.protocol !== 'https:' || url.port || url.username || url.password) return null;
+  const hosts = ['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','dacardworld.com','blowoutcards.com','steelcitycollectibles.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com'];
+  return hosts.some(host => url.hostname === host || url.hostname.endsWith('.' + host)) ? url : null;
 }
 
 function extensionForType(type) {
