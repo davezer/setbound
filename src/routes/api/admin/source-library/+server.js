@@ -38,7 +38,7 @@ function titleFrom(html, url) {
   return title.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').replace(/\s*(?:Checklist|\|.*)$/i, '').trim().slice(0, 180) || new URL(url).pathname.split('/').filter(Boolean).pop();
 }
 async function cached(database) {
-  const rows = await database.prepare(`SELECT entry_json, scanned_at FROM source_harvester_cache WHERE source = ? ORDER BY scanned_at DESC LIMIT 800`).bind(SOURCE).all();
+  const rows = await database.prepare(`SELECT entry_json, scanned_at FROM source_harvester_cache WHERE source = ? ORDER BY scanned_at DESC LIMIT 2500`).bind(SOURCE).all();
   return (rows.results || []).flatMap(row => { try { return [{...JSON.parse(row.entry_json), scannedAt:row.scanned_at}]; } catch { return []; } });
 }
 export async function GET({ platform }) {

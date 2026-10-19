@@ -1,9 +1,39 @@
 <script>
  import { onMount } from 'svelte';
+ let discoveryQueue = $state([]), discoveryBusy = $state(false), discoveredPages = $state(0), newPages = $state(0), discoveryScanned = $state(0);
  let links = $state('https://cardsmithsbreaks.com/full-checklist/2026-topps-holiday-baseball/');
  let entries = $state([]), chosen = $state([]), error = $state(''), note = $state(''), busy = $state(false), search = $state('');
  let showing = $derived(entries.filter(x=>`${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
  onMount(async()=>{try{const r=await fetch('/api/admin/source-library');const j=await r.json();entries=j.entries||[];}catch{}});
+ async function catalogStep(reset = false) {
+   if (discoveryBusy) return;
+   discoveryBusy = true; error = ''; note = '';
+   try {
+     if (reset) { discoveryQueue = []; discoveredPages = 0; newPages = 0; discoveryScanned = 0; }
+     const cursor = reset || !discoveryQueue.length ? null : discoveryQueue[0];
+     const r = await fetch('/api/admin/source-library/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cursor }) });
+     const j = await r.json();
+     if (!r.ok) throw new Error(j.message || 'Catalog discovery failed.');
+     if (j.kind === 'index') {
+       discoveryQueue = [...new Set([...(reset ? [] : discoveryQueue.slice(1)), ...(j.sitemaps || [])])];
+       note = `Catalog index loaded. ${discoveryQueue.length} sitemap(s) queued. Click Scan next batch to continue.`;
+     } else {
+       discoveryQueue = cursor ? discoveryQueue.slice(1) : [];
+       discoveredPages += j.pages || 0; newPages += j.added || 0; discoveryScanned += 1;
+       note = `Scanned ${discoveryScanned} sitemap(s): ${discoveredPages} checklist link(s), ${newPages} newly cached. ${discoveryQueue.length} sitemap(s) remain.`;
+       const list = await fetch('/api/admin/source-library');
+       if (list.ok) entries = (await list.json()).entries || [];
+     }
+   } catch(e) { error = e?.message || 'Discovery failed.'; }
+   finally { discoveryBusy = false; }
+ }
+ async function inspectVisible(){
+   if(busy)return;
+   const urls = showing.filter(x => x.discoveredOnly).slice(0,12).map(x => x.pageUrl);
+   if (!urls.length) { note = 'No uninspected sources in the current filter.'; return; }
+   busy=true;error='';note='';
+   try { const r=await fetch('/api/admin/source-library',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls})}); const j=await r.json(); if(!r.ok)throw new Error(j.message||'Inspection failed'); entries=j.entries||[]; const failures=(j.results||[]).filter(x=>!x.ok); note=`Inspected ${urls.length} source(s); ${urls.length-failures.length} ready for CSV selection.`; if(failures.length)error=failures.map(x=>x.error).join(' · '); } catch(e) { error=e?.message||'Inspection failed'; } finally { busy=false; }
+ }
  async function scan(){busy=true;error='';note='';try{const r=await fetch('/api/admin/source-library',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls:links.split(/[\n\s,]+/).filter(Boolean)})});const j=await r.json();if(!r.ok)throw new Error(j.message);entries=j.entries||[];note=`Inspected ${(j.results||[]).length} page(s); ${(j.results||[]).filter(x=>x.ok).length} saved to D1 cache.`; const failures=(j.results||[]).filter(x=>!x.ok);if(failures.length)error=failures.map(x=>x.error).join(' · ');}catch(e){error=e.message;}finally{busy=false;}}
  async function generateCsvZip(){
    const urls=[...new Set(chosen.filter(v=>v.endsWith('|csv-generated')).map(v=>v.slice(0,-14)))];
@@ -25,11 +55,12 @@
 <svelte:head><title>Checklist sources — Setbound</title></svelte:head>
 <section class="shell page">
  <div class="heading"><div><div class="eyebrow">Admin / Harvester pilot</div><h1>Checklist sources</h1><p>Cache checklist pages and download directly available original CSV/PDF files. No AI, parsing or publishing.</p></div><a href="/admin/import-studio">Open manual Import Studio ↗</a></div>
+<div class="panel discovery"><strong>Catalog discovery</strong><p>Discover releases from published sitemap indexes. One index is processed per click and discoveries are saved without overwriting inspected sources.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Discovering…' : 'Discover catalog'}</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryQueue.length}>Scan next batch ({discoveryQueue.length})</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !showing.some(x=>x.discoveredOnly)}>Inspect next 12 visible ({showing.filter(x=>x.discoveredOnly).length})</button></div><small>{discoveredPages} links scanned · {newPages} new · {discoveryQueue.length} pending sitemap(s). Newly discovered links must be inspected before generating CSV.</small></div>
  <div class="panel"><label for="urls">Checklist page URLs (up to 12 per scan)</label><textarea id="urls" bind:value={links} rows="4" placeholder="Paste one source checklist URL per line"></textarea><div class="tools"><button onclick={scan} disabled={busy}>{busy?'Working…':'Inspect & cache pages'}</button><span>Pages with JavaScript-generated download buttons may not expose direct file URLs. Those stay marked unavailable.</span></div></div>
  {#if error}<p class="error" role="alert">{error}</p>{/if}{#if note}<p class="note" role="status">{note}</p>{/if}
  <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><button class="secondary" type="button" onclick={generateCsvZip} disabled={busy||!chosen.some(x=>x.endsWith('|csv-generated'))}>Generate selected CSV ({chosen.filter(x=>x.endsWith('|csv-generated')).length})</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>
  <div class="list">{#each showing as x (x.pageUrl)}<article><div class="name"><strong>{x.name}</strong><a href={x.pageUrl} target="_blank" rel="noreferrer">Source ↗</a></div><small>{x.year || 'Year unknown'} · cached {x.scannedAt || x.checkedAt || '—'}</small><div class="formats">{#each ['csv','pdf'] as format}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|'+format)} disabled={!x[format+'Url']||busy} onchange={()=>toggle(x.pageUrl+'|'+format)}/>{format.toUpperCase()}: {x[format+'Url']?'Direct download':x[format+'Button']?'Browser export only':'Not detected'}</label>{/each}{#if x.csvButton && !x.csvUrl}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|csv-generated')} disabled={busy} onchange={()=>toggle(x.pageUrl+'|csv-generated')}/>Generate CSV from page (experimental)</label>{/if}</div></article>{/each}{#if !showing.length}<p>No cached sources match your search. Paste a checklist link above to start.</p>{/if}</div>
- <p class="note">Pilot scope: explicit checklist URLs; it does not crawl the entire catalog. Bulk download only uses links confirmed in cached page markup. Use the source page's CSV button manually for browser-only exports. Check the site's usage terms before scaling automated downloads.</p>
+ <p class="note">Discovery reads publicly available sitemap indexes in controlled batches; results depend on what the site publishes.  Bulk download only uses links confirmed in cached page markup. Use the source page's CSV button manually for browser-only exports. Check the site's usage terms before scaling automated downloads.</p>
 </section>
 <style>
  .page{padding:3rem 0 5rem}.heading{display:flex;justify-content:space-between;gap:2rem;align-items:start;margin-bottom:2rem}.heading h1{font-size:clamp(2.5rem,5vw,4rem);letter-spacing:-.05em;margin:.5rem 0}.heading p{color:var(--muted);max-width:650px}.heading a,.name a,.tools a{color:var(--blue);font-size:.8rem;font-weight:800}.panel{padding:1.3rem;background:#faf9f7;border:1px solid var(--line);border-radius:.8rem;display:grid;gap:.65rem}textarea,input{font:inherit;border:1px solid var(--line-strong);border-radius:.5rem;padding:.65rem;width:100%}label{font-size:.8rem;font-weight:800}.tools{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:1rem 0}.tools input{max-width:400px}.tools span,.note,small{font-size:.73rem;color:var(--muted)}button{border:0;border-radius:.5rem;background:var(--ink);color:white;font:inherit;font-size:.8rem;font-weight:800;padding:.7rem .95rem;cursor:pointer}.secondary{background:#eee;color:#222}button:disabled{opacity:.5}.error{color:#8d3028}.list{display:grid;gap:.6rem}.list article{border:1px solid var(--line);border-radius:.7rem;padding:1rem;display:grid;gap:.5rem}.name,.formats{display:flex;gap:1rem;align-items:center;flex-wrap:wrap}.name strong{flex:1}.formats label{display:flex;gap:.35rem;align-items:center;font-size:.75rem}.formats input{width:auto}.note{line-height:1.5}@media(max-width:720px){.heading{display:block}}

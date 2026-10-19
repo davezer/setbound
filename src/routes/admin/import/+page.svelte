@@ -292,7 +292,7 @@
 				throw new Error(result.message || 'Import failed.');
 			}
 
-			location.href = `/sets/${result.slug}`;
+			location.href = `/admin/sets/preview/${result.slug}`;
 		} catch (error) {
 			errorMessage = error?.message || 'Import failed.';
 			busy = false;
