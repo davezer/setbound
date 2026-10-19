@@ -5,11 +5,13 @@
  let links = $state('');
  let entries = $state([]), chosen = $state([]), error = $state(''), note = $state(''), busy = $state(false), search = $state('');
  let statusFilter = $state('ready');
+ let downloadFilterLabel = 'Not yet downloaded';
  let bulkBusy = $state(false), stopRequested = $state(false), bulkProgress = $state('');
- let readyVisible = $derived(showing.filter(x => x.sourceKind==='candidate' && x.extractionStatus==='ready'));
+ let readyVisible = $derived(showing.filter(x => x.sourceKind==='candidate' && x.extractionStatus==='ready' && !x.downloadedAt));
  let generatedSelected = $derived(chosen.filter(x=>x.endsWith('|csv-generated') && entries.some(e=>e.pageUrl===x.slice(0,-14) && e.sourceKind==='candidate' && e.extractionStatus==='ready')));
- let showing = $derived(entries.filter(x => x.sourceKind !== 'format' && (statusFilter === 'all' || (statusFilter === 'ready' && x.extractionStatus === 'ready') || (statusFilter === 'pending' && !x.extractionStatus) || (statusFilter === 'unavailable' && x.extractionStatus === 'unavailable') || (statusFilter === 'attention' && x.extractionStatus === 'attention')) && `${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
+ let showing = $derived(entries.filter(x => x.sourceKind !== 'format' && (statusFilter === 'all' || (statusFilter === 'ready' && x.extractionStatus === 'ready' && !x.downloadedAt) || (statusFilter === 'downloaded' && x.extractionStatus === 'ready' && !!x.downloadedAt) || (statusFilter === 'pending' && !x.extractionStatus) || (statusFilter === 'unavailable' && x.extractionStatus === 'unavailable') || (statusFilter === 'attention' && x.extractionStatus === 'attention')) && `${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
  let masterCount = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='ready').length);
+ let downloadedCount = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='ready' && !!x.downloadedAt).length);
  let unavailable = $derived(entries.filter(x=>x.sourceKind==='candidate' && x.extractionStatus==='unavailable').length);
  let awaiting = $derived(entries.filter(x=>x.sourceKind==='candidate' && !x.extractionStatus).length);
  let excluded = $derived(entries.filter(x=>x.sourceKind==='format').length);
@@ -68,6 +70,25 @@
    const picks=readyVisible.slice(0,50).map(x=>x.pageUrl+'|csv-generated');
    chosen=[...new Set([...chosen,...picks])];note='Selected '+picks.length+' CSV-ready master checklists (from current filter).';
  }
+ async function saveDownloaded(urls, downloaded=true){
+   if(!urls.length)return;
+   const r=await fetch('/api/admin/source-library',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({urls,downloaded})});
+   if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.message||'Could not save download history.');}
+   await refreshSources();
+   if(downloaded)chosen=chosen.filter(x=>!urls.some(u=>x===u+'|csv-generated'));
+ }
+ function generatedUrls(response){
+   const header=response.headers.get('x-generated-urls');
+   if(!header)throw Error('ZIP was generated but did not include a success manifest header. Download history was not updated.');
+   return JSON.parse(decodeURIComponent(header));
+ }
+ async function undoDownload(){
+   const urls=[...new Set(generatedSelected.map(v=>v.slice(0,-14)))].slice(0,12);
+   if(!urls.length){note='Select a downloaded CSV first.';return;}
+   busy=true;error='';
+   try{await saveDownloaded(urls,false);chosen=chosen.filter(x=>!urls.some(u=>x===u+'|csv-generated'));note='Reset '+urls.length+' CSV download status(es).';}
+   catch(e){error=e?.message||'Could not reset download status.';}finally{busy=false;}
+ }
  async function downloadFifty(){
    const urls=[...new Set(generatedSelected.map(v=>v.slice(0,-14)))].slice(0,50);
    if(!urls.length){error='Select at least one CSV-ready release first.';return;}
@@ -79,8 +100,10 @@
        const segment=urls.slice(i,i+10);
        const r=await fetch('/api/admin/source-library/export',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls:segment})});
        if(!r.ok){const j=await r.json().catch(()=>({}));throw Error(j.message||'CSV export batch '+(i/10+1)+' failed');}
+       const succeeded=generatedUrls(r);
        download('source-library-csv-'+String(i/10+1).padStart(2,'0')+'.zip',await r.blob());
-       done+=segment.length;bulkProgress='Downloaded '+done+'/'+urls.length+' selected CSV sources';
+       await saveDownloaded(succeeded);
+       done+=succeeded.length;bulkProgress='Generated '+done+'/'+urls.length+' CSVs and marked them downloaded';
        if(i+10<urls.length&&!stopRequested)await sleep(900);
      }
      note=bulkProgress+(stopRequested?' · Stopped.':' · Check each ZIP report before importing.');
@@ -161,8 +184,10 @@
        method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls})
      });
      if(!response.ok){const result=await response.json();throw new Error([result.message,...(result.failures||[]).map(x=>x.reason)].filter(Boolean).join(' · '));}
+     const succeeded=generatedUrls(response);
      download('source-library-generated-csv.zip',await response.blob());
-     note='Generated CSV ZIP downloaded. Review export-report.json and every checklist before importing.';
+     await saveDownloaded(succeeded);
+     note='CSV ZIP generated; '+succeeded.length+' source(s) marked downloaded. Review export-report.json before importing.';
    }catch(e){error=e?.message||'CSV generation failed.';}finally{busy=false;}
  }
  function toggle(id){chosen=chosen.includes(id)?chosen.filter(x=>x!==id):[...chosen,id];}
@@ -178,9 +203,9 @@
  <div class="panel"><label for="urls">Checklist page URLs (up to 12 per scan)</label><textarea id="urls" bind:value={links} rows="4" placeholder="Paste one source checklist URL per line"></textarea><div class="tools"><button onclick={scan} disabled={busy}>{busy?'Working…':'Inspect & cache pages'}</button><span>Pages with JavaScript-generated download buttons may not expose direct file URLs. Those stay marked unavailable.</span></div></div>
  {#if error}<p class="error" role="alert">{error}</p>{/if}{#if note}<p class="note" role="status">{note}</p>{/if}
  <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><button class="secondary" type="button" onclick={selectReadyFifty} disabled={busy || bulkBusy || !readyVisible.length}>Select up to 50 CSV-ready</button><button class="secondary" type="button" onclick={downloadFifty} disabled={busy || bulkBusy || !generatedSelected.length}>Download selected CSVs ({Math.min(50,generatedSelected.length)})</button><button class="secondary" type="button" onclick={generateCsvZip} disabled={busy || bulkBusy || !chosen.some(x=>x.endsWith('|csv-generated'))}>Generate first 12 CSVs ({chosen.filter(x=>x.endsWith('|csv-generated')).length} selected)</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>
- <p class="note">{masterCount} CSV-ready · {awaiting} awaiting extraction check · {unavailable} no usable table · {excluded} format pages excluded · {attention} need attention · {cachedTotal} cached source records in D1. Scan counters track this browser session only; your cached catalog is preserved.</p>
- <div class="tools"><label for="status-filter">Show</label><select id="status-filter" bind:value={statusFilter}><option value="ready">CSV ready</option><option value="pending">Awaiting check</option><option value="unavailable">No usable table</option><option value="attention">Needs attention</option><option value="all">All master candidates</option></select><button type="button" class="secondary" disabled={busy || discoveryBusy} onclick={recheckPrevious}>Recheck 12 earlier inspections</button></div>
- <div class="list">{#each showing as x (x.pageUrl)}<article><div class="name"><strong>{x.name}</strong><a href={x.pageUrl} target="_blank" rel="noreferrer">Source ↗</a></div><small>{x.year || 'Year unknown'} · {x.extractionStatus==='ready' ? `${x.extractedCards} cards · ${x.extractedSections} sections · CSV ready` : x.extractionStatus==='unavailable' ? `No usable card table: ${x.extractionReason || 'Extraction returned no rows'}` : x.extractionStatus==='attention' ? `Needs attention: ${x.extractionReason || 'Inspection failed'}` : 'Awaiting extraction check'} · cached {x.scannedAt || x.checkedAt || '—'}</small><div class="formats">{#each ['csv','pdf'] as format}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|'+format)} disabled={!x[format+'Url']||busy} onchange={()=>toggle(x.pageUrl+'|'+format)}/>{format.toUpperCase()}: {x[format+'Url']?'Direct download':x[format+'Button']?'Browser export only':'Not detected'}</label>{/each}{#if x.extractionStatus==='ready'}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|csv-generated')} disabled={busy || x.extractionStatus!=='ready'} onchange={()=>toggle(x.pageUrl+'|csv-generated')}/>Generate verified CSV</label>{/if}</div></article>{/each}{#if !showing.length}<p>No sources match this filter. Choose Awaiting check or All master candidates to see other entries.</p>{/if}</div>
+ <p class="note">{masterCount} CSV-ready · {downloadedCount} downloaded · {awaiting} awaiting extraction check · {unavailable} no usable table · {excluded} format pages excluded · {attention} need attention · {cachedTotal} cached source records in D1. Scan counters track this browser session only; your cached catalog is preserved.</p>
+ <div class="tools"><label for="status-filter">Show</label><select id="status-filter" bind:value={statusFilter}><option value="ready">Not yet downloaded</option><option value="downloaded">Downloaded</option><option value="pending">Awaiting check</option><option value="unavailable">No usable table</option><option value="attention">Needs attention</option><option value="all">All master candidates</option></select><button type="button" class="secondary" disabled={busy || bulkBusy || !generatedSelected.length || statusFilter !== 'downloaded'} onclick={undoDownload}>Mark selected as not downloaded</button><button type="button" class="secondary" disabled={busy || discoveryBusy} onclick={recheckPrevious}>Recheck 12 earlier inspections</button></div>
+ <div class="list">{#each showing as x (x.pageUrl)}<article><div class="name"><strong>{x.name}</strong><a href={x.pageUrl} target="_blank" rel="noreferrer">Source ↗</a></div><small>{x.year || 'Year unknown'} · {x.extractionStatus==='ready' ? `${x.extractedCards} cards · ${x.extractedSections} sections · CSV ready` : x.extractionStatus==='unavailable' ? `No usable card table: ${x.extractionReason || 'Extraction returned no rows'}` : x.extractionStatus==='attention' ? `Needs attention: ${x.extractionReason || 'Inspection failed'}` : 'Awaiting extraction check'} · {x.downloadedAt ? 'Downloaded '+new Date(x.downloadedAt).toLocaleString() : 'Not downloaded'} · cached {x.scannedAt || x.checkedAt || '—'}</small><div class="formats">{#each ['csv','pdf'] as format}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|'+format)} disabled={!x[format+'Url']||busy} onchange={()=>toggle(x.pageUrl+'|'+format)}/>{format.toUpperCase()}: {x[format+'Url']?'Direct download':x[format+'Button']?'Browser export only':'Not detected'}</label>{/each}{#if x.extractionStatus==='ready'}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|csv-generated')} disabled={busy || x.extractionStatus!=='ready'} onchange={()=>toggle(x.pageUrl+'|csv-generated')}/>Generate verified CSV</label>{/if}</div></article>{/each}{#if !showing.length}<p>No sources match this filter. Choose Awaiting check or All master candidates to see other entries.</p>{/if}</div>
  <p class="note">Discovery reads available release archives. Only individually inspected pages with a recognizable checklist are eligible for export. Format-specific sources stay cached but are not imported.  Bulk download only uses links confirmed in cached page markup. Use the source page's CSV button manually for browser-only exports. Check the site's usage terms before scaling automated downloads.</p>
 </section>
 <style>

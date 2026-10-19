@@ -80,5 +80,5 @@ export async function POST({ request, platform, fetch }) {
   }
   if (!files.length) return json({ message: 'No pages contained extractable card tables. Use their browser CSV buttons.', failures }, { status: 422 });
   files.push({ name: 'export-report.json', bytes: enc.encode(JSON.stringify({ report, failures }, null, 2)) });
-  return new Response(zip(files), { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="source-library-generated-csv.zip"', 'cache-control': 'no-store' } });
+  return new Response(zip(files), { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="source-library-generated-csv.zip"', 'cache-control': 'no-store', 'x-generated-urls': encodeURIComponent(JSON.stringify(report.map(item => item.pageUrl))) } });
 }

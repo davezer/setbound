@@ -89,6 +89,8 @@ export async function POST({request, platform, fetch}) {
       const verifiedMaster = extractionStatus === 'ready';
       const entry = {pageUrl:url,name:titleFrom(html,url),year:Number(String(url).match(/\b20\d{2}\b/)?.[0] || 0) || null,
         resolvedUrl, csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
+      const previous = await database.prepare('SELECT entry_json FROM source_harvester_cache WHERE page_url=? AND source=?').bind(url,SOURCE).first();
+      if (previous) { try { const prior=JSON.parse(previous.entry_json); if (prior.downloadedAt) entry.downloadedAt=prior.downloadedAt; } catch {} }
       await database.prepare(`INSERT INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'),datetime('now')) ON CONFLICT(page_url) DO UPDATE SET source=excluded.source,year=excluded.year,title=excluded.title,entry_json=excluded.entry_json,scanned_at=datetime('now'),updated_at=datetime('now')`).bind(url,SOURCE,entry.year,entry.name,JSON.stringify(entry)).run();
       results.push({ ...entry, ok:true });
     } catch(e) {
@@ -166,4 +168,32 @@ export async function PUT({request,platform,fetch}) {
   if (!files.length) return json({message:'No directly downloadable files were available.',failed},{status:422});
   files.push({name:'download-report.json',bytes:new TextEncoder().encode(JSON.stringify({downloaded:files.map(x=>x.name),failed},null,2))});
   return new Response(archive(files),{headers:{'content-type':'application/zip','content-disposition':'attachment; filename="cardsmiths-checklists.zip"','cache-control':'no-store'}});
+}
+
+// Track CSV ZIP download attempts; never confuse them with published/imported sets.
+export async function PATCH({ request, platform }) {
+  const body = await request.json().catch(() => ({}));
+  const urls = [...new Set(Array.isArray(body.urls) ? body.urls : [])];
+  if (!urls.length || urls.length > 12 || urls.some(u => !siteUrl(u)))
+    return json({ message:'Select 1–12 approved checklist URLs.' }, { status:400 });
+  if (typeof body.downloaded !== 'boolean') return json({message:'Invalid download status.'},{status:400});
+  const database = db(platform);
+  const changes = [];
+  for (const url of urls) {
+    const row = await database.prepare('SELECT entry_json FROM source_harvester_cache WHERE page_url=? AND source=?').bind(url,SOURCE).first();
+    if (!row) return json({message:'A checklist is no longer cached. Nothing changed.'},{status:409});
+    let entry;
+    try { entry=JSON.parse(row.entry_json); } catch { return json({message:'Invalid cache entry. Nothing changed.'},{status:409}); }
+    if (sourceCategory(url).kind!=='candidate' || entry.extractionStatus!=='ready')
+      return json({message:'Only CSV-ready master candidates may be marked downloaded.'},{status:409});
+    changes.push({url,entry});
+  }
+  const stamp = new Date().toISOString();
+  await database.batch(changes.map(({url,entry}) => {
+    if (body.downloaded) entry.downloadedAt=stamp;
+    else delete entry.downloadedAt;
+    return database.prepare("UPDATE source_harvester_cache SET entry_json=?,updated_at=datetime('now') WHERE page_url=? AND source=?")
+      .bind(JSON.stringify(entry),url,SOURCE);
+  }));
+  return json({ok:true,updated:changes.length});
 }
