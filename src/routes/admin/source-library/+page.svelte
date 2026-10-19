@@ -25,6 +25,20 @@
  }
  function stopBulk(){stopRequested=true;bulkProgress='Stopping after the current request…';}
  function sleep(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+
+ async function discoverHomepageParents(save = false) {
+   if (bulkBusy || busy || discoveryBusy) return;
+   discoveryBusy=true;error='';note='';
+   try {
+     const response=await fetch('/api/admin/source-library/discover',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({catalog:'homepage-parents',save})});
+     const result=await response.json();
+     if (!response.ok) throw Error(result.message||'Homepage archive discovery failed.');
+     note=save
+       ? 'Homepage parent links: '+result.found+' found · '+result.added+' newly cached · '+result.existing+' already cached. Existing inspections preserved.'
+       : 'PREVIEW ONLY: '+result.found+' year-prefixed parent link(s) found; '+result.samples.map(x=>x.name).slice(0,5).join(' · ')+'. No records changed. Verify these are top-level releases before saving.';
+     if(save) await refreshSources();
+   }catch(e){error=e?.message||'Homepage discovery failed.';}finally{discoveryBusy=false;}
+ }
  async function scanTwenty(){
    if(bulkBusy||busy||discoveryBusy||!discoveryNextPage)return;
    bulkBusy=true;stopRequested=false;error='';note='';
@@ -197,6 +211,7 @@
 <svelte:head><title>Checklist sources — Setbound</title></svelte:head>
 <section class="shell page">
  <div class="heading"><div><div class="eyebrow">Admin / Harvester pilot</div><h1>Checklist sources</h1><p>Cache checklist pages and download directly available original CSV/PDF files. No AI, parsing or publishing.</p></div><a href="/admin/import-studio">Open manual Import Studio ↗</a></div>
+<div class="panel"><strong>Homepage release archive — parent-only discovery (pilot)</strong><p>Preview the release-title links from Checklist Central. Box format links are not harvested. Existing D1 entries are never erased.</p><div class="tools"><button type="button" onclick={() => discoverHomepageParents(false)} disabled={discoveryBusy || busy || bulkBusy}>Preview parent links</button><button type="button" class="secondary" onclick={() => discoverHomepageParents(true)} disabled={discoveryBusy || busy || bulkBusy}>Cache parent links</button></div><small>First preview, then cache. This scans only the parent release links present in the homepage HTML; it does not claim full historical coverage.</small></div>
 <div class="panel discovery"><strong>Catalog discovery</strong><p>Find releases from the published archive, three pages per scan. Results are cached as uninspected sources and existing reviews are preserved.</p><div class="tools"><button type="button" onclick={() => catalogStep(true)} disabled={discoveryBusy || busy}>{discoveryBusy ? 'Scanning…' : 'Start archive scan'}</button><button type="button" class="secondary" onclick={scanTwenty} disabled={busy || discoveryBusy || bulkBusy || !discoveryNextPage}>Scan next 20 pages</button><button type="button" class="secondary" onclick={() => catalogStep(false)} disabled={discoveryBusy || busy || !discoveryNextPage}>Scan next 3 pages {discoveryNextPage ? '(' + discoveryNextPage + ')' : ''}</button><button type="button" class="secondary" onclick={inspectSixty} disabled={busy || discoveryBusy || bulkBusy || !awaiting}>Inspect next 60</button><button type="button" class="secondary" onclick={inspectVisible} disabled={busy || discoveryBusy || !entries.some(x=>x.sourceKind==='candidate' && !x.extractionStatus)}>Inspect next 12 visible ({awaiting})</button></div><small>{discoveryScanned} archive pages scanned · {discoveredPages} links seen · {newPages} new entries · {discoveryNextPage ? 'next page '+discoveryNextPage : 'scan complete'}. Discovered links must be inspected before CSV export.</small></div>
  {#if bulkBusy || bulkProgress}<div class="tools"><small role="status">{bulkProgress || 'Working…'}</small>{#if bulkBusy}<button type="button" class="secondary" onclick={stopBulk}>Stop after current batch</button>{/if}</div>{/if}
  <div class="panel discovery"><strong>Upcoming releases</strong><p>Discover announced releases separately. Listings without a usable checklist stay in the cache for later review; nothing is imported or published.</p><div class="tools"><button type="button" class="secondary" onclick={() => scanUpcoming(true)} disabled={busy || discoveryBusy || bulkBusy}>Start upcoming scan</button><button type="button" class="secondary" onclick={() => scanUpcoming(false)} disabled={busy || discoveryBusy || bulkBusy || !upcomingNextPage}>Continue upcoming scan {upcomingNextPage ? '(page '+upcomingNextPage+')' : ''}</button></div><small>{upcomingScanned} upcoming pages scanned · {upcomingAdded} new sources · {upcomingNextPage ? 'next page '+upcomingNextPage : 'scan complete'}. Discovery alone does not verify a checklist.</small></div>

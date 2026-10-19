@@ -68,10 +68,46 @@ async function save(database, entries, catalog) {
   }
   return inserted;
 }
+
+// Parent checklist links from the homepage release archive, never its adjacent format links.
+function parentArchiveLinks(html) {
+  const start = html.search(/Browse the archive/i);
+  if (start < 0) throw new Error('Homepage archive section could not be located; no entries saved.');
+  const part = html.slice(start);
+  const found = new Map();
+  for (const m of part.matchAll(/<a\b([^>]*?)>([\s\S]*?)<\/a>/gi)) {
+    const href = m[1].match(/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i);
+    if (!href) continue;
+    const url = canonical(href[1] || href[2] || href[3], ROOT);
+    if (!url || sourceCategory(url).kind !== 'candidate') continue;
+    const label = strip(m[2]);
+    // Main release titles are numbered by year; format links are usually short descriptors.
+    if (!/^(?:19|20)\d{2}(?:[-\/]\d{2})?\s+\S/.test(label)) continue;
+    if (!found.has(url)) found.set(url,{pageUrl:url,name:label.slice(0,180)});
+  }
+  if (!found.size) throw new Error('No year-prefixed parent checklist links found in homepage archive. No entries saved.');
+  return [...found.values()];
+}
+
 export async function POST({ request, platform, fetch }) {
   const body = await request.json().catch(() => ({}));
   const catalog = body.catalog === 'upcoming' ? 'upcoming' : body.catalog === 'past' || body.catalog == null ? 'past' : null;
   if (!catalog) return json({message:'Invalid catalog.'},{status:400});
+
+  if (body.catalog === 'homepage-parents') {
+    try {
+      const response = await fetch(ROOT + '/', { redirect:'manual', headers:{accept:'text/html'} });
+      if (!response.ok || !String(response.headers.get('content-type')||'').toLowerCase().includes('text/html'))
+        return json({message:'Homepage archive HTML unavailable (HTTP '+response.status+'). No changes made.'},{status:502});
+      const html=await response.text();
+      if (html.length>8_000_000) return json({message:'Homepage HTML exceeds safety limit.'},{status:413});
+      const entries=parentArchiveLinks(html);
+      // Preview first. No cache mutation unless the admin explicitly requests save.
+      if (body.save !== true) return json({ok:true,preview:true,found:entries.length,samples:entries.slice(0,15)});
+      const added=await save(db(platform),entries);
+      return json({ok:true,preview:false,found:entries.length,added,existing:entries.length-added});
+    }catch(error){return json({message:error?.message||'Archive extraction failed. No changes made.'},{status:422});}
+  }
   const first = body.reset === true ? 1 : Number(body.nextPage);
   if (!Number.isSafeInteger(first) || first < 1 || first > MAX_PAGE) return json({message:'Invalid archive page.'},{status:400});
   const database = db(platform);
