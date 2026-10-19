@@ -10,6 +10,58 @@
 	let enrichmentFilter = $state('All enrichment');
 	let query = $state('');
 	let deleting = $state(null);
+	// SETBOUND_BULK_DELETE_V1
+	let selectedDeleteIds = $state([]);
+	let bulkDeleteBusy = $state(false);
+	let bulkDeleteProgress = $state('');
+	const selectedDeleteProducts = $derived(products.filter(p => selectedDeleteIds.includes(Number(p.id))));
+	const visibleDeleteIds = $derived(visible.map(p => Number(p.id)));
+	function changeDeleteSelection(id, checked) {
+		const next = new Set(selectedDeleteIds);
+		if (checked) next.add(id); else next.delete(id);
+		selectedDeleteIds = [...next];
+	}
+	function selectVisibleForDelete() {
+		selectedDeleteIds = [...new Set([...selectedDeleteIds, ...visibleDeleteIds])];
+	}
+	async function deleteSelectedImports() {
+		if (bulkDeleteBusy || deleting !== null) return;
+		const selected = [...selectedDeleteProducts];
+		if (!selected.length) return;
+		const live = selected.filter(p => Boolean(p.published)).length;
+		const cardCount = selected.reduce((sum,p) => sum + Number(p.card_count || 0), 0);
+		const confirmed = prompt(
+			'DELETE ' + selected.length + ' IMPORTS PERMANENTLY?\n\n' +
+			selected.length + ' products, ' + cardCount.toLocaleString() + ' cards, and their checklists, sources and artwork will be deleted.\n' +
+			(live ? 'WARNING: ' + live + ' selected sets are LIVE.\n' : '') +
+			'Collection records associated with these sets may also be lost.\n' +
+			'This cannot be undone. Type DELETE ' + selected.length + ' to proceed.'
+		);
+		if (confirmed !== 'DELETE ' + selected.length) return;
+		bulkDeleteBusy = true;
+		message = '';
+		let completed = 0;
+		try {
+			for (const item of selected) {
+				bulkDeleteProgress = 'Deleting ' + (completed + 1) + ' of ' + selected.length + ': ' + item.name;
+				const response = await fetch('/api/admin/products/' + encodeURIComponent(item.id), { method: 'DELETE' });
+				const result = await response.json().catch(() => ({}));
+				if (!response.ok || result.ok !== true || Number(result.deleted?.id) !== Number(item.id)) {
+					throw Error((result.message || 'Delete failed') + ' (' + item.name + ').');
+				}
+				products = products.filter(p => Number(p.id) !== Number(item.id));
+				selectedDeleteIds = selectedDeleteIds.filter(id => id !== Number(item.id));
+				selectedOfflineIds = selectedOfflineIds.filter(id => id !== Number(item.id));
+				completed++;
+			}
+			message = 'Deleted ' + completed + ' selected import(s).';
+		} catch (error) {
+			message = 'Deleted ' + completed + ' of ' + selected.length + ' before stopping. ' + (error?.message || 'Unknown error') + ' Remaining selections were preserved.';
+		} finally {
+			bulkDeleteBusy = false;
+			bulkDeleteProgress = '';
+		}
+	}
 	let toggling = $state(null);
 	let message = $state('');
 	let enrichmentProduct = $state(null);
@@ -352,9 +404,22 @@
 		<p>Select visible respects the search and filters. Select all live includes sets hidden by filters. Only explicitly selected LIVE sets are changed.</p>
 	</div>
 
+	<div class="bulk-delete-tools" aria-label="Bulk delete imports">
+		<div><strong>Bulk delete imports</strong><span>{selectedDeleteProducts.length} selected · {selectedDeleteProducts.filter(p => p.published).length} live</span></div>
+		<div class="bulk-delete-actions">
+			<button type="button" onclick={selectVisibleForDelete} disabled={bulkDeleteBusy || !visible.length}>Select visible ({visible.length})</button>
+			<button type="button" onclick={() => selectedDeleteIds = []} disabled={bulkDeleteBusy || !selectedDeleteIds.length}>Clear selection</button>
+			<button type="button" class="delete-selected" onclick={deleteSelectedImports} disabled={bulkDeleteBusy || deleting !== null || !selectedDeleteProducts.length}>{bulkDeleteBusy ? 'Deleting…' : 'Delete selected (' + selectedDeleteProducts.length + ')'}</button>
+		</div>
+		<p>Only checked imports will be deleted. Selection is separate from bulk visibility. Deletion is permanent and requires typed confirmation.</p>
+		{#if bulkDeleteProgress}<p role="status">{bulkDeleteProgress}</p>{/if}
+	</div>
 	<div class="list">
 		{#each visible as product (product.id)}
 			<article class="row">
+				<div class="bulk-choice bulk-delete-choice">
+					<label title="Select for permanent deletion"><input type="checkbox" aria-label={'Select ' + product.name + ' for permanent deletion'} checked={selectedDeleteIds.includes(Number(product.id))} disabled={bulkDeleteBusy} onchange={(event) => changeDeleteSelection(Number(product.id), event.currentTarget.checked)} /></label>
+				</div>
 				<div class="bulk-choice">
 					<input type="checkbox" aria-label={`Select ${product.name} for bulk offline`} checked={selectedLiveIds.includes(Number(product.id))} disabled={!product.published || bulkOfflineBusy} onchange={(event) => changeOfflineSelection(Number(product.id), event.currentTarget.checked)} />
 				</div>
@@ -462,6 +527,14 @@
 	.offline-tools-actions button.offline-danger{background:#8d3028;border-color:#8d3028;color:#fff}
 	.offline-tools-actions button:disabled{opacity:.45;cursor:not-allowed}
 	.offline-tools p{font-size:.72rem;color:var(--muted);margin:0}
+	.bulk-delete-tools{display:grid;gap:.65rem;border:1px solid #e3bbb6;border-radius:.85rem;padding:1rem;margin:1rem 0 1.25rem;background:#fff9f8}
+	.bulk-delete-tools>div:first-child,.bulk-delete-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem}
+	.bulk-delete-tools>div:first-child span{font-size:.75rem;color:var(--muted)}
+	.bulk-delete-actions button{border:1px solid var(--line-strong);background:white;border-radius:.55rem;padding:.52rem .68rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
+	.bulk-delete-actions .delete-selected{background:#8d3028;border-color:#8d3028;color:white}
+	.bulk-delete-actions button:disabled{opacity:.45;cursor:not-allowed}
+	.bulk-delete-tools p{font-size:.72rem;color:var(--muted);margin:0}
+	.bulk-delete-choice input{accent-color:#8d3028}
 	.bulk-choice{display:flex;justify-content:center;align-items:center}
 	.bulk-choice input{width:18px;height:18px;accent-color:#8d3028}
 	.top{display:flex;justify-content:space-between;gap:2rem;margin-bottom:2rem}
@@ -481,7 +554,7 @@
 	.backfill-panel{display:flex;justify-content:space-between;gap:1rem;margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--line);border-radius:.65rem;background:#faf9f7;color:var(--muted);font-size:.7rem}
 	.backfill-panel strong{color:var(--ink)}
 	.list{border-top:1px solid var(--line)}
-	.row{display:grid;grid-template-columns:22px 130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
+	.row{display:grid;grid-template-columns:22px 22px 130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
 	.preview{width:130px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:.65rem;background:#f4f3f1;overflow:hidden;display:grid;place-items:center}
 	.preview img{width:100%;height:100%;object-fit:cover}
 	.preview span{color:var(--muted);font-size:.7rem;font-weight:900}
@@ -517,7 +590,7 @@
 	@media(max-width:1100px){
 		.filters{grid-template-columns:repeat(3,1fr)}
 		.filters .search{grid-column:span 2}
-		.row{grid-template-columns:22px 100px 1fr}
+		.row{grid-template-columns:22px 22px 100px 1fr}
 		.preview{width:100px}
 		.actions{grid-column:1/-1;justify-content:flex-start;max-width:none}
 	}
@@ -526,7 +599,7 @@
 		.top>a{display:inline-block;margin-top:1rem}
 		.filters{grid-template-columns:1fr}
 		.filters .search{grid-column:auto}
-		.row{grid-template-columns:22px 80px 1fr}
+		.row{grid-template-columns:22px 22px 80px 1fr}
 		.preview{width:80px}
 	}
 </style>
