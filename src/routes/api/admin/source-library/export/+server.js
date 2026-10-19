@@ -67,7 +67,10 @@ function extractCsv(html) {
       const rookie = /(?:^|\s)(?:RC|Rookie)(?:\s|$)/i.test(player) ? '1' : '0';
       player = player.replace(/\s+(?:RC|Rookie)\s*$/i, '').trim();
       // Never infer autograph/memorabilia from an isolated row; section names remain intact for review.
-      const type = /autograph|signature/i.test(section) ? 'Autograph' : /relic|memorabilia|patch/i.test(section) ? 'Memorabilia' : 'Insert';
+      const type = /autograph|signature/i.test(section) ? 'Autograph'
+  : /relic|memorabilia|patch/i.test(section) ? 'Memorabilia'
+  : /\bbase\b/i.test(section) ? 'Base'
+  : 'Insert';
       const key = [section, number, player, affiliation].join('|').toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
