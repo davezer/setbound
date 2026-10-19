@@ -13,6 +13,40 @@
 	let toggling = $state(null);
 	let message = $state('');
 	let enrichmentProduct = $state(null);
+	// SETBOUND_BULK_OFFLINE_V1
+	let selectedOfflineIds = $state([]);
+	let bulkOfflineBusy = $state(false);
+	const liveSetIds = $derived(products.filter(p => Boolean(p.published)).map(p => Number(p.id)));
+	const visibleLiveIds = $derived(visible.filter(p => Boolean(p.published)).map(p => Number(p.id)));
+	const selectedLiveIds = $derived(selectedOfflineIds.filter(id => liveSetIds.includes(id)));
+	function changeOfflineSelection(id, checked) {
+		const next = new Set(selectedOfflineIds);
+		checked ? next.add(id) : next.delete(id);
+		selectedOfflineIds = [...next];
+	}
+	function selectVisibleLive() {
+		selectedOfflineIds = [...new Set([...selectedLiveIds, ...visibleLiveIds])];
+	}
+	function selectAllLive() { selectedOfflineIds = [...liveSetIds]; }
+	async function takeSelectedOffline() {
+		const ids = [...selectedLiveIds];
+		if (!ids.length || bulkOfflineBusy) return;
+		if (!confirm(`Take ${ids.length} selected LIVE set(s) offline?\n\nNo cards, images, metadata or collection data will be deleted. You can republish them individually later.`)) return;
+		bulkOfflineBusy = true;
+		message = '';
+		try {
+			const formData = new FormData();
+			formData.set('product_ids', JSON.stringify(ids));
+			const response = await fetch('?/bulkOffline', { method: 'POST', body: formData });
+			if (!response.ok) throw new Error(`Bulk update failed (HTTP ${response.status}). No changes are confirmed.`);
+			const idSet = new Set(ids);
+			products = products.map(p => idSet.has(Number(p.id)) ? { ...p, published: 0 } : p);
+			selectedOfflineIds = selectedOfflineIds.filter(id => !idSet.has(id));
+			message = `Offline request completed for ${ids.length} selected set(s). Refresh the page to confirm status.`;
+		} catch (error) { message = error?.message || 'Could not take selected sets offline.'; }
+		finally { bulkOfflineBusy = false; }
+	}
+
 
 	let backfillBusy = $state(false);
 	let backfillProgress = $state(null);
@@ -246,7 +280,7 @@
 		<div>
 			<div class="eyebrow">Admin</div>
 			<h1>Manage sets</h1>
-			<p>Artwork and collector-facing set details.</p>
+			<p>Review drafts, manage artwork, and control which sets are public.</p>
 		</div>
 		<a href="/admin">← Admin</a>
 	</div>
@@ -304,9 +338,26 @@
 
 	<div class="filter-summary backfill-summary"><div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div><span class="topps-ready-summary">Research products individually before saving details.</span></div>
 
+	<div class="offline-tools" aria-label="Bulk publishing controls">
+		<div class="offline-tools-heading">
+			<strong>Bulk visibility</strong>
+			<span>{liveSetIds.length.toLocaleString()} live · {selectedLiveIds.length.toLocaleString()} selected</span>
+		</div>
+		<div class="offline-tools-actions">
+			<button type="button" onclick={selectVisibleLive} disabled={bulkOfflineBusy || !visibleLiveIds.length}>Select visible live ({visibleLiveIds.length})</button>
+			<button type="button" onclick={selectAllLive} disabled={bulkOfflineBusy || !liveSetIds.length}>Select all live ({liveSetIds.length})</button>
+			<button type="button" onclick={() => selectedOfflineIds = []} disabled={bulkOfflineBusy || !selectedLiveIds.length}>Clear selection</button>
+			<button class="offline-danger" type="button" onclick={takeSelectedOffline} disabled={bulkOfflineBusy || !selectedLiveIds.length}>{bulkOfflineBusy ? 'Taking offline…' : `Take ${selectedLiveIds.length} offline`}</button>
+		</div>
+		<p>Select visible respects the search and filters. Select all live includes sets hidden by filters. Only explicitly selected LIVE sets are changed.</p>
+	</div>
+
 	<div class="list">
 		{#each visible as product (product.id)}
 			<article class="row">
+				<div class="bulk-choice">
+					<input type="checkbox" aria-label={`Select ${product.name} for bulk offline`} checked={selectedLiveIds.includes(Number(product.id))} disabled={!product.published || bulkOfflineBusy} onchange={(event) => changeOfflineSelection(Number(product.id), event.currentTarget.checked)} />
+				</div>
 				<div class="preview">
 					{#if product.image_key}
 						<img src={imageUrl(product)} alt="" />
@@ -404,6 +455,15 @@
 
 <style>
 	.page{padding-top:3rem;padding-bottom:5rem}
+	.offline-tools{display:grid;gap:.65rem;border:1px solid var(--line-strong);border-radius:.85rem;padding:1rem;margin:1rem 0 1.25rem;background:#faf9f7}
+	.offline-tools-heading,.offline-tools-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem}
+	.offline-tools-heading span{font-size:.75rem;color:var(--muted)}
+	.offline-tools-actions button{border:1px solid var(--line-strong);background:white;border-radius:.55rem;padding:.52rem .68rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}
+	.offline-tools-actions button.offline-danger{background:#8d3028;border-color:#8d3028;color:#fff}
+	.offline-tools-actions button:disabled{opacity:.45;cursor:not-allowed}
+	.offline-tools p{font-size:.72rem;color:var(--muted);margin:0}
+	.bulk-choice{display:flex;justify-content:center;align-items:center}
+	.bulk-choice input{width:18px;height:18px;accent-color:#8d3028}
 	.top{display:flex;justify-content:space-between;gap:2rem;margin-bottom:2rem}
 	.top h1{font-size:clamp(2.5rem,5vw,4.5rem);letter-spacing:-.055em;margin:.35rem 0 .5rem}
 	.top p{margin:0;color:var(--muted)}
@@ -421,7 +481,7 @@
 	.backfill-panel{display:flex;justify-content:space-between;gap:1rem;margin:0 0 .8rem;padding:.7rem .85rem;border:1px solid var(--line);border-radius:.65rem;background:#faf9f7;color:var(--muted);font-size:.7rem}
 	.backfill-panel strong{color:var(--ink)}
 	.list{border-top:1px solid var(--line)}
-	.row{display:grid;grid-template-columns:130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
+	.row{display:grid;grid-template-columns:22px 130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}
 	.preview{width:130px;aspect-ratio:16/9;border:1px solid var(--line);border-radius:.65rem;background:#f4f3f1;overflow:hidden;display:grid;place-items:center}
 	.preview img{width:100%;height:100%;object-fit:cover}
 	.preview span{color:var(--muted);font-size:.7rem;font-weight:900}
@@ -457,7 +517,7 @@
 	@media(max-width:1100px){
 		.filters{grid-template-columns:repeat(3,1fr)}
 		.filters .search{grid-column:span 2}
-		.row{grid-template-columns:100px 1fr}
+		.row{grid-template-columns:22px 100px 1fr}
 		.preview{width:100px}
 		.actions{grid-column:1/-1;justify-content:flex-start;max-width:none}
 	}
@@ -466,7 +526,7 @@
 		.top>a{display:inline-block;margin-top:1rem}
 		.filters{grid-template-columns:1fr}
 		.filters .search{grid-column:auto}
-		.row{grid-template-columns:80px 1fr}
+		.row{grid-template-columns:22px 80px 1fr}
 		.preview{width:80px}
 	}
 </style>

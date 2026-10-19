@@ -85,6 +85,30 @@ export const actions = {
 		throw redirect(303, '/admin/sets?saved=1');
 	},
 
+	// SETBOUND_BULK_OFFLINE_V1: change publication status without deleting any data.
+	bulkOffline: async ({ request, platform }) => {
+		const form = await request.formData();
+		let ids;
+		try { ids = JSON.parse(String(form.get('product_ids') || '[]')); }
+		catch { return fail(400, { message: 'Invalid selection.' }); }
+		if (!Array.isArray(ids) || ids.length < 1 || ids.length > 1000 ||
+			!ids.every(id => Number.isSafeInteger(id) && id > 0) ||
+			new Set(ids).size !== ids.length) {
+			return fail(400, { message: 'Select between 1 and 1000 unique valid sets.' });
+		}
+		const database = db(platform);
+		const statements = [];
+		for (let offset = 0; offset < ids.length; offset += 75) {
+			const chunk = ids.slice(offset, offset + 75);
+			const marks = chunk.map(() => '?').join(',');
+			statements.push(database.prepare(
+				`UPDATE products SET published = 0, updated_at = datetime('now') WHERE published = 1 AND id IN (${marks})`
+			).bind(...chunk));
+		}
+		const results = await database.batch(statements);
+		return { ok: true, offlineCount: results.reduce((sum, row) => sum + Number(row.meta?.changes || 0), 0) };
+	},
+
 	visibility: async ({ request, platform }) => {
 		const database = db(platform);
 		const form = await request.formData();

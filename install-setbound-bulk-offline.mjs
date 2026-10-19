@@ -1,0 +1,44 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = process.cwd();
+const targets = [
+  'src/routes/admin/sets/+page.server.js',
+  'src/routes/admin/sets/+page.svelte'
+];
+const files = targets.map(relative => ({ relative, absolute: path.resolve(root, relative) }));
+function once(source, needle, replacement, label) {
+  const a = source.indexOf(needle);
+  if (a < 0 || source.indexOf(needle, a + needle.length) >= 0) throw new Error(`Could not uniquely locate ${label}. No files changed.`);
+  return source.slice(0, a) + replacement + source.slice(a + needle.length);
+}
+
+try {
+  const sources = files.map(f => fs.readFileSync(f.absolute, 'utf8'));
+  if (sources.some(s => s.includes('SETBOUND_BULK_OFFLINE_V1'))) {
+    throw new Error('Bulk offline update is already present; refusing to install twice.');
+  }
+  let [server, page] = sources;
+  const serverAnchor = '\tvisibility: async ({ request, platform }) => {';
+  server = once(server, serverAnchor, `\t// SETBOUND_BULK_OFFLINE_V1: change publication status without deleting any data.\n\tbulkOffline: async ({ request, platform }) => {\n\t\tconst form = await request.formData();\n\t\tlet ids;\n\t\ttry { ids = JSON.parse(String(form.get('product_ids') || '[]')); }\n\t\tcatch { return fail(400, { message: 'Invalid selection.' }); }\n\t\tif (!Array.isArray(ids) || ids.length < 1 || ids.length > 1000 ||\n\t\t\t!ids.every(id => Number.isSafeInteger(id) && id > 0) ||\n\t\t\tnew Set(ids).size !== ids.length) {\n\t\t\treturn fail(400, { message: 'Select between 1 and 1000 unique valid sets.' });\n\t\t}\n\t\tconst database = db(platform);\n\t\tconst statements = [];\n\t\tfor (let offset = 0; offset < ids.length; offset += 75) {\n\t\t\tconst chunk = ids.slice(offset, offset + 75);\n\t\t\tconst marks = chunk.map(() => '?').join(',');\n\t\t\tstatements.push(database.prepare(\n\t\t\t\t\`UPDATE products SET published = 0, updated_at = datetime('now') WHERE published = 1 AND id IN (\${marks})\`\n\t\t\t).bind(...chunk));\n\t\t}\n\t\tconst results = await database.batch(statements);\n\t\treturn { ok: true, offlineCount: results.reduce((sum, row) => sum + Number(row.meta?.changes || 0), 0) };\n\t},\n\n${serverAnchor}`, 'server visibility action');
+
+  page = once(page, "\tlet enrichmentProduct = $state(null);", `\tlet enrichmentProduct = $state(null);\n\t// SETBOUND_BULK_OFFLINE_V1\n\tlet selectedOfflineIds = $state([]);\n\tlet bulkOfflineBusy = $state(false);\n\tconst liveSetIds = $derived(products.filter(p => Boolean(p.published)).map(p => Number(p.id)));\n\tconst visibleLiveIds = $derived(visible.filter(p => Boolean(p.published)).map(p => Number(p.id)));\n\tconst selectedLiveIds = $derived(selectedOfflineIds.filter(id => liveSetIds.includes(id)));\n\tfunction changeOfflineSelection(id, checked) {\n\t\tconst next = new Set(selectedOfflineIds);\n\t\tchecked ? next.add(id) : next.delete(id);\n\t\tselectedOfflineIds = [...next];\n\t}\n\tfunction selectVisibleLive() {\n\t\tselectedOfflineIds = [...new Set([...selectedLiveIds, ...visibleLiveIds])];\n\t}\n\tfunction selectAllLive() { selectedOfflineIds = [...liveSetIds]; }\n\tasync function takeSelectedOffline() {\n\t\tconst ids = [...selectedLiveIds];\n\t\tif (!ids.length || bulkOfflineBusy) return;\n\t\tif (!confirm(\`Take \${ids.length} selected LIVE set(s) offline?\\n\\nNo cards, images, metadata or collection data will be deleted. You can republish them individually later.\`)) return;\n\t\tbulkOfflineBusy = true;\n\t\tmessage = '';\n\t\ttry {\n\t\t\tconst formData = new FormData();\n\t\t\tformData.set('product_ids', JSON.stringify(ids));\n\t\t\tconst response = await fetch('?/bulkOffline', { method: 'POST', body: formData });\n\t\t\tif (!response.ok) throw new Error(\`Bulk update failed (HTTP \${response.status}). No changes are confirmed.\`);\n\t\t\tconst idSet = new Set(ids);\n\t\t\tproducts = products.map(p => idSet.has(Number(p.id)) ? { ...p, published: 0 } : p);\n\t\t\tselectedOfflineIds = selectedOfflineIds.filter(id => !idSet.has(id));\n\t\t\tmessage = \`Offline request completed for \${ids.length} selected set(s). Refresh the page to confirm status.\`;\n\t\t} catch (error) { message = error?.message || 'Could not take selected sets offline.'; }\n\t\tfinally { bulkOfflineBusy = false; }\n\t}\n`, 'page enrichment state');
+  // Explicit controls outside the existing old backfill header.
+  page = once(page, '\t<div class="list">', `\t<div class="offline-tools" aria-label="Bulk publishing controls">\n\t\t<div class="offline-tools-heading">\n\t\t\t<strong>Bulk visibility</strong>\n\t\t\t<span>\{liveSetIds.length.toLocaleString()} live · \{selectedLiveIds.length.toLocaleString()} selected</span>\n\t\t</div>\n\t\t<div class="offline-tools-actions">\n\t\t\t<button type="button" onclick={selectVisibleLive} disabled={bulkOfflineBusy || !visibleLiveIds.length}>Select visible live (\{visibleLiveIds.length})</button>\n\t\t\t<button type="button" onclick={selectAllLive} disabled={bulkOfflineBusy || !liveSetIds.length}>Select all live (\{liveSetIds.length})</button>\n\t\t\t<button type="button" onclick={() => selectedOfflineIds = []} disabled={bulkOfflineBusy || !selectedLiveIds.length}>Clear selection</button>\n\t\t\t<button class="offline-danger" type="button" onclick={takeSelectedOffline} disabled={bulkOfflineBusy || !selectedLiveIds.length}>\{bulkOfflineBusy ? 'Taking offline…' : \`Take \${selectedLiveIds.length} offline\`}</button>\n\t\t</div>\n\t\t<p>Select visible respects the search and filters. Select all live includes sets hidden by filters. Only explicitly selected LIVE sets are changed.</p>\n\t</div>\n\n\t<div class="list">`, 'list container');
+  page = once(page, '\t\t\t<article class="row">', `\t\t\t<article class="row">\n\t\t\t\t<div class="bulk-choice">\n\t\t\t\t\t<input type="checkbox" aria-label={\`Select \${product.name} for bulk offline\`} checked={selectedLiveIds.includes(Number(product.id))} disabled={!product.published || bulkOfflineBusy} onchange={(event) => changeOfflineSelection(Number(product.id), event.currentTarget.checked)} />\n\t\t\t\t</div>`, 'product row');
+  page = once(page, '\t.page{padding-top:3rem;padding-bottom:5rem}', `\t.page{padding-top:3rem;padding-bottom:5rem}\n\t.offline-tools{display:grid;gap:.65rem;border:1px solid var(--line-strong);border-radius:.85rem;padding:1rem;margin:1rem 0 1.25rem;background:#faf9f7}\n\t.offline-tools-heading,.offline-tools-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem}\n\t.offline-tools-heading span{font-size:.75rem;color:var(--muted)}\n\t.offline-tools-actions button{border:1px solid var(--line-strong);background:white;border-radius:.55rem;padding:.52rem .68rem;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}\n\t.offline-tools-actions button.offline-danger{background:#8d3028;border-color:#8d3028;color:#fff}\n\t.offline-tools-actions button:disabled{opacity:.45;cursor:not-allowed}\n\t.offline-tools p{font-size:.72rem;color:var(--muted);margin:0}\n\t.bulk-choice{display:flex;justify-content:center;align-items:center}\n\t.bulk-choice input{width:18px;height:18px;accent-color:#8d3028}`, 'page CSS');
+  // Avoid changing the existing row columns: checkbox takes a compact left edge via position.
+  page = once(page, '\t.row{display:grid;grid-template-columns:130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}', '\t.row{display:grid;grid-template-columns:22px 130px minmax(300px,1fr) auto;align-items:center;gap:1.2rem;padding:1rem 0;border-bottom:1px solid var(--line)}', 'desktop row grid');
+  page = once(page, '\t\t.row{grid-template-columns:100px 1fr}', '\t\t.row{grid-template-columns:22px 100px 1fr}', 'tablet row grid');
+  page = once(page, '\t\t.actions{grid-column:1/-1;justify-content:flex-start;max-width:none}', '\t\t.actions{grid-column:1/-1;justify-content:flex-start;max-width:none}', 'tablet actions');
+  page = once(page, '\t\t.row{grid-template-columns:80px 1fr}', '\t\t.row{grid-template-columns:22px 80px 1fr}', 'mobile row grid');
+  // Header text to set expectations.
+  page = once(page, '<p>Artwork and collector-facing set details.</p>', '<p>Review drafts, manage artwork, and control which sets are public.</p>', 'page intro');
+
+  const outputs = [server, page];
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  for (let i=0; i<files.length; i++) fs.copyFileSync(files[i].absolute, files[i].absolute + '.pre-bulk-offline-' + stamp + '.bak');
+  for (let i=0; i<files.length; i++) fs.writeFileSync(files[i].absolute, outputs[i], 'utf8');
+  console.log('Installed Setbound bulk offline controls. Backups created. No database migrations.');
+  console.log('Next: npm run check && npm run build');
+} catch (error) { console.error('Installation aborted:', error.message); process.exitCode = 1; }
