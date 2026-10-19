@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { cleanResearchCopy, readArtworkCache, fetchImage } from '$lib/server/research-v4.js';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif']);
@@ -17,14 +18,6 @@ const FORMAT_META = new Map([
 	['sapphire', ['Sapphire Edition Box Breakdown', 120]],
 	['mania', ['Mania Box Breakdown', 110]]
 ]);
-
-function allowedImageUrl(value) {
-  let url;
-  try { url = new URL(value); } catch { return null; }
-  if (url.protocol !== 'https:' || url.port || url.username || url.password) return null;
-  const hosts = ['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','dacardworld.com','blowoutcards.com','steelcitycollectibles.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com','fanatics.com','fanaticsauthentic.com','fanaticsassets.com','static.fanatics.com','media.fanatics.com','images.fanatics.com','images.footballfanatics.com','cloudfront.net','imgix.net','akamaihd.net','scene7.com'];
-  return hosts.some(host => url.hostname === host || url.hostname.endsWith('.' + host)) ? url : null;
-}
 
 function cleanCollectorCopy(value) {
   return String(value || '')
@@ -50,7 +43,7 @@ export async function POST({ platform, request, fetch }) {
 		const body = await request.json();
 		const productSlug = String(body.productSlug || '').trim();
 		const releaseDate = String(body.releaseDate || '').trim() || null;
-		const overview = cleanCollectorCopy(body.overview) || null;
+		const overview = cleanResearchCopy(body.overview) || null;
 		const formats = Array.isArray(body.formats) ? body.formats : [];
 		const imageUrl = String(body.imageUrl || '').trim();
 		const applyReleaseDate = body.applyReleaseDate !== false;
@@ -82,7 +75,7 @@ export async function POST({ platform, request, fetch }) {
 		if (applyFormats) {
 			for (const format of formats) {
 				const key = String(format?.key || '').trim();
-				const details = cleanCollectorCopy(format?.details);
+				const details = cleanResearchCopy(format?.details);
 				if (!key || !details || !FORMAT_META.has(key)) continue;
 				const [defaultLabel, sort] = FORMAT_META.get(key);
 				const label = String(format?.label || '').trim() || defaultLabel;
@@ -102,34 +95,16 @@ export async function POST({ platform, request, fetch }) {
 
 		let imageKey = product.image_key || null;
 		if (applyImage) {
-			const remote = allowedImageUrl(imageUrl);
-			if (!remote) return json({ message: 'Image host is not on the approved manufacturer/CDN allowlist.' }, { status: 400 });
-
-			let target = remote.href;
-            let response;
-            for (let hop = 0; hop < 4; hop++) {
-                const safe = allowedImageUrl(target);
-                if (!safe) return json({ message: 'Image redirected to an unapproved host.' }, { status: 400 });
-                response = await fetch(safe.href, { redirect: 'manual', headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'user-agent': 'Mozilla/5.0 Setbound/1.0' } });
-                if (![301,302,303,307,308].includes(response.status)) break;
-                const next = response.headers.get('location');
-                if (!next) break;
-                target = new URL(next, target).href;
-            }
-			if (!response.ok) return json({ message: `Product image download failed with HTTP ${response.status}.` }, { status: 502 });
-
-			const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-			if (!ALLOWED_IMAGE_TYPES.has(type)) return json({ message: `Unsupported product image type: ${type || 'unknown'}.` }, { status: 400 });
-
-			const bytes = await response.arrayBuffer();
-			if (bytes.byteLength > MAX_IMAGE_BYTES) return json({ message: 'Product image is larger than 8 MB.' }, { status: 400 });
-
-			const key = `sets/${product.slug}-${crypto.randomUUID()}.${extensionForType(type)}`;
-			await platform.env.SET_IMAGES.put(key, bytes, { httpMetadata: { contentType: type, cacheControl: 'public, max-age=31536000, immutable' } });
-			await database.prepare(`UPDATE products SET image_key = ?, updated_at = datetime('now') WHERE id = ?`).bind(key, product.id).run();
-			if (product.image_key && product.image_key !== key) await platform.env.SET_IMAGES.delete(product.image_key);
-			imageKey = key;
-		}
+      const approved=await readArtworkCache(platform?.env?.SET_IMAGES,product.id);
+      if (!approved.some(x => x.url === imageUrl)) return json({message:'Artwork must be selected from verified official research results. Run Find official artwork again.'},{status:400});
+      const image=await fetchImage(fetch,imageUrl);
+      if (!image) return json({message:'The approved product image is no longer reachable.'},{status:502});
+      const key=`sets/${product.slug}-${crypto.randomUUID()}.${extensionForType(image.type)}`;
+      await platform.env.SET_IMAGES.put(key,image.bytes,{httpMetadata:{contentType:image.type,cacheControl:'public, max-age=31536000, immutable'}});
+      await database.prepare(`UPDATE products SET image_key = ?, updated_at = datetime('now') WHERE id = ?`).bind(key,product.id).run();
+      if (product.image_key && product.image_key !== key) await platform.env.SET_IMAGES.delete(product.image_key);
+      imageKey=key;
+    }
 
 		return json({ ok: true, productId: product.id, imageKey });
 	} catch (error) {

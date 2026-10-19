@@ -9,16 +9,17 @@
   let overview = $state('');
   let formats = $state([]);
   let images = $state([]);
+  let artworkBusy = $state(false);
+  let artworkMessage = $state('');
   let sources = $state([]);
   let selectedImage = $state('');
-  let manualImage = $state('');
   let applyReleaseDate = $state(false);
   let applyOverview = $state(false);
   let applyFormats = $state(false);
   let applyImage = $state(false);
 
   async function research() {
-    busy=true; error=''; warning=''; draft=null;
+    busy=true; error=''; warning='';
     try {
       const response=await fetch('/api/admin/products/ai-research',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({productId:product.id})});
       const result=await response.json();
@@ -28,7 +29,7 @@
     } catch(e) {error=e?.message||'Research failed.';} finally {busy=false;}
   }
   async function existingSources() {
-    busy=true;error='';warning='';draft=null;
+    busy=true;error='';warning='';
     try {
       const response=await fetch(`/api/admin/products/${product.id}/enrich-draft`);
       const result=await response.json();
@@ -41,13 +42,25 @@
     releaseDate=value.releaseDate||product.release_date||'';
     overview=value.overview||'';
     formats=(value.formats||[]).map(x=>({...x}));
-    images=value.images||[];
+    // Do not discard previously verified artwork during unrelated text research.
+    if ((value.images || []).length) images=value.images;
     sources=value.sources||[];
-    selectedImage=''; manualImage='';
+    if (!images.some(x=>x.url===selectedImage)) { selectedImage=''; applyImage=false; }
     applyReleaseDate=Boolean(value.releaseDate);
     applyOverview=Boolean(value.overview);
     applyFormats=Boolean(formats.length);
-    applyImage=false;
+  }
+  async function findArtwork(cachedOnly=false) {
+    artworkBusy=true; artworkMessage='';
+    try {
+      const response=await fetch('/api/admin/products/official-artwork',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({productId:product.id,cachedOnly})});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.message||'Could not find official artwork.');
+      images=result.images||[];
+      artworkMessage=result.warning|| (images.length+' candidate image(s) available.');
+      if(!images.some(x=>x.url===selectedImage)) { selectedImage=''; applyImage=false; }
+    } catch(e) { artworkMessage=e?.message||'Artwork search failed.'; }
+    finally { artworkBusy=false; }
   }
   async function apply() {
     if(!draft)return;
@@ -56,8 +69,8 @@
     try {
       const response=await fetch('/api/admin/source-harvester/apply-enrichment',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({productSlug:product.slug,releaseDate,overview,formats,imageUrl:(manualImage.trim() || selectedImage),
-          applyReleaseDate,applyOverview,applyFormats,applyImage:applyImage&&Boolean(manualImage.trim() || selectedImage)})
+        body:JSON.stringify({productSlug:product.slug,releaseDate,overview,formats,imageUrl:(selectedImage),
+          applyReleaseDate,applyOverview,applyFormats,applyImage:applyImage&&Boolean(selectedImage)})
       });
       const result=await response.json();
       if(!response.ok)throw new Error(result.message||'Could not save enrichment.');
@@ -70,8 +83,8 @@
   <div class="modal" role="dialog" aria-modal="true" aria-label={`Research ${product.name}`}>
     <header><div><div class="eyebrow">Setbound research studio</div><h2>{product.name}</h2><p>AI searches the web for source-backed product details. Nothing saves without approval.</p></div><button class="close" type="button" onclick={()=>onclose?.()}>×</button></header>
     <div class="body">
-      <div class="research-actions"><button type="button" class="primary" onclick={research} disabled={busy||applying}>{busy?'Researching…':'Research with AI'}</button><button type="button" class="secondary" onclick={existingSources} disabled={busy||applying}>Try existing sources</button></div>
-      <p class="note">AI research uses OpenAI web search and may incur API charges. Source links and box specifications must be checked before approval.</p>
+      <div class="research-actions"><button type="button" class="primary" onclick={research} disabled={busy||applying}>{busy?'Researching…':'Research with AI'}</button><button type="button" class="secondary" onclick={existingSources} disabled={busy||applying}>Try existing sources</button><button type="button" class="secondary" onclick={()=>findArtwork(false)} disabled={artworkBusy||applying}>{artworkBusy?'Finding artwork…':'Find official artwork'}</button></div>
+      <p class="note">Research details and official artwork separately. Only Topps or Checklist Insider pages are searched for Topps artwork. All fields require approval.</p>{#if artworkMessage}<p class="note" role="status">{artworkMessage}</p>{/if}
       {#if error}<div class="error" role="alert">{error}</div>{/if}
       {#if warning}<p class="note">{warning}</p>{/if}
       {#if busy}<div class="loading">Researching this exact release and verifying candidate artwork pages…</div>{/if}
