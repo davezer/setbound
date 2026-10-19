@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { sourceCategory } from '$lib/server/master-source.js';
 
 const SOURCE = 'cardsmithsbreaks';
 const HOSTS = new Set(['cardsmithsbreaks.com', 'www.cardsmithsbreaks.com']);
@@ -137,6 +138,7 @@ export async function POST({ request, platform, fetch }) {
   for (const pageUrl of requested) {
     const entry = await getEntry(platform, pageUrl);
     if (!entry) { failures.push({ pageUrl, reason: 'Page has not been cached.' }); continue; }
+    if (sourceCategory(pageUrl).kind !== 'candidate' || entry.verifiedMaster !== true) { failures.push({pageUrl,reason:'Select an inspected and verified master checklist.'}); continue; }
     try {
       const file = await makeFile(fetch, pageUrl);
       if (size + file.bytes.length > MAX_ARCHIVE) throw new Error('Combined CSV size limit reached.');

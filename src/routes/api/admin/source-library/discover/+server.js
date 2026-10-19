@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
+import { sourceCategory } from '$lib/server/master-source.js';
 
 // Keep original source identifiers for internal provenance, not UI branding.
 const HOST = 'cardsmithsbreaks.com';
@@ -56,7 +57,8 @@ async function save(database, entries) {
   for (let n = 0; n < entries.length; n += WRITE_CHUNK) {
     const statements = entries.slice(n, n + WRITE_CHUNK).map(({pageUrl, name}) => {
       const year = Number(new URL(pageUrl).pathname.match(/\b20\d{2}\b/)?.[0] || 0) || null;
-      const entry = {pageUrl, name, year, csvUrl: null, pdfUrl: null, csvButton: false, pdfButton: false, discoveredOnly: true};
+      const category=sourceCategory(pageUrl);
+      const entry = {pageUrl, name, year, csvUrl: null, pdfUrl: null, csvButton: false, pdfButton: false, discoveredOnly: true, sourceKind:category.kind, masterUrl:category.masterUrl||null, verifiedMaster:false};
       return database.prepare(`INSERT OR IGNORE INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`)
         .bind(pageUrl, SOURCE, year, name, JSON.stringify(entry));
     });
