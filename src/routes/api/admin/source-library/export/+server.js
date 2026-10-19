@@ -44,7 +44,7 @@ function csvLine(row) {
 }
 // Only parse actual HTML tables with a clear card-number/player/team header.
 // A browser-only DOM export cannot be reconstructed safely if rows aren't present in the HTML.
-export function extractCsv(html) {
+function extractCsv(html) {
   const cards = [];
   const seen = new Set();
   let matchedTables = 0;
