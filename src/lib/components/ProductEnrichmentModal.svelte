@@ -97,7 +97,17 @@
         </section>
         <section><label class="check"><input type="checkbox" bind:checked={applyImage} disabled={!selectedImage}/> Product artwork ({images.length})</label>
           {#if !images.length}<small>No verified image found automatically. You can paste an exact product image URL from a supported manufacturer or retailer below, or upload a local image from Manage Sets.</small>{/if}
-          <label class="field"><span>Verified product image URL (optional)</span><input class="input" type="url" bind:value={manualImage} placeholder="https://.../product-image.jpg" oninput={()=>{selectedImage='';applyImage=Boolean(manualImage.trim());}} /></label>
+          <label class="field"><span>Verified product image URL (optional)</span><input
+  class="input"
+  type="url"
+  value={manualImage}
+  placeholder="https://.../product-image.jpg"
+  oninput={(event) => {
+    manualImage = event.currentTarget.value;
+    selectedImage = '';
+    applyImage = Boolean(manualImage.trim());
+  }}
+/></label>
           <div class="images">{#each images as img}<label class:selected={selectedImage===img.url}><input type="radio" name="research-image" checked={selectedImage===img.url} onchange={()=>{selectedImage=img.url;applyImage=true;}}/><img src={img.url} alt="Product artwork candidate"/><a href={img.sourceUrl} target="_blank" rel="noopener noreferrer">Source ↗</a></label>{/each}</div>
         </section>
         <section><strong>Research sources</strong>{#each sources as source}<a href={source.url} rel="noopener noreferrer" target="_blank">{source.title} ↗</a>{/each}{#if !sources.length}<small>No qualifying research sources found. Do not apply speculative data.</small>{/if}</section>
