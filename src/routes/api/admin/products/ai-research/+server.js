@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 
 const MODEL = 'gpt-4.1-mini';
 const SOURCE_HOSTS = ['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','beckett.com','cardboardconnection.com','checklistinsider.com','dacardworld.com','blowoutcards.com','steelcitycollectibles.com'];
-const IMAGE_HOSTS = [...SOURCE_HOSTS,'cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com'];
+const IMAGE_HOSTS = [...SOURCE_HOSTS,'cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com','fanatics.com','fanaticsauthentic.com','fanaticsassets.com','static.fanatics.com','media.fanatics.com','images.fanatics.com','images.footballfanatics.com','cloudfront.net','imgix.net','akamaihd.net','scene7.com'];
 const FORMAT_KEYS = new Set(['hobby','breaker','blaster','mega','jumbo','retail','fat_pack','hanger','collector','inserts','mania','sapphire']);
 function allowed(raw, hosts) {
   try { const u = new URL(raw); return u.protocol === 'https:' && !u.port && !u.username && !u.password && hosts.some(h => u.hostname === h || u.hostname.endsWith('.'+h)); }
@@ -19,14 +19,21 @@ function parseObject(raw) {
   try { return JSON.parse(value); } catch { const a=value.indexOf('{'), b=value.lastIndexOf('}'); if(a>=0&&b>a) return JSON.parse(value.slice(a,b+1)); throw new Error('AI did not return usable structured research.'); }
 }
 function cleanCopy(raw) {
-  return String(raw||'')
-    .replace(/\[\s*(?:[\w.-]+\.(?:com|net|org|app)[^\]]*|https?:\/\/[^\]]+)\s*\]/gi,'')
-    .replace(/\(\s*https?:\/\/[^)]+\)/gi,'')
-    .replace(/https?:\/\/\S+/gi,'')
-    .replace(/\b(?:source|via|reference)\s*:\s*\(?\s*[\w.-]+\.(?:com|net|org)\b[^\n]*/gi,'')
-    .replace(/【[^】]+】|\[\s*\d+\s*\]/g,'')
-    .replace(/\s+([,.;!?])/g,'$1').replace(/[ \t]{2,}/g,' ').trim();
+  return String(raw || '')
+    .replace(/\[\s*(?:https?:\/\/[^\]]+|(?:www\.)?[\w.-]+\.(?:com|net|org|app)[^\]]*)\s*\]/gi, '')
+    .replace(/\(\s*https?:\/\/[^)]+\)/gi, '')
+    .replace(/https?:\/\/[^\s)]+/gi, '')
+    .replace(/【[^】]+】|\[\s*\d+\s*\]/g, '')
+    .replace(/\s*\((?:\s|\d|[,.;])*\)/g, '')
+    .replace(/\b(?:Hobby|Hanger|Mega|Jumbo|Blaster|Retail|Value|Mania|Sapphire)?\s*(?:boxes|packs|products|items)\s+are available for purchase[^.!?]*[.!?]/gi, '')
+    .replace(/\b(?:available for purchase|shop now|buy now|order today|purchase on the official)[^.!?]*[.!?]?/gi, '')
+    .replace(/\b(?:source|via|reference)\s*:\s*[^\n]+/gi, '')
+    .replace(/\s+([,.;!?])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\s+\.(?=\s|$)/g, '.')
+    .trim();
 }
+
 function readImages(html, base) {
   const out=[];
   function add(raw) { const url=imageUrl(raw,base); if(allowed(url,IMAGE_HOSTS)&&!out.includes(url))out.push(url); }
@@ -44,16 +51,27 @@ function readImages(html, base) {
 }
 async function verifiedImage(fetch, url) {
   try {
-    if(!allowed(url,IMAGE_HOSTS))return false;
-    const response=await fetch(url,{method:'GET',redirect:'manual',headers:{accept:'image/avif,image/webp,image/png,image/jpeg'}});
-    const type=String(response.headers.get('content-type')||'').split(';')[0].toLowerCase();
-    if(!response.ok||!['image/jpeg','image/png','image/webp','image/avif'].includes(type))return false;
-    const size=Number(response.headers.get('content-length')||0);
-    if(size>8*1024*1024)return false;
-    await response.body?.cancel();
-    return true;
-  } catch { return false; }
+    let target=url;
+    for(let redirect=0;redirect<4;redirect++) {
+      if(!allowed(target,IMAGE_HOSTS))return null;
+      const response=await fetch(target,{method:'GET',redirect:'manual',headers:{accept:'image/avif,image/webp,image/png,image/jpeg,*/*','user-agent':'Mozilla/5.0'}});
+      if([301,302,303,307,308].includes(response.status)) {
+        const location=response.headers.get('location');
+        if(!location)return null;
+        target=new URL(location,target).href;
+        continue;
+      }
+      const type=String(response.headers.get('content-type')||'').split(';')[0].toLowerCase();
+      if(!response.ok||!['image/jpeg','image/png','image/webp','image/avif'].includes(type))return null;
+      const size=Number(response.headers.get('content-length')||0);
+      if(size>8*1024*1024)return null;
+      await response.body?.cancel();
+      return target;
+    }
+    return null;
+  }catch{return null;}
 }
+
 export async function POST({request,platform,fetch}) {
   const key=platform?.env?.OPENAI_API_KEY;
   if(!key)return json({message:'OPENAI_API_KEY is not configured.'},{status:503});
@@ -90,7 +108,7 @@ export async function POST({request,platform,fetch}) {
   }
   const images=[];
   for(const candidate of candidates.slice(0,24)) {
-    if(await verifiedImage(fetch,candidate.url))images.push(candidate);
+    const verified=await verifiedImage(fetch,candidate.url); if(verified && !images.some(x=>x.url===verified))images.push({...candidate,url:verified});
     if(images.length>=6)break;
   }
   const releaseDate=/^\d{4}-\d{2}-\d{2}$/.test(result.releaseDate||'')?result.releaseDate:'';

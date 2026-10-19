@@ -11,6 +11,7 @@
   let images = $state([]);
   let sources = $state([]);
   let selectedImage = $state('');
+  let manualImage = $state('');
   let applyReleaseDate = $state(false);
   let applyOverview = $state(false);
   let applyFormats = $state(false);
@@ -42,7 +43,7 @@
     formats=(value.formats||[]).map(x=>({...x}));
     images=value.images||[];
     sources=value.sources||[];
-    selectedImage='';
+    selectedImage=''; manualImage='';
     applyReleaseDate=Boolean(value.releaseDate);
     applyOverview=Boolean(value.overview);
     applyFormats=Boolean(formats.length);
@@ -55,8 +56,8 @@
     try {
       const response=await fetch('/api/admin/source-harvester/apply-enrichment',{
         method:'POST',headers:{'content-type':'application/json'},
-        body:JSON.stringify({productSlug:product.slug,releaseDate,overview,formats,imageUrl:selectedImage,
-          applyReleaseDate,applyOverview,applyFormats,applyImage:applyImage&&Boolean(selectedImage)})
+        body:JSON.stringify({productSlug:product.slug,releaseDate,overview,formats,imageUrl:(manualImage.trim() || selectedImage),
+          applyReleaseDate,applyOverview,applyFormats,applyImage:applyImage&&Boolean(manualImage.trim() || selectedImage)})
       });
       const result=await response.json();
       if(!response.ok)throw new Error(result.message||'Could not save enrichment.');
@@ -82,7 +83,8 @@
           <div class="format-grid">{#each formats as format,index}<label class="field"><span>{format.label}</span><textarea bind:value={formats[index].details}></textarea>{#if format.sourceUrl}<a target="_blank" rel="noopener noreferrer" href={format.sourceUrl}>Check evidence ↗</a>{/if}</label>{/each}</div>
         </section>
         <section><label class="check"><input type="checkbox" bind:checked={applyImage} disabled={!selectedImage}/> Product artwork ({images.length})</label>
-          {#if !images.length}<small>No verified supported image URL was found. You can still upload artwork manually from Manage Sets.</small>{/if}
+          {#if !images.length}<small>No verified image found automatically. You can paste an exact product image URL from a supported manufacturer or retailer below, or upload a local image from Manage Sets.</small>{/if}
+          <label class="field"><span>Verified product image URL (optional)</span><input class="input" type="url" bind:value={manualImage} placeholder="https://.../product-image.jpg" oninput={()=>{selectedImage='';applyImage=Boolean(manualImage.trim());}} /></label>
           <div class="images">{#each images as img}<label class:selected={selectedImage===img.url}><input type="radio" name="research-image" checked={selectedImage===img.url} onchange={()=>{selectedImage=img.url;applyImage=true;}}/><img src={img.url} alt="Product artwork candidate"/><a href={img.sourceUrl} target="_blank" rel="noopener noreferrer">Source ↗</a></label>{/each}</div>
         </section>
         <section><strong>Research sources</strong>{#each sources as source}<a href={source.url} rel="noopener noreferrer" target="_blank">{source.title} ↗</a>{/each}{#if !sources.length}<small>No qualifying research sources found. Do not apply speculative data.</small>{/if}</section>

@@ -22,10 +22,21 @@ function allowedImageUrl(value) {
   let url;
   try { url = new URL(value); } catch { return null; }
   if (url.protocol !== 'https:' || url.port || url.username || url.password) return null;
-  const hosts = ['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','dacardworld.com','blowoutcards.com','steelcitycollectibles.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com'];
+  const hosts = ['topps.com','upperdeck.com','paniniamerica.net','pokemon.com','pokemoncenter.com','fanaticscollect.com','checklistinsider.com','dacardworld.com','blowoutcards.com','steelcitycollectibles.com','cdn.shopify.com','images.ctfassets.net','cdn11.bigcommerce.com','xcdn.checklistinsider.com','cdn.shopifycdn.net','images.squarespace-cdn.com','shopify.com','fanatics.com','fanaticsauthentic.com','fanaticsassets.com','static.fanatics.com','media.fanatics.com','images.fanatics.com','images.footballfanatics.com','cloudfront.net','imgix.net','akamaihd.net','scene7.com'];
   return hosts.some(host => url.hostname === host || url.hostname.endsWith('.' + host)) ? url : null;
 }
 
+function cleanCollectorCopy(value) {
+  return String(value || '')
+    .replace(/\[\s*(?:https?:\/\/[^\]]+|(?:www\.)?[\w.-]+\.(?:com|net|org|app)[^\]]*)\s*\]/gi,'')
+    .replace(/\(\s*https?:\/\/[^)]+\)/gi,'')
+    .replace(/https?:\/\/[^\s)]+/gi,'')
+    .replace(/【[^】]+】|\[\s*\d+\s*\]/g,'')
+    .replace(/\b(?:Hobby|Hanger|Mega|Jumbo|Blaster|Retail|Value|Mania|Sapphire)?\s*(?:boxes|packs|products|items)\s+are available for purchase[^.!?]*[.!?]/gi,'')
+    .replace(/\b(?:available for purchase|shop now|buy now|order today|purchase on the official)[^.!?]*[.!?]?/gi,'')
+    .replace(/\s+([,.;!?])/g,'$1')
+    .replace(/[ \t]{2,}/g,' ').trim();
+}
 function extensionForType(type) {
 	if (type === 'image/jpeg') return 'jpg';
 	if (type === 'image/png') return 'png';
@@ -39,7 +50,7 @@ export async function POST({ platform, request, fetch }) {
 		const body = await request.json();
 		const productSlug = String(body.productSlug || '').trim();
 		const releaseDate = String(body.releaseDate || '').trim() || null;
-		const overview = String(body.overview || '').trim() || null;
+		const overview = cleanCollectorCopy(body.overview) || null;
 		const formats = Array.isArray(body.formats) ? body.formats : [];
 		const imageUrl = String(body.imageUrl || '').trim();
 		const applyReleaseDate = body.applyReleaseDate !== false;
@@ -71,7 +82,7 @@ export async function POST({ platform, request, fetch }) {
 		if (applyFormats) {
 			for (const format of formats) {
 				const key = String(format?.key || '').trim();
-				const details = String(format?.details || '').trim();
+				const details = cleanCollectorCopy(format?.details);
 				if (!key || !details || !FORMAT_META.has(key)) continue;
 				const [defaultLabel, sort] = FORMAT_META.get(key);
 				const label = String(format?.label || '').trim() || defaultLabel;
@@ -94,7 +105,17 @@ export async function POST({ platform, request, fetch }) {
 			const remote = allowedImageUrl(imageUrl);
 			if (!remote) return json({ message: 'Image host is not on the approved manufacturer/CDN allowlist.' }, { status: 400 });
 
-			const response = await fetch(remote.href, { redirect: 'manual', headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'user-agent': 'Mozilla/5.0 Setbound/1.0' } });
+			let target = remote.href;
+            let response;
+            for (let hop = 0; hop < 4; hop++) {
+                const safe = allowedImageUrl(target);
+                if (!safe) return json({ message: 'Image redirected to an unapproved host.' }, { status: 400 });
+                response = await fetch(safe.href, { redirect: 'manual', headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,*/*', 'user-agent': 'Mozilla/5.0 Setbound/1.0' } });
+                if (![301,302,303,307,308].includes(response.status)) break;
+                const next = response.headers.get('location');
+                if (!next) break;
+                target = new URL(next, target).href;
+            }
 			if (!response.ok) return json({ message: `Product image download failed with HTTP ${response.status}.` }, { status: 502 });
 
 			const type = String(response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
