@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { sourceCategory } from '$lib/server/master-source.js';
+import { extractCsv } from '$lib/server/source-table-extractor.js';
 
 const HOST = 'cardsmithsbreaks.com';
 const SOURCE = 'cardsmithsbreaks';
@@ -58,10 +59,11 @@ export async function POST({request, platform, fetch}) {
       const html = (await response.text()).slice(0, 1200000);
       const links = downloadLinks(html,url);
       const category = sourceCategory(url);
-      const hasCards = /<table\b[\s\S]*?<tr\b/i.test(html) && /(?:card\s*(?:number|#)|player|subject|name)/i.test(html);
-      const verifiedMaster = category.kind === 'candidate' && hasCards;
+      const extraction = category.kind === 'candidate' ? extractCsv(html) : {ok:false,reason:'Format-specific source'};
+      const extractionStatus = category.kind !== 'candidate' ? 'excluded' : extraction.ok ? 'ready' : 'unavailable';
+      const verifiedMaster = extractionStatus === 'ready';
       const entry = {pageUrl:url,name:titleFrom(html,url),year:Number(String(url).match(/\b20\d{2}\b/)?.[0] || 0) || null,
-        csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,checkedAt:new Date().toISOString()};
+        csvUrl:links.csv,pdfUrl:links.pdf, csvButton:/\b(?:Download\s*)?CSV\b/i.test(html), pdfButton:/\bDownload\s*PDF\b/i.test(html),sourceKind:category.kind,masterUrl:category.masterUrl||null,verifiedMaster,extractionStatus,extractedCards:extraction.ok?extraction.cards:0,extractedSections:extraction.ok?extraction.sections:0,extractionReason:extraction.ok?null:extraction.reason||null,checkedAt:new Date().toISOString()};
       await database.prepare(`INSERT INTO source_harvester_cache (page_url,source,year,title,entry_json,scanned_at,updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'),datetime('now')) ON CONFLICT(page_url) DO UPDATE SET source=excluded.source,year=excluded.year,title=excluded.title,entry_json=excluded.entry_json,scanned_at=datetime('now'),updated_at=datetime('now')`).bind(url,SOURCE,entry.year,entry.name,JSON.stringify(entry)).run();
       results.push({ ...entry, ok:true });
     } catch(e) { results.push({pageUrl:url,ok:false,error:e?.message || 'Page could not be inspected.'}); }
