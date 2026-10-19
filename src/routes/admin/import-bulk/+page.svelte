@@ -18,17 +18,34 @@
   let readyCount = $derived(queue.filter(x => x.status === 'ready').length);
 
   const extension = file => file.name.split('.').pop().toLowerCase();
-  const prettyName = file => file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const SPECIAL = new Map(Object.entries({
+    nba:'NBA', nfl:'NFL', mlb:'MLB', nhl:'NHL', mls:'MLS', wwe:'WWE', ufc:'UFC', fifa:'FIFA',
+    f1:'F1', wnba:'WNBA', ncaa:'NCAA', rc:'RC', sdcc:'SDCC', nycc:'NYCC', nscc:'NSCC',
+    prizm:'Prizm', topps:'Topps', bowman:'Bowman', chrome:'Chrome', 'o-pee-chee':'O-Pee-Chee'
+  }));
+  function titleWord(word) {
+    if (word.toLowerCase() === 'x') return 'x';
+    if (SPECIAL.has(word.toLowerCase())) return SPECIAL.get(word.toLowerCase());
+    return word.split(/([-'])/).map((part, i, parts) => part === '-' || part === "'" ? part : (i > 0 && parts[i-1] === "'" && part.toLowerCase() === 's') ? 's' :
+      (SPECIAL.get(part.toLowerCase()) || (part ? part[0].toUpperCase() + part.slice(1).toLowerCase() : ''))
+    ).join('');
+  }
+  function formattedName(file) {
+    const base = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const season = file.name.match(/^(19\d{2}|20\d{2})[-_](\d{2})(?:[-_]|\.)/);
+    const year = file.name.match(/^(19\d{2}|20\d{2})(?:[-_\s]|\.)/);
+    const prefix = season ? season[1] + '-' + season[2] : year ? year[1] : String(new Date().getFullYear());
+    const rest = base.replace(/^(?:19|20)\d{2}(?:\s+\d{2})?\s*/, '').trim();
+    return { year: Number(prefix.slice(0,4)), name: prefix + ' ' + (rest || base).split(/\s+/).map(titleWord).join(' ').replace(/\bO Pee Chee\b/g, 'O-Pee-Chee') };
+  }
+
   function guess(file) {
-    const full = prettyName(file);
-    const m = full.match(/(?:^|\s)((?:19|20)\d{2})(?:[-– ](\d{2}))?(?=\s|$)/);
-    const year = m ? Number(m[1]) : new Date().getFullYear();
-    const name = full.replace(/^\s*(?:19|20)\d{2}(?:\s+\d{2})?\s*/,'').trim();
+    const { year, name } = formattedName(file);
     const manufacturer = data.manufacturers.find(x=>new RegExp('\\b'+x.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(name));
     const sportTerms = [{word:/baseball|bowman(?! university)/i,match:/baseball/i},{word:/football|nfl/i,match:/football/i},{word:/basketball|nba|hoops/i,match:/basketball/i},{word:/hockey|nhl|o pee chee/i,match:/hockey/i},{word:/soccer|mls|fifa|world cup/i,match:/soccer/i},{word:/formula.?1|f1/i,match:/racing|motorsport|formula/i},{word:/wwe|wrestling/i,match:/wrestling/i},{word:/ufc/i,match:/mma|ufc/i}];
     const term=sportTerms.find(t=>t.word.test(name));
     const sport=term && data.sports.find(x=>term.match.test(x.name));
-    return {year,name: name || full,manufacturerId:manufacturer?.id ?? data.manufacturers[0]?.id ?? '',sportId:sport?.id ?? data.sports[0]?.id ?? ''};
+    return {year,name,manufacturerId:manufacturer?.id ?? data.manufacturers[0]?.id ?? '',sportId:sport?.id ?? data.sports[0]?.id ?? ''};
   }
   async function addFiles(files) {
     if(importing || reading || !files.length)return;

@@ -177,9 +177,10 @@ export async function POST({ request, platform }) {
 		 * And always create:
 		 *   2026-bowman-football
 		 */
-		const displayName = productDisplayName(body.name, year);
-		const canonicalName = `${year} ${displayName}`.trim();
-		const slug = `${year}-${slugify(displayName)}`;
+		const seasonMatch = String(body.name).trim().match(new RegExp('^' + year + '-(\\d{2})\\s+(.+)$'));
+		const displayName = seasonMatch ? seasonMatch[2] : productDisplayName(body.name, year);
+		const canonicalName = seasonMatch ? `${year}-${seasonMatch[1]} ${displayName}` : `${year} ${displayName}`;
+		const slug = `${year}-${slugify(seasonMatch ? seasonMatch[1] + ' ' + displayName : displayName)}`;
 
 		const existingProduct = await database
 			.prepare(`
