@@ -5,6 +5,19 @@
  let showing = $derived(entries.filter(x=>`${x.name} ${x.pageUrl}`.toLowerCase().includes(search.toLowerCase())));
  onMount(async()=>{try{const r=await fetch('/api/admin/source-library');const j=await r.json();entries=j.entries||[];}catch{}});
  async function scan(){busy=true;error='';note='';try{const r=await fetch('/api/admin/source-library',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls:links.split(/[\n\s,]+/).filter(Boolean)})});const j=await r.json();if(!r.ok)throw new Error(j.message);entries=j.entries||[];note=`Inspected ${(j.results||[]).length} page(s); ${(j.results||[]).filter(x=>x.ok).length} saved to D1 cache.`; const failures=(j.results||[]).filter(x=>!x.ok);if(failures.length)error=failures.map(x=>x.error).join(' · ');}catch(e){error=e.message;}finally{busy=false;}}
+ async function generateCsvZip(){
+   const urls=[...new Set(chosen.filter(v=>v.endsWith('|csv-generated')).map(v=>v.slice(0,-14)))];
+   if(!urls.length){error='Select a Generate CSV checkbox first.';return;}
+   busy=true;error='';note='';
+   try {
+     const response=await fetch('/api/admin/source-library/export',{
+       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({urls})
+     });
+     if(!response.ok){const result=await response.json();throw new Error([result.message,...(result.failures||[]).map(x=>x.reason)].filter(Boolean).join(' · '));}
+     download('source-library-generated-csv.zip',await response.blob());
+     note='Generated CSV ZIP downloaded. Review export-report.json and every checklist before importing.';
+   }catch(e){error=e?.message||'CSV generation failed.';}finally{busy=false;}
+ }
  function toggle(id){chosen=chosen.includes(id)?chosen.filter(x=>x!==id):[...chosen,id];}
  function pickVisible(){chosen=[...new Set([...chosen,...showing.flatMap(x=>['csv','pdf'].filter(k=>x[k+'Url']).map(k=>x.pageUrl+'|'+k))])];}
  function download(name,blob){const u=URL.createObjectURL(blob);const a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
@@ -14,8 +27,8 @@
  <div class="heading"><div><div class="eyebrow">Admin / Harvester pilot</div><h1>Checklist sources</h1><p>Cache checklist pages and download directly available original CSV/PDF files. No AI, parsing or publishing.</p></div><a href="/admin/import-studio">Open manual Import Studio ↗</a></div>
  <div class="panel"><label for="urls">Checklist page URLs (up to 12 per scan)</label><textarea id="urls" bind:value={links} rows="4" placeholder="Paste one source checklist URL per line"></textarea><div class="tools"><button onclick={scan} disabled={busy}>{busy?'Working…':'Inspect & cache pages'}</button><span>Pages with JavaScript-generated download buttons may not expose direct file URLs. Those stay marked unavailable.</span></div></div>
  {#if error}<p class="error" role="alert">{error}</p>{/if}{#if note}<p class="note" role="status">{note}</p>{/if}
- <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>
- <div class="list">{#each showing as x (x.pageUrl)}<article><div class="name"><strong>{x.name}</strong><a href={x.pageUrl} target="_blank" rel="noreferrer">Source ↗</a></div><small>{x.year || 'Year unknown'} · cached {x.scannedAt || x.checkedAt || '—'}</small><div class="formats">{#each ['csv','pdf'] as format}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|'+format)} disabled={!x[format+'Url']||busy} onchange={()=>toggle(x.pageUrl+'|'+format)}/>{format.toUpperCase()}: {x[format+'Url']?'Direct download':x[format+'Button']?'Browser export only':'Not detected'}</label>{/each}</div></article>{/each}{#if !showing.length}<p>No cached sources match your search. Paste a checklist link above to start.</p>{/if}</div>
+ <div class="tools"><input bind:value={search} placeholder="Search cached releases…" aria-label="Search cached releases"/><button class="secondary" onclick={pickVisible} disabled={busy}>Select available files</button><button onclick={bulk} disabled={busy||!chosen.length}>Download selected ({chosen.length})</button><button class="secondary" type="button" onclick={generateCsvZip} disabled={busy||!chosen.some(x=>x.endsWith('|csv-generated'))}>Generate selected CSV ({chosen.filter(x=>x.endsWith('|csv-generated')).length})</button><a href="/admin/import-studio">Review/import downloaded CSV ↗</a></div>
+ <div class="list">{#each showing as x (x.pageUrl)}<article><div class="name"><strong>{x.name}</strong><a href={x.pageUrl} target="_blank" rel="noreferrer">Source ↗</a></div><small>{x.year || 'Year unknown'} · cached {x.scannedAt || x.checkedAt || '—'}</small><div class="formats">{#each ['csv','pdf'] as format}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|'+format)} disabled={!x[format+'Url']||busy} onchange={()=>toggle(x.pageUrl+'|'+format)}/>{format.toUpperCase()}: {x[format+'Url']?'Direct download':x[format+'Button']?'Browser export only':'Not detected'}</label>{/each}{#if x.csvButton && !x.csvUrl}<label><input type="checkbox" checked={chosen.includes(x.pageUrl+'|csv-generated')} disabled={busy} onchange={()=>toggle(x.pageUrl+'|csv-generated')}/>Generate CSV from page (experimental)</label>{/if}</div></article>{/each}{#if !showing.length}<p>No cached sources match your search. Paste a checklist link above to start.</p>{/if}</div>
  <p class="note">Pilot scope: explicit checklist URLs; it does not crawl the entire catalog. Bulk download only uses links confirmed in cached page markup. Use the source page's CSV button manually for browser-only exports. Check the site's usage terms before scaling automated downloads.</p>
 </section>
 <style>
