@@ -13,6 +13,7 @@
   let artworkMessage = $state('');
   let sources = $state([]);
   let selectedImage = $state('');
+  let manualImage = $state('');
   let applyReleaseDate = $state(false);
   let applyOverview = $state(false);
   let applyFormats = $state(false);
