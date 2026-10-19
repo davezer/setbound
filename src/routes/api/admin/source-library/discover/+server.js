@@ -92,7 +92,7 @@ function parentArchiveLinks(html) {
 export async function POST({ request, platform, fetch }) {
   const body = await request.json().catch(() => ({}));
   const catalog = body.catalog === 'upcoming' ? 'upcoming' : body.catalog === 'past' || body.catalog == null ? 'past' : null;
-  if (!catalog) return json({message:'Invalid catalog.'},{status:400});
+  if (!catalog && body.catalog !== 'homepage-parents') return json({message:'Invalid catalog.'},{status:400});
 
   if (body.catalog === 'homepage-parents') {
     try {
@@ -104,7 +104,7 @@ export async function POST({ request, platform, fetch }) {
       const entries=parentArchiveLinks(html);
       // Preview first. No cache mutation unless the admin explicitly requests save.
       if (body.save !== true) return json({ok:true,preview:true,found:entries.length,samples:entries.slice(0,15)});
-      const added=await save(db(platform),entries);
+      const added=await save(db(platform),entries,'homepage-parents');
       return json({ok:true,preview:false,found:entries.length,added,existing:entries.length-added});
     }catch(error){return json({message:error?.message||'Archive extraction failed. No changes made.'},{status:422});}
   }
