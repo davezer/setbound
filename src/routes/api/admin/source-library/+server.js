@@ -47,7 +47,7 @@ export async function GET({ platform }) {
 export async function POST({request, platform, fetch}) {
   const body = await request.json().catch(() => ({}));
   const urls = [...new Set((Array.isArray(body.urls) ? body.urls : []).map(siteUrl).filter(Boolean))].slice(0, MAX_PAGES);
-  if (!urls.length) return json({message:'Paste at least one Cardsmiths full-checklist or csbmaster URL.'},{status:400});
+  if (!urls.length) return json({message:'Paste at least one Source full-checklist or csbmaster URL.'},{status:400});
   const database = db(platform);
   const results = [];
   for (const url of urls) {
