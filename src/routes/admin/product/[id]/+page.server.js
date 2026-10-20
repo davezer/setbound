@@ -116,7 +116,7 @@ export async function load({ platform, params, url }) {
 }
 
 export const actions = {
-  default: async ({ platform, params, request }) => {
+   saveMetadata: async ({ platform, params, request }) => {
     const database = db(platform);
     const productId = Number(params.id);
     const form = await request.formData();

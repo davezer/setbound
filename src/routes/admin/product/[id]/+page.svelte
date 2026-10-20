@@ -51,7 +51,7 @@
     </form>
   </section>
 
-  <form method="POST" class="editor">
+  <form method="POST" action="?/saveMetadata" class="editor">
     <section class="section">
       <div class="section-title"><div class="eyebrow">Basics</div><h2>Product info</h2></div>
       <div class="autofill-row"><button class="auto-fill" type="button" onclick={autoFillDetails} disabled={enrichmentBusy}>{enrichmentBusy ? 'Finding details…' : 'Auto-fill from source'}</button>{#if enrichmentMessage}<span>{enrichmentMessage}</span>{/if}</div>
