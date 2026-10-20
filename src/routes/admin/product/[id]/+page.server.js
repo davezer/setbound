@@ -1,6 +1,23 @@
 import { fail, redirect, error } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 
+
+function conciseBoxDetails(value) {
+  const text=Array.isArray(value)?value.join(' · '):String(value||'');
+  const parts=text.split(/\s*[·\n]\s*/).map(s=>s.trim()).filter(Boolean);
+  const count=parts.find(p=>/^Packs\s*[×x]\s*cards\s*:/i.test(p));
+  if(!count)return text;
+  const match=count.match(/:\s*(\d+)\s*[×x]\s*(\d+)/i);
+  if(!match)return text;
+  const autos=parts.find(p=>/^Autographs\s*:/i.test(p));
+  let hits='Not specified';
+  if(autos){
+    const v=autos.replace(/^Autographs\s*:\s*/i,'').trim();
+    hits=/^(?:none|0)(?:\b|$)/i.test(v)?'None':v.replace(/^(\d+)\s+guaranteed\b/i,(_,n)=>n+' autograph'+(n==='1'?'':'s')+' guaranteed');
+  }
+  return 'Cards per pack: '+match[2]+'\nPacks per box: '+match[1]+'\nGuaranteed hits: '+hits;
+}
+
 const FORMAT_FIELDS = [
   { key: 'hobby', label: 'Hobby Box Breakdown', sort: 10 },
   { key: 'breaker', label: 'Breaker / Breaker Delight Breakdown', sort: 20 },
@@ -112,7 +129,7 @@ export async function load({ platform, params, url }) {
     WHERE product_id = ? ORDER BY sort_order, id
   `).bind(product.id).all();
   const saved = new Map((formatResult.results || []).map(row => [row.format_key, row]));
-  return { product, imageSaved: url.searchParams.has('image-saved'), formats: FORMAT_FIELDS.map(field => ({ ...field, details: saved.get(field.key)?.details || '' })) };
+  return { product, imageSaved: url.searchParams.has('image-saved'), formats: FORMAT_FIELDS.map(field => ({ ...field, details: conciseBoxDetails(saved.get(field.key)?.details || '') })) };
 }
 
 export const actions = {
@@ -127,7 +144,7 @@ export const actions = {
       UPDATE products SET release_date = ?, product_notes = ?, updated_at = datetime('now') WHERE id = ?
     `).bind(releaseDate, notes, productId)];
     for (const field of FORMAT_FIELDS) {
-      const details = String(form.get(`format_${field.key}`) || '').trim();
+      const details = conciseBoxDetails(String(form.get(`format_${field.key}`) || '').trim());
       if (details) statements.push(database.prepare(`
         INSERT INTO product_formats (product_id, format_key, label, details, sort_order, updated_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'))

@@ -4,6 +4,23 @@ import { db } from '$lib/server/db';
 const HOST='cardsmithsbreaks.com';
 const KEYS={hobby:'Hobby',jumbo:'Jumbo',breaker:'Breaker Delight',blaster:'Blaster / Value',mega:'Mega',retail:'Retail',fat_pack:'Fat Pack',hanger:'Hanger',collector:'Collector / Tin'};
 const MAX_HTML=3_000_000;
+
+function conciseBoxDetails(value) {
+  const text=Array.isArray(value)?value.join(' · '):String(value||'');
+  const parts=text.split(/\s*[·\n]\s*/).map(s=>s.trim()).filter(Boolean);
+  const count=parts.find(p=>/^Packs\s*[×x]\s*cards\s*:/i.test(p));
+  if(!count)return text;
+  const match=count.match(/:\s*(\d+)\s*[×x]\s*(\d+)/i);
+  if(!match)return text;
+  const autos=parts.find(p=>/^Autographs\s*:/i.test(p));
+  let hits='Not specified';
+  if(autos){
+    const v=autos.replace(/^Autographs\s*:\s*/i,'').trim();
+    hits=/^(?:none|0)(?:\b|$)/i.test(v)?'None':v.replace(/^(\d+)\s+guaranteed\b/i,(_,n)=>n+' autograph'+(n==='1'?'':'s')+' guaranteed');
+  }
+  return 'Cards per pack: '+match[2]+'\nPacks per box: '+match[1]+'\nGuaranteed hits: '+hits;
+}
+
 function decode(s){return String(s||'').replace(/&(?:amp|#38);/gi,'&').replace(/&(?:quot|#34);/gi,'"').replace(/&#(?:39|0*39);|&apos;/gi,"'").replace(/&nbsp;/gi,' ').replace(/&ndash;/gi,'–').replace(/&mdash;/gi,'—').replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n)));}
 function strip(s){return decode(String(s||'').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();}
 function attr(html,key){const a=String(html).match(new RegExp('\\b'+key+'\\s*=\\s*(?:"([^"]*)"|\'([^\']*)\')','i'));return decode(a?.[1]??a?.[2]??'');}
@@ -62,7 +79,7 @@ async function sourcePage(fetchFn,url){
  if(Number(r.headers.get('content-length')||0)>MAX_HTML)throw Error('Source page too large.');
  const html=await r.text();if(html.length>MAX_HTML)throw Error('Source page too large.');return html;
 }
-async function getFacts(fetchFn,url){const html=await sourcePage(fetchFn,url);return {overview:description(html),formats:extractSpecs(html),images:candidates(html,url)};}
+async function getFacts(fetchFn,url){const html=await sourcePage(fetchFn,url);return {overview:description(html),formats:Object.fromEntries(Object.entries(extractSpecs(html)).map(([key,values])=>[key,conciseBoxDetails(values)])),images:candidates(html,url)};}
 async function getImage(fetchFn,url){
  const r=await fetchFn(url,{redirect:'manual',headers:{accept:'image/webp,image/png,image/jpeg,image/avif'}});
  if(!r.ok)throw Error('Selected image unavailable (HTTP '+r.status+').');
@@ -88,7 +105,7 @@ export async function POST({request,platform,fetch}){
   const image=typeof body.imageUrl==='string'&&facts.images.includes(body.imageUrl)&&!p.image_key?body.imageUrl:null;
   const updates=[];
   if(wantOverview)updates.push(database.prepare("UPDATE products SET product_notes=?, updated_at=datetime('now') WHERE id=? AND (product_notes IS NULL OR TRIM(product_notes)='')").bind(facts.overview,id));
-  for(const key of selected){updates.push(database.prepare("INSERT INTO product_formats (product_id,format_key,label,details,sort_order,updated_at) VALUES (?,?,?,?,100,datetime('now')) ON CONFLICT(product_id,format_key) DO UPDATE SET details=excluded.details, updated_at=datetime('now') WHERE substr(product_formats.details, 1, 12) = 'Listed as a '").bind(id,key,KEYS[key]+' Box Breakdown',facts.formats[key].join(' · ')));}
+  for(const key of selected){updates.push(database.prepare("INSERT INTO product_formats (product_id,format_key,label,details,sort_order,updated_at) VALUES (?,?,?,?,100,datetime('now')) ON CONFLICT(product_id,format_key) DO UPDATE SET details=excluded.details, updated_at=datetime('now') WHERE substr(product_formats.details, 1, 12) = 'Listed as a '").bind(id,key,KEYS[key]+' Box Breakdown',facts.formats[key]));}
   if(!updates.length&&!image)return json({message:'No eligible empty metadata selected.'},{status:409});
   // Read and validate the approved image before changing database state.
   let img=null;if(image){if(!platform?.env?.SET_IMAGES)throw Error('Image storage unavailable.');img=await getImage(fetch,image);}
