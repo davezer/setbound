@@ -88,7 +88,7 @@ export async function POST({request,platform,fetch}){
   const image=typeof body.imageUrl==='string'&&facts.images.includes(body.imageUrl)&&!p.image_key?body.imageUrl:null;
   const updates=[];
   if(wantOverview)updates.push(database.prepare("UPDATE products SET product_notes=?, updated_at=datetime('now') WHERE id=? AND (product_notes IS NULL OR TRIM(product_notes)='')").bind(facts.overview,id));
-  for(const key of selected){updates.push(database.prepare("INSERT INTO product_formats (product_id,format_key,label,details,sort_order,updated_at) VALUES (?,?,?,?,100,datetime('now')) ON CONFLICT(product_id,format_key) DO UPDATE SET details=excluded.details, updated_at=datetime('now') WHERE product_formats.details LIKE 'Listed as a % configuration in source release directory.'").bind(id,key,KEYS[key]+' Box Breakdown',facts.formats[key].join(' · ')));}
+  for(const key of selected){updates.push(database.prepare("INSERT INTO product_formats (product_id,format_key,label,details,sort_order,updated_at) VALUES (?,?,?,?,100,datetime('now')) ON CONFLICT(product_id,format_key) DO UPDATE SET details=excluded.details, updated_at=datetime('now') WHERE substr(product_formats.details, 1, 12) = 'Listed as a '").bind(id,key,KEYS[key]+' Box Breakdown',facts.formats[key].join(' · ')));}
   if(!updates.length&&!image)return json({message:'No eligible empty metadata selected.'},{status:409});
   // Read and validate the approved image before changing database state.
   let img=null;if(image){if(!platform?.env?.SET_IMAGES)throw Error('Image storage unavailable.');img=await getImage(fetch,image);}
