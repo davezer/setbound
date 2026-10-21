@@ -76,6 +76,7 @@
 	let metadataStop = $state(false);
 	let metadataProgress = $state('');
 	let metadataError = $state('');
+	let metadataModalOpen = $state(false); // SETBOUND_BULK_METADATA_MODAL_V2
 	const visibleMetadataIds = $derived(visible.map(p => Number(p.id)));
 	const readyMetadata = $derived(metadataResults.filter(row => row.status === 'ready' && row.approved));
 	function updateSet(ids, id, checked) { const next=new Set(ids);checked?next.add(id):next.delete(id);return [...next]; }
@@ -98,7 +99,7 @@
 	}
 	async function metadataPreview() {
 		if(metadataBusy || metadataApplying || !metadataSelectedIds.length)return;
-		metadataResults=[];metadataBusy=true;metadataStop=false;metadataError='';
+		metadataResults=[];metadataBusy=true;metadataStop=false;metadataError='';metadataModalOpen=true;
 		const ids=[...metadataSelectedIds];
 		for(let i=0;i<ids.length;i++){
 			if(metadataStop)break;
@@ -110,9 +111,10 @@
 				const first=await a.json().catch(()=>({})),second=await b.json().catch(()=>({}));
 				if(!a.ok||!b.ok)throw Error(first.message||second.message||'Source lookup failed.');
 				const fields=Object.entries(second.formats||{}).filter(([key,value])=>value && (!second.existingFormats?.[key] || second.existingFormats[key].startsWith('Listed as a '))).map(([key])=>key);
+				const images=second.hasImage?[]:[...new Set(second.images||[])];
 				const date=!!first.releaseDate&&!first.existingDate;
 				const desc=!!second.overview&&!second.existingOverview;
-				metadataResults=[...metadataResults,{id:p.id,name:p.name,status:date||desc||fields.length?'ready':'unchanged',approved:date||desc||fields.length>0,date,desc,fields,releaseDate:first.releaseDate,overview:second.overview||'',formats:second.formats||{},sourceUrl:second.sourceUrl}];
+				metadataResults=[...metadataResults,{id:p.id,name:p.name,status:date||desc||fields.length||images.length?'ready':'unchanged',approved:!!(date||desc||fields.length),date,desc,fields,images,image:'',releaseDate:first.releaseDate,overview:second.overview||'',formats:second.formats||{},sourceUrl:second.sourceUrl}];
 			}catch(e){metadataResults=[...metadataResults,{id:p.id,name:p.name,status:'error',error:e?.message||'Lookup failed',approved:false}];}
 		}
 		metadataBusy=false;metadataProgress='Reviewed '+metadataResults.length+' of '+ids.length+' sets.';
@@ -120,7 +122,7 @@
 	async function metadataApply() {
 		const rows=[...readyMetadata];
 		if(metadataApplying||!rows.length)return;
-		if(!confirm('Save selected empty metadata for '+rows.length+' sets?\n\nExisting descriptions, images and custom box details will be preserved. Image selection remains manual.'))return;
+		if(!confirm('Save approved metadata for '+rows.length+' sets?\n\nSelected source images will be downloaded to R2. Existing artwork, descriptions, and custom box details will not be replaced.'))return;
 		metadataApplying=true;metadataStop=false;metadataError='';
 		let saved=0, failed=0;
 		for(let i=0;i<rows.length;i++){
@@ -128,8 +130,9 @@
 			const row=rows[i];metadataProgress='Saving '+(i+1)+' / '+rows.length+': '+row.name;
 			try {
 				if(row.date){const r=await fetch('/api/admin/products/source-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,releaseDate:true,formats:[]}),signal:AbortSignal.timeout(25000)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Release date save failed.');}
-				if(row.desc||row.fields.length){const r=await fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,applyOverview:row.desc,overview:row.overview,formats:row.fields}),signal:AbortSignal.timeout(25000)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Details save failed.');}
-				products=products.map(p=>Number(p.id)===row.id?{...p,release_date:row.date?row.releaseDate:p.release_date,has_product_details:row.desc?1:p.has_product_details}:p);
+				let resultImageKey='';
+				if(row.desc||row.fields.length||row.image){const r=await fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,applyOverview:row.desc,overview:row.overview,formats:row.fields,imageUrl:row.image||''}),signal:AbortSignal.timeout(25000)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Details save failed.');resultImageKey=j.imageKey||'';}
+				products=products.map(p=>Number(p.id)===row.id?{...p,release_date:row.date?row.releaseDate:p.release_date,has_product_details:row.desc?1:p.has_product_details,image_key:resultImageKey||p.image_key}:p);
 				metadataResults=metadataResults.map(x=>x.id===row.id?{...x,status:'saved',approved:false}:x);saved++;
 			}catch(e){metadataResults=metadataResults.map(x=>x.id===row.id?{...x,status:'error',error:e?.message||'Save failed',approved:false}:x);failed++;}
 		}
@@ -491,23 +494,9 @@
 			<button type="button" onclick={metadataPreview} disabled={metadataBusy||metadataApplying||!metadataSelectedIds.length}>{metadataBusy?'Checking…':'Preview parent metadata ('+metadataSelectedIds.length+')'}</button>
 			{#if metadataBusy||metadataApplying}<button type="button" onclick={()=>metadataStop=true} disabled={metadataStop}>Stop after current set</button>{/if}
 		</div>
-		<p>Exact parent matches only. Previews release dates, original descriptions and box details without saving. Images stay manual. Source requests run one set at a time.</p>
-		{#if metadataProgress}<p role="status">{metadataProgress}</p>{/if}
-		{#if metadataError}<p class="error">{metadataError}</p>{/if}
-		{#if metadataResults.length}
-			<div style="display:grid;gap:.55rem;max-height:400px;overflow:auto">
-				{#each metadataResults as row (row.id)}
-					<div style="padding:.6rem;border:1px solid #ddd;border-radius:.5rem">
-						{#if row.status==='ready'}<label style="display:flex;gap:.5rem;align-items:center"><input type="checkbox" checked={row.approved} disabled={metadataApplying||metadataBusy} onchange={e=>metadataResults=metadataResults.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/><strong>{row.name}</strong></label>
-							<small>{row.date?'Release date: '+row.releaseDate+' · ':''}{row.desc?'Description · ':''}{row.fields.length+' box breakdown(s)'} · <a href={row.sourceUrl} target="_blank" rel="noreferrer">Source ↗</a></small>
-							{#if row.desc}<p style="font-size:.76rem">{row.overview}</p>{/if}
-							{#each row.fields as key}<p style="font-size:.74rem;white-space:pre-line"><strong>{key.replaceAll('_',' ')}:</strong> {row.formats[key]}</p>{/each}
-						{:else}<strong>{row.name}</strong> <small>· {row.status==='error'?row.error:row.status}</small>{/if}
-					</div>
-				{/each}
-			</div>
-			<div class="offline-tools-actions"><button type="button" onclick={()=>metadataResults=metadataResults.map(x=>x.status==='ready'?{...x,approved:true}:x)} disabled={metadataBusy||metadataApplying}>Select all proposed metadata</button><button type="button" onclick={()=>metadataResults=metadataResults.map(x=>({...x,approved:false}))} disabled={metadataBusy||metadataApplying}>Deselect</button><button type="button" onclick={metadataApply} disabled={metadataBusy||metadataApplying||!readyMetadata.length}>{metadataApplying?'Saving…':'Approve and save ('+readyMetadata.length+')'}</button></div>
-		{/if}</div>
+		<p>Review release dates, descriptions, box details and product images in a full-size window. Nothing saves without approval.</p>
+		{#if metadataResults.length}<button type="button" onclick={()=>metadataModalOpen=true}>Open metadata review ({metadataResults.length})</button>{/if}
+		</div>
 		</details>
 		<details class="batch-panel danger-panel">
 			<summary><span><strong>Delete imports</strong><small>{selectedDeleteProducts.length} selected</small></span><span class="batch-chevron">⌄</span></summary>
@@ -623,6 +612,63 @@
 		{/if}
 	</div>
 </section>
+
+
+{#if metadataModalOpen}
+  <div class="bulk-meta-overlay" role="presentation" onclick={e=>{if(e.target===e.currentTarget&&!metadataBusy&&!metadataApplying)metadataModalOpen=false}}>
+    <section class="bulk-meta-dialog" role="dialog" aria-modal="true" aria-label="Bulk parent metadata review" tabindex="-1">
+      <header class="bulk-meta-head">
+        <div><h2>Review parent metadata</h2><p>{metadataResults.length} reviewed · {readyMetadata.length} approved · {metadataSelectedIds.length} selected</p></div>
+        <button type="button" aria-label="Close review" onclick={()=>metadataModalOpen=false}>✕</button>
+      </header>
+      <div class="bulk-meta-toolbar">
+        <button type="button" onclick={()=>metadataResults=metadataResults.map(x=>x.status==='ready'?{...x,approved:true}:x)} disabled={metadataBusy||metadataApplying}>Select all proposals</button>
+        <button type="button" onclick={()=>metadataResults=metadataResults.map(x=>({...x,approved:false}))} disabled={metadataBusy||metadataApplying}>Deselect all</button>
+        {#if metadataBusy||metadataApplying}<button type="button" onclick={()=>metadataStop=true} disabled={metadataStop}>Stop after current set</button>{/if}
+      </div>
+      {#if metadataProgress}<p class="bulk-meta-progress" role="status">{metadataProgress}</p>{/if}
+      {#if metadataError}<p role="alert" class="error">{metadataError}</p>{/if}
+      <div class="bulk-meta-results">
+        {#each metadataResults as row (row.id)}
+          <article class="bulk-meta-item">
+            <div class="bulk-meta-item-head">
+              {#if row.status==='ready'}
+                <label><input type="checkbox" checked={row.approved} disabled={metadataBusy||metadataApplying} onchange={e=>metadataResults=metadataResults.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/><strong>{row.name}</strong></label>
+              {:else}<strong>{row.name}</strong>{/if}
+              <span>{row.status}</span>
+            </div>
+            {#if row.status==='ready'}
+              <p>{row.date?'Release date: '+row.releaseDate+' · ':''}{row.desc?'Description · ':''}{row.fields.length} box breakdown(s) · {row.images.length} image candidate(s) · <a href={row.sourceUrl} target="_blank" rel="noopener noreferrer">Source ↗</a></p>
+              {#if row.desc}<p class="bulk-meta-description">{row.overview}</p>{/if}
+              {#each row.fields as key}<p class="bulk-meta-spec"><strong>{key.replaceAll('_',' ')}:</strong> {row.formats[key]}</p>{/each}
+              {#if row.images.length}
+                <div class="bulk-meta-images">
+                  <label class:chosen={!row.image}>
+                    <input type="radio" name={'image-'+row.id} checked={!row.image} disabled={metadataBusy||metadataApplying} onchange={()=>metadataResults=metadataResults.map(x=>x.id===row.id?{...x,image:''}:x)}/>
+                    <span>No image</span>
+                  </label>
+                  {#each row.images as url}
+                    <label class:chosen={row.image===url}>
+                      <input type="radio" name={'image-'+row.id} checked={row.image===url} disabled={metadataBusy||metadataApplying} onchange={()=>metadataResults=metadataResults.map(x=>x.id===row.id?{...x,image:url,approved:true}:x)}/>
+                      <img src={url} alt={'Source candidate for '+row.name} loading="lazy"/>
+                    </label>
+                  {/each}
+                </div>
+                <p class="bulk-meta-note">Only select artwork you've verified belongs to this release. Existing product images are never replaced.</p>
+              {/if}
+            {:else if row.status==='error'}<p class="error">{row.error}</p>{/if}
+          </article>
+        {/each}
+        {#if metadataBusy}<p>Checking sources one product at a time…</p>{/if}
+      </div>
+      <footer class="bulk-meta-footer">
+        <span>{readyMetadata.length} approved for saving</span>
+        <button type="button" onclick={()=>metadataModalOpen=false} disabled={metadataApplying}>Close</button>
+        <button type="button" class="bulk-meta-save" onclick={metadataApply} disabled={metadataBusy||metadataApplying||!readyMetadata.length}>{metadataApplying?'Saving…':'Approve and save ('+readyMetadata.length+')'}</button>
+      </footer>
+    </section>
+  </div>
+{/if}
 
 {#if cleanupProduct}
 	<ChecklistCleanupModal product={cleanupProduct} onclose={() => cleanupProduct = null} />
@@ -759,4 +805,18 @@
 		.list .info{grid-column:3/-1;grid-row:2}
 		.list .actions{grid-column:1/-1}
 	}
+
+/* SETBOUND_BULK_METADATA_MODAL_V2 */
+.bulk-meta-overlay{position:fixed;inset:0;background:#1119;z-index:1500;display:grid;place-items:center;padding:1rem}
+.bulk-meta-dialog{width:min(1050px,100%);max-height:94vh;min-height:50vh;background:white;border-radius:1rem;display:flex;flex-direction:column;overflow:hidden;color:#171717}
+.bulk-meta-head,.bulk-meta-toolbar,.bulk-meta-footer{display:flex;gap:.65rem;align-items:center;justify-content:space-between;padding:.85rem 1.1rem;border-bottom:1px solid #e5e5e5;flex-wrap:wrap}
+.bulk-meta-head h2{font-size:1.35rem;margin:0}.bulk-meta-head p,.bulk-meta-progress{font-size:.75rem;color:#666;margin:.2rem 0 0}
+.bulk-meta-head button,.bulk-meta-toolbar button,.bulk-meta-footer button{cursor:pointer;border:1px solid #ddd;background:#f6f6f6;border-radius:.5rem;padding:.52rem .75rem;font:inherit;font-size:.76rem;font-weight:800}
+.bulk-meta-progress{padding:.4rem 1.1rem}.bulk-meta-results{padding:1rem;overflow:auto;flex:1;display:grid;gap:.8rem;align-content:start}
+.bulk-meta-item{border:1px solid #ddd;border-radius:.7rem;padding:1rem;display:grid;gap:.55rem}
+.bulk-meta-item-head{display:flex;align-items:center;justify-content:space-between;gap:1rem}.bulk-meta-item-head label{display:flex;align-items:center;gap:.5rem}.bulk-meta-item-head span{color:#777;font-size:.7rem}
+.bulk-meta-item p{font-size:.78rem;line-height:1.5;margin:0}.bulk-meta-description{color:#333}.bulk-meta-spec{white-space:pre-line}.bulk-meta-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(135px,1fr));gap:.6rem}
+.bulk-meta-images label{display:grid;gap:.3rem;padding:.5rem;border:1px solid #ddd;border-radius:.6rem;min-height:135px;cursor:pointer;align-content:start}.bulk-meta-images label.chosen{border-color:#111;background:#fafafa}
+.bulk-meta-images label img{max-width:100%;width:100%;height:125px;object-fit:contain}.bulk-meta-note{color:#666}.bulk-meta-footer{border-top:1px solid #e5e5e5;border-bottom:0}.bulk-meta-footer .bulk-meta-save{background:#191919;color:white}.bulk-meta-footer button:disabled{opacity:.4}
+@media(max-width:600px){.bulk-meta-dialog{max-height:96vh}.bulk-meta-overlay{padding:.4rem}.bulk-meta-results{padding:.65rem}}
 </style>
