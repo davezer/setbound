@@ -1,0 +1,21 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const page='src/routes/admin/sets/+page.svelte';
+const extractor='src/lib/server/source-table-extractor.js';
+const route='src/routes/api/admin/products/[id]/clean-checklists/+server.js';
+const modal='src/lib/components/ChecklistCleanupModal.svelte';
+const files=[page,extractor];
+for(const p of files)if(!fs.existsSync(p))throw Error('Required file missing: '+p+'. No changes made.');
+for(const p of [route,modal])if(fs.existsSync(p))throw Error('Destination already exists: '+p+'. No changes made.');
+const original=Object.fromEntries(files.map(p=>[p,fs.readFileSync(p,'utf8')]));
+function one(s,a,b,name){let n=s.split(a).length-1;if(n!==1)throw Error(`Expected one ${name} anchor; found ${n}. No changes made.`);return s.replace(a,b)}
+let next=one(original[page],"import ProductEnrichmentModal from '$lib/components/ProductEnrichmentModal.svelte';","import ProductEnrichmentModal from '$lib/components/ProductEnrichmentModal.svelte';\n\timport ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';",'modal import');
+next=one(next,"let enrichmentProduct = $state(null);","let enrichmentProduct = $state(null);\n\tlet cleanupProduct = $state(null);",'modal state');
+next=one(next,'<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>','<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>\n\t\t\t\t\t<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>','per-product button');
+next=one(next,'{#if sourceMetadataProduct}','{#if cleanupProduct}\n\t<ChecklistCleanupModal product={cleanupProduct} onclose={() => cleanupProduct = null} />\n{/if}\n{#if sourceMetadataProduct}','modal mount');
+let ex=one(original[extractor],".replace(/&#39;|&apos;/gi, \"'\").replace(/&lt;/gi, '<')", ".replace(/&#39;|&apos;/gi, \"'\").replace(/&ndash;/gi, '–').replace(/&mdash;/gi, '—').replace(/&hellip;/gi, '…').replace(/&lsquo;|&rsquo;/gi, '’').replace(/&ldquo;|&rdquo;/gi, '“').replace(/&lt;/gi, '<')",'HTML entity decoder');
+const content=fs.readFileSync(new URL('./clean-checklists-server.txt',import.meta.url),'utf8');
+const ui=fs.readFileSync(new URL('./clean-checklists-modal.txt',import.meta.url),'utf8');
+fs.mkdirSync(path.dirname(route),{recursive:true});fs.mkdirSync(path.dirname(modal),{recursive:true});
+fs.writeFileSync(route,content);fs.writeFileSync(modal,ui);fs.writeFileSync(page,next);fs.writeFileSync(extractor,ex);
+console.log('Installed review-first checklist cleanup. No backups, no migrations, no existing records modified.');

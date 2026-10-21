@@ -1,5 +1,6 @@
 <script>
 	import ProductEnrichmentModal from '$lib/components/ProductEnrichmentModal.svelte';
+	import ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';
 	import CardsmithsMetadataModal from '$lib/components/CardsmithsMetadataModal.svelte'; // SETBOUND_CARDSMITHS_METADATA_V1
 	let { data, form } = $props();
 
@@ -66,6 +67,7 @@
 	let toggling = $state(null);
 	let message = $state('');
 	let enrichmentProduct = $state(null);
+	let cleanupProduct = $state(null);
 	let sourceMetadataProduct = $state(null);
 	// SETBOUND_BULK_OFFLINE_V1
 	let selectedOfflineIds = $state([]);
@@ -472,6 +474,7 @@
 								: 'Go live'}
 					</button>
 
+					<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>
 					<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>
 					<button class="edit" type="button" onclick={() => enrichmentProduct = product}>
 						{'Research product'}
@@ -517,6 +520,9 @@
 	</div>
 </section>
 
+{#if cleanupProduct}
+	<ChecklistCleanupModal product={cleanupProduct} onclose={() => cleanupProduct = null} />
+{/if}
 {#if sourceMetadataProduct}
 	<CardsmithsMetadataModal product={sourceMetadataProduct} onclose={() => sourceMetadataProduct = null} onapplied={(result) => { products = products.map(p => Number(p.id) === Number(result.productId) ? { ...p, release_date: result.releaseDate || p.release_date } : p); message = 'Source metadata saved.'; }} />
 {/if}
