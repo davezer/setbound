@@ -41,7 +41,7 @@
     try{
       if(useDate){const r=await fetch('/api/admin/products/source-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:product.id,releaseDate:true,formats:[]})});const j=await r.json();if(!r.ok)throw Error(j.message||'Release date update failed.');}
       let result={productId:product.id,releaseDate:useDate?dateInfo.releaseDate:null};
-      if((useOverview&&overview)||selected.length||image){const r=await fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:product.id,applyOverview:useOverview&&!!overview,formats:selected,imageUrl:image})});const j=await r.json();if(!r.ok)throw Error(j.message||'Could not save metadata.');result={...result,...j};}
+      if((useOverview&&overview)||selected.length||image){const r=await fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:product.id,applyOverview:useOverview&&!!overview,overview,formats:selected,imageUrl:image})});const j=await r.json();if(!r.ok)throw Error(j.message||'Could not save metadata.');result={...result,...j};}
       onapplied?.(result);onclose?.();
     }catch(e){error=e?.message||'Save failed.';}finally{saving=false;}
   }
@@ -58,13 +58,13 @@
    <h3>Product description</h3>
    {#if overview}
     <label class="choice"><input type="checkbox" bind:checked={useOverview} disabled={!!details.existingOverview}/> Save description {details.existingOverview?'(existing description preserved)':''}</label>
-    <textarea value={overview} readonly aria-label="Source product description" />
-    <p class="hint">Source excerpt for review, not manufacturer-verified marketing copy. Edit descriptions further on the product page.</p>
+    <textarea bind:value={overview} aria-label="Editable product description" />
+    <p class="hint">Editable draft based on source release facts, not manufacturer-verified marketing copy.</p>
    {:else}<p>No usable description was found.</p>{/if}
    <h3>Box contents and specifications</h3>
    {#if !Object.keys(details.formats||{}).length}<p>No structured box comparison found. Nothing will be invented.</p>{/if}
    {#each Object.entries(details.formats||{}) as [key,lines]}
-    <label class="format"><span class="choice"><input type="checkbox" checked={selected.includes(key)} disabled={!!details.existingFormats?.[key]&&!details.existingFormats[key].startsWith('Listed as a ')} onchange={e=>toggle(key,e.currentTarget.checked)}/> <strong>{key.replaceAll('_',' ')} {details.existingFormats?.[key]&&!details.existingFormats[key].startsWith('Listed as a ')?'(already saved)':''}</strong></span><span>{lines.join(' · ')}</span></label>
+    <label class="format"><span class="choice"><input type="checkbox" checked={selected.includes(key)} disabled={!!details.existingFormats?.[key]&&!details.existingFormats[key].startsWith('Listed as a ')} onchange={e=>toggle(key,e.currentTarget.checked)}/> <strong>{key.replaceAll('_',' ')} {details.existingFormats?.[key]&&!details.existingFormats[key].startsWith('Listed as a ')?'(already saved)':''}</strong></span><span style="white-space:pre-line">{Array.isArray(lines)?lines.join(' · '):lines}</span></label>
    {/each}
    <h3>Product image candidates</h3>
    {#if details.hasImage}<p>Existing product artwork is preserved.</p>

@@ -28,18 +28,25 @@ function approved(raw){try{const u=new URL(raw);return u.protocol==='https:'&&!u
 function imageUrl(raw,base){try{const u=new URL(decode(raw),base);if(u.protocol!=='https:'||u.port||u.username||u.password)return null;const h=u.hostname.toLowerCase();if(!([HOST,'www.'+HOST].includes(h)||h.endsWith('.wp.com')||h==='i0.wp.com'||h==='i1.wp.com'||h==='i2.wp.com'))return null;return u.href;}catch{return null;}}
 function nameToKey(s){const v=s.toLowerCase();if(/breaker|delight/.test(v))return 'breaker';if(/jumbo/.test(v))return 'jumbo';if(/hobby/.test(v))return 'hobby';if(/blaster|value/.test(v))return 'blaster';if(/mega/.test(v))return 'mega';if(/retail/.test(v))return 'retail';if(/fat pack/.test(v))return 'fat_pack';if(/hanger/.test(v))return 'hanger';if(/collector|tin/.test(v))return 'collector';return null;}
 function description(html){
- const tags=[...html.matchAll(/<meta\b[^>]*>/gi)].map(m=>m[0]);
- const value=tags.find(t=>/\bname\s*=\s*["']description["']/i.test(t));
- const raw=value?attr(value,'content'):'';
- // Description is an editable source excerpt; don't append unrelated commerce copy.
- return raw && raw.length>=35&&!/buy now|lowest ask|ebay listings/i.test(raw)?raw.slice(0,650):'';
+  const heading=strip(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]||'').replace(/\s+Checklist(?:\s*&\s*Odds)?$/i,'').trim();
+  if(!heading)return '';
+  // Use descriptive release facts in the page's introductory copy; never use the generic SEO checklist tally.
+  const intro=strip(html.slice(Math.max(0,html.search(/<h1\b/i)),Math.min(html.length,Math.max(0,html.search(/<h1\b/i))+16000)));
+  const chase=intro.match(/(?:Chase|Highlights? include|Features? include)\s+([^.!?]{18,250})[.!?]/i);
+  if(chase){
+    const fact=chase[0].trim().replace(/\s+/g,' ');
+    if(!/filter by|search|ebay|odds and print runs|checklist:/i.test(fact))return heading+' features '+fact.replace(/^Chase\s+/i,'chase ');
+  }
+  // No meaningful release highlights present: leave blank for editorial review.
+  return '';
 }
+
 function extractSpecs(html){
  // The site's comparison table is organized in columns, not per-box cards.
  const rows=[];
  for(const table of html.matchAll(/<table\b[^>]*>[\s\S]*?<\/table>/gi)){
    const tr=[...table[0].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(r=>[...r[1].matchAll(/<(?:td|th)\b[^>]*>([\s\S]*?)<\/(?:td|th)>/gi)].map(c=>strip(c[1]))).filter(x=>x.length>1);
-   const header=tr.find(r=>r.slice(1).filter(x=>nameToKey(x)).length>=2);
+   const header=tr.find(r=>r.slice(1).filter(x=>nameToKey(x)).length>=1);
    if(!header)continue;
    const start=tr.indexOf(header);
    const map=header.slice(1).map(v=>nameToKey(v));
@@ -54,14 +61,34 @@ function extractSpecs(html){
  }
  return {};
 }
+
+function singleFormatSpecs(html){
+  // Some parent pages only provide a summary instead of a comparison table.
+  const head=html.match(/<h1\b[^>]*>[\s\S]*?<\/h1>/i);
+  const start=head?html.indexOf(head[0])+head[0].length:0;
+  const intro=strip(html.slice(start,start+24000));
+  const key=nameToKey(intro.slice(0,300))||'hobby';
+  let packs=null,cards=null,hits=null;
+  for(const pattern of [/(?:Hobby|Jumbo|Blaster|Mega|Value|Retail)?\s*boxes?\s+(?:hold|contain|include|have)\s+(\d+)\s+packs?\s+(?:of|with|at)\s+(\d+)\s+cards?/i,/(\d+)\s+packs?\s+(?:of|with|at)\s+(\d+)\s+cards?\s+(?:per\s+)?(?:box|pack)/i]){
+    const found=intro.match(pattern);if(found){packs=found[1];cards=found[2];break;}
+  }
+  if(!packs){packs=intro.match(/(\d+)\s+Packs\s*\/\s*Box/i)?.[1]||null;}
+  if(!cards&&packs){const total=intro.match(/(\d+)\s+Cards\s*\/\s*Box/i)?.[1];if(total&&Number(total)%Number(packs)===0)cards=String(Number(total)/Number(packs));}
+  const nearby=intro.slice(0,1200);
+  const guarantee=nearby.match(/(?:with|includes?|guarantees?|containing)\s+(\d+)\s+(?:guaranteed\s+)?autographs?\b/i)||nearby.match(/(\d+)\s+Auto\s+Guaranteed/i);
+  if(guarantee)hits=guarantee[1]+' autograph'+(guarantee[1]==='1'?'':'s');
+  if(!packs&&!cards&&!hits)return {};
+  return {[key]:[...(cards?['Cards per pack: '+cards]:[]),...(packs?['Packs per box: '+packs]:[]),...(hits?['Guaranteed hits: '+hits]:[] )].join('\n')};
+}
+
 function candidates(html,base){
- const found=new Set();
+ const found=new Map();
  for(const m of html.matchAll(/<meta\b[^>]*>/gi)){
    if(!/(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["']/i.test(m[0]))continue;
-   const u=imageUrl(attr(m[0],'content'),base);if(u)found.add(u);
+   const u=imageUrl(attr(m[0],'content'),base);if(u){const parsed=new URL(u);const signature=parsed.pathname.replace(/-\d+x\d+(?=\.[a-z]+$)/i,'').toLowerCase();if(!found.has(signature))found.set(signature,u);}
  }
  // og:image may be a generic site banner; the admin must review it.
- return [...found].slice(0,4);
+ return [...found.values()].slice(0,4);
 }
 async function productAndParent(database,id){
  const p=await database.prepare(`SELECT p.id,p.slug,p.name,p.product_notes,p.image_key,p.primary_source_id,s.source_url,s.original_filename FROM products p LEFT JOIN sources s ON s.id=p.primary_source_id WHERE p.id=?`).bind(id).first();
@@ -79,7 +106,7 @@ async function sourcePage(fetchFn,url){
  if(Number(r.headers.get('content-length')||0)>MAX_HTML)throw Error('Source page too large.');
  const html=await r.text();if(html.length>MAX_HTML)throw Error('Source page too large.');return html;
 }
-async function getFacts(fetchFn,url){const html=await sourcePage(fetchFn,url);return {overview:description(html),formats:Object.fromEntries(Object.entries(extractSpecs(html)).map(([key,values])=>[key,conciseBoxDetails(values)])),images:candidates(html,url)};}
+async function getFacts(fetchFn,url){const html=await sourcePage(fetchFn,url);return {overview:description(html),formats:Object.fromEntries(Object.entries(Object.keys(extractSpecs(html)).length?extractSpecs(html):singleFormatSpecs(html)).map(([key,values])=>[key,conciseBoxDetails(values)])),images:candidates(html,url)};}
 async function getImage(fetchFn,url){
  const r=await fetchFn(url,{redirect:'manual',headers:{accept:'image/webp,image/png,image/jpeg,image/avif'}});
  if(!r.ok)throw Error('Selected image unavailable (HTTP '+r.status+').');
@@ -101,10 +128,11 @@ export async function POST({request,platform,fetch}){
   }
   if(body.mode!=='apply')return json({message:'Invalid operation.'},{status:400});
   const selected=Array.isArray(body.formats)?[...new Set(body.formats.filter(x=>typeof x==='string'&&KEYS[x]&&facts.formats[x]))]:[];
-  const wantOverview=body.applyOverview===true&&!p.product_notes&&facts.overview;
+  const editedOverview=String(body.overview||facts.overview||'').replace(/<[^>]*>/g,'').trim().slice(0,650);
+  const wantOverview=body.applyOverview===true&&!p.product_notes&&!!facts.overview&&!!editedOverview;
   const image=typeof body.imageUrl==='string'&&facts.images.includes(body.imageUrl)&&!p.image_key?body.imageUrl:null;
   const updates=[];
-  if(wantOverview)updates.push(database.prepare("UPDATE products SET product_notes=?, updated_at=datetime('now') WHERE id=? AND (product_notes IS NULL OR TRIM(product_notes)='')").bind(facts.overview,id));
+  if(wantOverview)updates.push(database.prepare("UPDATE products SET product_notes=?, updated_at=datetime('now') WHERE id=? AND (product_notes IS NULL OR TRIM(product_notes)='')").bind(editedOverview,id));
   for(const key of selected){updates.push(database.prepare("INSERT INTO product_formats (product_id,format_key,label,details,sort_order,updated_at) VALUES (?,?,?,?,100,datetime('now')) ON CONFLICT(product_id,format_key) DO UPDATE SET details=excluded.details, updated_at=datetime('now') WHERE substr(product_formats.details, 1, 12) = 'Listed as a '").bind(id,key,KEYS[key]+' Box Breakdown',facts.formats[key]));}
   if(!updates.length&&!image)return json({message:'No eligible empty metadata selected.'},{status:409});
   // Read and validate the approved image before changing database state.
