@@ -1,5 +1,4 @@
 <script>
-	import ProductEnrichmentModal from '$lib/components/ProductEnrichmentModal.svelte';
 	import ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';
 	import CardsmithsMetadataModal from '$lib/components/CardsmithsMetadataModal.svelte'; // SETBOUND_CARDSMITHS_METADATA_V1
 	let { data, form } = $props();
@@ -140,7 +139,6 @@
 
 	let toggling = $state(null);
 	let message = $state('');
-	let enrichmentProduct = $state(null);
 	let cleanupProduct = $state(null);
 	let sourceMetadataProduct = $state(null);
 	// SETBOUND_BULK_OFFLINE_V1
@@ -361,15 +359,6 @@
 		}
 	}
 
-	function enrichmentApplied(payload) {
-		if (!enrichmentProduct) return;
-		enrichmentProduct.release_date = payload.releaseDate || enrichmentProduct.release_date;
-		if (payload.result?.imageKey) enrichmentProduct.image_key = payload.result.imageKey;
-		enrichmentProduct.has_product_details = 1;
-		products = [...products];
-		message = 'Product details enriched.';
-	}
-
 	async function deleteImport(product) {
 		const label = `${product.year} ${product.name}`;
 
@@ -466,37 +455,36 @@
 		<button class="reset" onclick={resetFilters}>Clear</button>
 	</div>
 
-	<div class="filter-summary backfill-summary"><div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div><span class="topps-ready-summary">Research products individually before saving details.</span></div>
-
-	<div class="offline-tools" aria-label="Bulk publishing controls">
-		<div class="offline-tools-heading">
-			<strong>Bulk visibility</strong>
-			<span>{liveSetIds.length.toLocaleString()} live · {selectedLiveIds.length.toLocaleString()} selected</span>
-		</div>
-		<div class="offline-tools-actions">
-			<button type="button" onclick={selectVisibleLive} disabled={bulkOfflineBusy || !visibleLiveIds.length}>Select visible live ({visibleLiveIds.length})</button>
-			<button type="button" onclick={selectAllLive} disabled={bulkOfflineBusy || !liveSetIds.length}>Select all live ({liveSetIds.length})</button>
-			<button type="button" onclick={() => selectedOfflineIds = []} disabled={bulkOfflineBusy || !selectedLiveIds.length}>Clear selection</button>
-			<button class="offline-danger" type="button" onclick={takeSelectedOffline} disabled={bulkOfflineBusy || !selectedLiveIds.length}>{bulkOfflineBusy ? 'Taking offline…' : `Take ${selectedLiveIds.length} offline`}</button>
-		</div>
-		<p>Select visible respects the search and filters. Select all live includes sets hidden by filters. Only explicitly selected LIVE sets are changed.</p>
-	</div>
+	<div class="filter-summary backfill-summary"><div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div><span class="topps-ready-summary">Filter, select and manage your imported checklists.</span></div>
 
 
-	<!-- SETBOUND_MANAGE_BULK_V1 -->
-	<div class="offline-tools" aria-label="Bulk go live">
-		<div class="offline-tools-heading"><strong>Bulk go live</strong><span>{selectedDraftIds.length} drafts selected</span></div>
-		<div class="offline-tools-actions">
+	<div class="bulk-workspace">
+		<details class="batch-panel">
+			<summary><span><strong>Publish drafts</strong><small>{selectedDraftIds.length} selected</small></span><span class="batch-chevron">⌄</span></summary>
+			<div class="batch-content">
+<div class="offline-tools-actions">
 			<button type="button" onclick={()=>selectedPublishIds=[...new Set([...selectedPublishIds,...visibleDraftIds])]} disabled={publishing||!visibleDraftIds.length}>Select visible drafts ({visibleDraftIds.length})</button>
 			<button type="button" onclick={()=>selectedPublishIds=products.filter(p=>!p.published).map(p=>Number(p.id))} disabled={publishing}>Select all drafts</button>
 			<button type="button" onclick={()=>selectedPublishIds=[]} disabled={publishing||!selectedPublishIds.length}>Clear</button>
 			<button type="button" onclick={publishSelected} disabled={publishing||!selectedDraftIds.length}>{publishing?'Publishing…':'Go live ('+selectedDraftIds.length+')'}</button>
 		</div>
-		<p>Uses separate checkboxes from bulk delete and bulk offline. Only selected drafts are published.</p>
-	</div>
-	<div class="offline-tools" aria-label="Bulk source metadata">
-		<div class="offline-tools-heading"><strong>Bulk parent metadata</strong><span>{metadataSelectedIds.length} selected · {readyMetadata.length} ready to apply</span></div>
-		<div class="offline-tools-actions">
+		<p>Uses separate checkboxes from bulk delete and bulk offline. Only selected drafts are published.</p></div>
+		</details>
+		<details class="batch-panel">
+			<summary><span><strong>Take sets offline</strong><small>{selectedLiveIds.length} selected · {liveSetIds.length} live</small></span><span class="batch-chevron">⌄</span></summary>
+			<div class="batch-content">
+<div class="offline-tools-actions">
+			<button type="button" onclick={selectVisibleLive} disabled={bulkOfflineBusy || !visibleLiveIds.length}>Select visible live ({visibleLiveIds.length})</button>
+			<button type="button" onclick={selectAllLive} disabled={bulkOfflineBusy || !liveSetIds.length}>Select all live ({liveSetIds.length})</button>
+			<button type="button" onclick={() => selectedOfflineIds = []} disabled={bulkOfflineBusy || !selectedLiveIds.length}>Clear selection</button>
+			<button class="offline-danger" type="button" onclick={takeSelectedOffline} disabled={bulkOfflineBusy || !selectedLiveIds.length}>{bulkOfflineBusy ? 'Taking offline…' : `Take ${selectedLiveIds.length} offline`}</button>
+		</div>
+		<p>Select visible respects the search and filters. Select all live includes sets hidden by filters. Only explicitly selected LIVE sets are changed.</p></div>
+		</details>
+		<details class="batch-panel">
+			<summary><span><strong>Bulk parent metadata</strong><small>{metadataSelectedIds.length} selected · {readyMetadata.length} ready</small></span><span class="batch-chevron">⌄</span></summary>
+			<div class="batch-content">
+<div class="offline-tools-actions">
 			<button type="button" onclick={()=>metadataSelectedIds=[...new Set([...metadataSelectedIds,...visibleMetadataIds])]} disabled={metadataBusy||metadataApplying}>Select visible ({visibleMetadataIds.length})</button>
 			<button type="button" onclick={()=>metadataSelectedIds=products.map(p=>Number(p.id))} disabled={metadataBusy||metadataApplying}>Select all sets</button>
 			<button type="button" onclick={()=>metadataSelectedIds=[]} disabled={metadataBusy||metadataApplying}>Clear</button>
@@ -519,19 +507,22 @@
 				{/each}
 			</div>
 			<div class="offline-tools-actions"><button type="button" onclick={()=>metadataResults=metadataResults.map(x=>x.status==='ready'?{...x,approved:true}:x)} disabled={metadataBusy||metadataApplying}>Select all proposed metadata</button><button type="button" onclick={()=>metadataResults=metadataResults.map(x=>({...x,approved:false}))} disabled={metadataBusy||metadataApplying}>Deselect</button><button type="button" onclick={metadataApply} disabled={metadataBusy||metadataApplying||!readyMetadata.length}>{metadataApplying?'Saving…':'Approve and save ('+readyMetadata.length+')'}</button></div>
-		{/if}
-	</div>
-
-	<div class="bulk-delete-tools" aria-label="Bulk delete imports">
-		<div><strong>Bulk delete imports</strong><span>{selectedDeleteProducts.length} selected · {selectedDeleteProducts.filter(p => p.published).length} live</span></div>
-		<div class="bulk-delete-actions">
+		{/if}</div>
+		</details>
+		<details class="batch-panel danger-panel">
+			<summary><span><strong>Delete imports</strong><small>{selectedDeleteProducts.length} selected</small></span><span class="batch-chevron">⌄</span></summary>
+			<div class="batch-content">
+<div class="bulk-delete-actions">
 			<button type="button" onclick={selectVisibleForDelete} disabled={bulkDeleteBusy || !visible.length}>Select visible ({visible.length})</button>
 			<button type="button" onclick={() => selectedDeleteIds = []} disabled={bulkDeleteBusy || !selectedDeleteIds.length}>Clear selection</button>
 			<button type="button" class="delete-selected" onclick={deleteSelectedImports} disabled={bulkDeleteBusy || deleting !== null || !selectedDeleteProducts.length}>{bulkDeleteBusy ? 'Deleting…' : 'Delete selected (' + selectedDeleteProducts.length + ')'}</button>
 		</div>
 		<p>Only checked imports will be deleted. Selection is separate from bulk visibility. Deletion is permanent and requires typed confirmation.</p>
-		{#if bulkDeleteProgress}<p role="status">{bulkDeleteProgress}</p>{/if}
+		{#if bulkDeleteProgress}<p role="status">{bulkDeleteProgress}</p>{/if}</div>
+		</details>
 	</div>
+	<p class="selection-hint">Row checkboxes: publish · metadata · delete · offline. Open a bulk tool above to select visible sets or act on your selection.</p>
+
 	<div class="list">
 		{#each visible as product (product.id)}
 			<article class="row">
@@ -592,9 +583,6 @@
 
 					<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>
 					<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>
-					<button class="edit" type="button" onclick={() => enrichmentProduct = product}>
-						{'Research product'}
-					</button>
 					<a class="edit" href={`/admin/sets/preview/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
@@ -641,9 +629,6 @@
 {/if}
 {#if sourceMetadataProduct}
 	<CardsmithsMetadataModal product={sourceMetadataProduct} onclose={() => sourceMetadataProduct = null} onapplied={(result) => { products = products.map(p => Number(p.id) === Number(result.productId) ? { ...p, release_date: result.releaseDate || p.release_date } : p); message = 'Source metadata saved.'; }} />
-{/if}
-{#if enrichmentProduct}
-	<ProductEnrichmentModal product={enrichmentProduct} onclose={() => enrichmentProduct = null} onapplied={enrichmentApplied} />
 {/if}
 
 <style>
@@ -729,5 +714,49 @@
 		.filters .search{grid-column:auto}
 		.row{grid-template-columns:22px 22px 80px 1fr}
 		.preview{width:80px}
+	}
+
+	/* SETBOUND_MANAGE_COMPACT_V2 */
+	.bulk-workspace{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.65rem;margin:1rem 0 .5rem}
+	.batch-panel{min-width:0;border:1px solid var(--line-strong);border-radius:.7rem;background:#faf9f7}
+	.batch-panel summary{display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.85rem;cursor:pointer;list-style:none}
+	.batch-panel summary::-webkit-details-marker{display:none}
+	.batch-panel summary>span:first-child{display:grid;gap:.2rem;min-width:0}
+	.batch-panel summary strong{font-size:.77rem}
+	.batch-panel summary small{color:var(--muted);font-size:.65rem}
+	.batch-chevron{font-size:1.1rem;color:var(--muted)}
+	.batch-panel[open] .batch-chevron{transform:rotate(180deg)}
+	.batch-panel[open]{grid-column:span 2}
+	.batch-content{padding:.15rem .85rem .85rem;border-top:1px solid var(--line);display:grid;gap:.65rem;min-width:0}
+	.batch-content p{margin:0;font-size:.7rem;color:var(--muted)}
+	.batch-content .offline-tools-actions,.batch-content .bulk-delete-actions{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+	.batch-content button{border:1px solid var(--line-strong);border-radius:.5rem;padding:.48rem .65rem;background:#fff;color:var(--ink);font:inherit;font-size:.7rem;font-weight:800;cursor:pointer}
+	.batch-content button:disabled{opacity:.42;cursor:not-allowed}
+	.batch-content .offline-danger,.batch-content .delete-selected{color:#fff;background:#8d3028;border-color:#8d3028}
+	.danger-panel{background:#fff9f8;border-color:#e3bbb6}
+	.selection-hint{font-size:.68rem;color:var(--muted);margin:.4rem 0 .8rem}
+	/* Explicitly allocate room for all four selection boxes, thumbnail, info and actions. */
+	.list .row{display:grid;grid-template-columns:repeat(4,22px) 92px minmax(180px,1fr) minmax(275px,auto);align-items:center;gap:.65rem;padding:.85rem 0}
+	.list .bulk-choice{min-width:0;align-self:center}
+	.list .preview{width:92px;height:70px;aspect-ratio:auto}
+	.list .preview img{display:block;max-width:100%;width:100%;height:100%;object-fit:contain}
+	.list .info{min-width:0;overflow-wrap:anywhere}
+	.list .title-line strong{font-size:.85rem}
+	.list .actions{grid-column:7;display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:.35rem;max-width:460px;min-width:0}
+	.list .actions .upload,.list .actions .clear,.list .actions .edit,.list .actions .visibility,.list .actions .delete{padding:.43rem .55rem;font-size:.66rem;line-height:1.3}
+	@media(max-width:1250px){
+		.bulk-workspace{grid-template-columns:repeat(2,minmax(0,1fr))}
+		.batch-panel[open]{grid-column:span 2}
+		.list .row{grid-template-columns:repeat(4,22px) 86px minmax(0,1fr)}
+		.list .preview{width:86px;height:66px}
+		.list .actions{grid-column:5/-1;justify-content:flex-start;max-width:none}
+	}
+	@media(max-width:640px){
+		.bulk-workspace{grid-template-columns:minmax(0,1fr)}
+		.batch-panel[open]{grid-column:span 1}
+		.list .row{grid-template-columns:repeat(4,22px) minmax(0,1fr);gap:.5rem}
+		.list .preview{grid-column:1/3;grid-row:2;width:76px;height:58px}
+		.list .info{grid-column:3/-1;grid-row:2}
+		.list .actions{grid-column:1/-1}
 	}
 </style>
