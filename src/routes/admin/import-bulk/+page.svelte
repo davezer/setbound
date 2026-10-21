@@ -16,6 +16,7 @@
   let onlySelected = $derived(queue.filter(x => x.selected && x.status === 'ready'));
   let importedCount = $derived(queue.filter(x => x.status === 'imported').length);
   let readyCount = $derived(queue.filter(x => x.status === 'ready').length);
+  let retryableCount = $derived(queue.filter(x => x.status === 'failed' && x.cards.length > 0 && x.auditCanImport !== false).length);
 
   const extension = file => file.name.split('.').pop().toLowerCase();
   const SPECIAL = new Map(Object.entries({
@@ -89,6 +90,48 @@
       queue=queue.map(x=>x.id===item.id?{...x,status:'imported',slug:result.slug,selected:false,error:''}:x);
     }catch(e){queue=queue.map(x=>x.id===item.id?{...x,status:'failed',error:e?.message||'Import failed. This file was not marked imported.'}:x);}
   }
+  async function retryOne(id) {
+    if (importing || reading) return;
+    const item = queue.find(x => x.id === id);
+    if (!item || item.status !== 'failed' || !item.cards.length || item.auditCanImport === false) return;
+    importing = true;
+    message = '';
+    try {
+      queue = queue.map(x => x.id === id ? {...x,status:'ready',error:'',selected:false} : x);
+      await importOne({...item,status:'ready',selected:false});
+    } finally {
+      importing = false;
+    }
+  }
+
+  async function retryFailedImports() {
+    if (importing || reading) return;
+    const ids = queue.filter(x => x.status === 'failed' && x.cards.length > 0 && x.auditCanImport !== false).map(x => x.id);
+    if (!ids.length) return;
+    if (!confirm('Retry ' + ids.length + ' failed import(s)? Successful imports will not be retried. Existing sets will not be overwritten.')) return;
+    importing = true;
+    stop = false;
+    let successful = 0;
+    let failed = 0;
+    try {
+      for (const id of ids) {
+        if (stop) break;
+        const item = queue.find(x => x.id === id);
+        if (!item || item.status !== 'failed' || !item.cards.length) continue;
+        queue = queue.map(x => x.id === id ? {...x,status:'ready',error:'',selected:false} : x);
+        await importOne({...item,status:'ready',selected:false});
+        const result = queue.find(x => x.id === id);
+        if (result?.status === 'imported') successful++;
+        else failed++;
+        message = 'Retry progress: ' + (successful + failed) + '/' + ids.length + ' processed · ' + successful + ' imported · ' + failed + ' failed.';
+      }
+    } finally {
+      importing = false;
+      stop = false;
+    }
+    message = 'Retry complete: ' + successful + ' imported · ' + failed + ' failed. Review any remaining errors below.';
+  }
+
   async function importSelected(){
     if(importing||reading||!onlySelected.length)return;
     if(!confirm(`Import ${onlySelected.length} selected checklist(s) as unpublished drafts? Existing products will not be overwritten.`))return;
@@ -110,6 +153,7 @@
   <div class="summary"><strong>{queue.length} files</strong><span>{readyCount} ready</span><span>{importedCount} imported</span><span>{queue.filter(x=>x.status==='failed').length} need attention</span></div>
   <div class="controls">
     <button onclick={importSelected} disabled={importing||reading||!onlySelected.length}>Import selected drafts ({onlySelected.length})</button>
+    <button class="secondary" onclick={retryFailedImports} disabled={importing||reading||!retryableCount}>Retry failed imports ({retryableCount})</button>
     {#if importing}<button class="secondary" onclick={()=>stop=true} disabled={stop}>{stop?'Stopping…':'Stop after current file'}</button>{/if}
     <button class="secondary" onclick={()=>queue=queue.map(x=>({...x,selected:x.status==='ready'}))} disabled={importing}>Select ready</button>
     <button class="secondary" onclick={()=>queue=queue.map(x=>({...x,selected:false}))} disabled={importing}>Clear selection</button>
@@ -136,6 +180,7 @@
         {:else if item.status==='imported'}
           <a class="preview" href={slugFor(item)} target="_blank" rel="noreferrer">Preview unpublished set ↗</a>
         {:else if item.status==='failed'}
+          {#if item.cards.length && item.auditCanImport !== false}<button class="secondary" onclick={()=>retryOne(item.id)} disabled={importing||reading}>Retry import</button>{/if}
           <button class="secondary" onclick={()=>remove(item.id)} disabled={importing}>Remove from queue</button>
         {/if}
       </article>
