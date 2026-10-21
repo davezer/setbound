@@ -85,6 +85,20 @@ export const actions = {
 		throw redirect(303, '/admin/sets?saved=1');
 	},
 
+
+	// SETBOUND_MANAGE_BULK_V1
+	bulkOnline: async ({ request, platform }) => {
+		const form = await request.formData();
+		let ids;
+		try { ids=JSON.parse(String(form.get('product_ids')||'[]')); }
+		catch { return fail(400,{message:'Invalid selection.'}); }
+		if(!Array.isArray(ids)||ids.length<1||ids.length>1000||!ids.every(id=>Number.isSafeInteger(id)&&id>0)||new Set(ids).size!==ids.length) return fail(400,{message:'Select 1 to 1000 unique drafts.'});
+		const database=db(platform),statements=[];
+		for(let i=0;i<ids.length;i+=75){const chunk=ids.slice(i,i+75);statements.push(database.prepare("UPDATE products SET published=1,updated_at=datetime('now') WHERE published=0 AND id IN ("+chunk.map(()=>'?').join(',')+')').bind(...chunk));}
+		const result=await database.batch(statements);
+		return {ok:true,publishedCount:result.reduce((n,r)=>n+Number(r.meta?.changes||0),0)};
+	},
+
 	// SETBOUND_BULK_OFFLINE_V1: change publication status without deleting any data.
 	bulkOffline: async ({ request, platform }) => {
 		const form = await request.formData();
