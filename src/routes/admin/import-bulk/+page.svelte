@@ -42,12 +42,28 @@
 
   function guess(file) {
     const { year, name } = formattedName(file);
-    const manufacturer = data.manufacturers.find(x=>new RegExp('\\b'+x.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(name));
-    const sportTerms = [{word:/baseball|bowman(?! university)/i,match:/baseball/i},{word:/football|nfl/i,match:/football/i},{word:/basketball|nba|hoops/i,match:/basketball/i},{word:/hockey|nhl|o pee chee/i,match:/hockey/i},{word:/soccer|mls|fifa|world cup/i,match:/soccer/i},{word:/formula.?1|f1/i,match:/racing|motorsport|formula/i},{word:/wwe|wrestling/i,match:/wrestling/i},{word:/ufc/i,match:/mma|ufc/i}];
-    const term=sportTerms.find(t=>t.word.test(name));
-    const sport=term && data.sports.find(x=>term.match.test(x.name));
-    return {year,name,manufacturerId:manufacturer?.id ?? data.manufacturers[0]?.id ?? '',sportId:sport?.id ?? data.sports[0]?.id ?? ''};
+    const manufacturer = data.manufacturers.find(x => name.toLowerCase().includes(String(x.name).toLowerCase()));
+    // Title-specific classifications first. Never interpret "Bowman" or "Upper Deck" alone as a sport.
+    // Titles we cannot confidently classify require human selection, not a default to the first sport.
+    const groups = [
+      { title: /\b(?:marvel|disney|star\s*wars|toy\s*story|pixar|lorcana|pokemon|pokémon|dc\s*comics|batman|superman|avengers|x[-\s]?men|spider[-\s]?man|stranger\s*things|garbage\s*pail|wacky\s*packages|lord\s*of\s*the\s*rings|harry\s*potter|jurassic\s*park|ghostbusters|spongebob|teenage\s*mutant\s*ninja\s*turtles|anime|fortnite|minecraft)\b/i, sport: /non[-\s]?sport|entertainment|pop\s*culture|trading\s*card\s*game|collectibles/i },
+      { title: /\b(?:golf|pga|lpga|liv\s*golf|ryder\s*cup)\b/i, sport: /golf/i },
+      { title: /\b(?:wwe|wrestling|aew|wcw)\b/i, sport: /wrestling|combat|non[-\s]?sport/i },
+      { title: /\b(?:ufc|mma)\b/i, sport: /mma|ufc|combat/i },
+      { title: /\b(?:soccer|mls|fifa|world\s*cup|uefa|premier\s*league|nwsl|bundesliga|laliga)\b/i, sport: /soccer|football\s*\(soccer\)/i },
+      { title: /\b(?:hockey|nhl|o[-\s]?pee[-\s]?chee)\b/i, sport: /hockey/i },
+      { title: /\b(?:basketball|nba|wnba|hoops)\b/i, sport: /basketball/i },
+      { title: /\b(?:football|nfl)\b/i, sport: /football/i },
+      { title: /\b(?:baseball|mlb)\b/i, sport: /baseball/i },
+      { title: /\b(?:formula\s*1|f1|nascar|racing|indycar)\b/i, sport: /racing|motorsport|formula/i },
+      { title: /\b(?:tennis|atp|wta)\b/i, sport: /tennis/i },
+      { title: /\b(?:olympics|olympic)\b/i, sport: /olympic|multi[-\s]?sport/i }
+    ];
+    const group = groups.find(g => g.title.test(name));
+    const sport = group ? data.sports.find(x => group.sport.test(x.name)) : null;
+    return { year, name, manufacturerId: manufacturer?.id ?? data.manufacturers[0]?.id ?? '', sportId: sport?.id ?? '' };
   }
+
   async function addFiles(files) {
     if(importing || reading || !files.length)return;
     reading=true;message='';
@@ -169,7 +185,7 @@
           <div class="fields">
             <label>Name<input value={item.name} oninput={e=>patch(item.id,'name',e.currentTarget.value)} disabled={importing}/></label>
             <label>Year<input type="number" min="1800" max="2200" value={item.year} oninput={e=>patch(item.id,'year',Number(e.currentTarget.value))} disabled={importing}/></label>
-            <label>Sport<select value={item.sportId} onchange={e=>patch(item.id,'sportId',Number(e.currentTarget.value))} disabled={importing}>{#each data.sports as sport}<option value={sport.id}>{sport.name}</option>{/each}</select></label>
+            <label>Sport<select value={item.sportId} onchange={e=>patch(item.id,'sportId',e.currentTarget.value ? Number(e.currentTarget.value) : '')} disabled={importing}><option value="">Choose sport…</option>{#each data.sports as sport}<option value={sport.id}>{sport.name}</option>{/each}</select></label>
             <label>Manufacturer<select value={item.manufacturerId} onchange={e=>patch(item.id,'manufacturerId',Number(e.currentTarget.value))} disabled={importing}>{#each data.manufacturers as manufacturer}<option value={manufacturer.id}>{manufacturer.name}</option>{/each}</select></label>
           </div>
         {/if}
