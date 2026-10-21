@@ -17,7 +17,12 @@ export async function load({ platform }) {
 			p.product_notes,
 			p.published,
 			CASE WHEN NULLIF(TRIM(COALESCE(p.product_notes, '')), '') IS NOT NULL THEN 1 ELSE 0 END AS has_product_details,
-			CASE WHEN length(trim(COALESCE(p.product_notes, ''))) > 0 THEN 1 ELSE 0 END AS has_enrichment,
+			CASE WHEN length(trim(COALESCE(p.product_notes, ''))) > 0 OR EXISTS (
+				SELECT 1 FROM product_formats pf
+				WHERE pf.product_id = p.id
+				  AND length(trim(COALESCE(pf.details, ''))) > 0
+				  AND substr(pf.details, 1, 12) <> 'Listed as a '
+			) THEN 1 ELSE 0 END AS has_enrichment,
 			m.name AS manufacturer_name,
 			s.name AS sport_name,
 			CASE WHEN EXISTS (

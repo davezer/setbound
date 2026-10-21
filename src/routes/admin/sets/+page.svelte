@@ -132,7 +132,7 @@
 				if(row.date){const r=await fetch('/api/admin/products/source-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,releaseDate:true,formats:[]}),signal:AbortSignal.timeout(25000)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Release date save failed.');}
 				let resultImageKey='';
 				if(row.desc||row.fields.length||row.image){const r=await fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,applyOverview:row.desc,overview:row.overview,formats:row.fields,imageUrl:row.image||''}),signal:AbortSignal.timeout(25000)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Details save failed.');resultImageKey=j.imageKey||'';}
-				products=products.map(p=>Number(p.id)===row.id?{...p,release_date:row.date?row.releaseDate:p.release_date,has_product_details:row.desc?1:p.has_product_details,image_key:resultImageKey||p.image_key}:p);
+				products=products.map(p=>Number(p.id)===row.id?{...p,release_date:row.date?row.releaseDate:p.release_date,has_product_details:row.desc?1:p.has_product_details,has_enrichment:(row.desc||row.fields.length)?1:p.has_enrichment,image_key:resultImageKey||p.image_key}:p);
 				metadataResults=metadataResults.map(x=>x.id===row.id?{...x,status:'saved',approved:false}:x);saved++;
 			}catch(e){metadataResults=metadataResults.map(x=>x.id===row.id?{...x,status:'error',error:e?.message||'Save failed',approved:false}:x);failed++;}
 		}
@@ -207,10 +207,12 @@
 				) &&
 				(
 					enrichmentFilter === 'All enrichment' ||
-					(enrichmentFilter === 'Topps backfill ready' && Boolean(product.has_topps_backfill)) ||
-					(enrichmentFilter === 'Needs Topps backfill' &&
-						String(product.manufacturer_name || '').toLowerCase() === 'topps' &&
-						!product.has_topps_backfill)
+					(enrichmentFilter === 'Enriched' && Boolean(product.has_enrichment)) ||
+					(enrichmentFilter === 'Needs enrichment' && !product.has_enrichment) ||
+					(enrichmentFilter === 'Needs photo' && !product.image_key) ||
+					(enrichmentFilter === 'Ready to go live' && !product.published &&
+						Boolean(product.has_enrichment) && Boolean(product.image_key) &&
+						Number(product.card_count || 0) > 0)
 				) &&
 				(
 					!q ||
@@ -450,8 +452,10 @@
 			<span>Enrichment</span>
 			<select class="input" bind:value={enrichmentFilter}>
 				<option>All enrichment</option>
-				<option>Topps backfill ready</option>
-				<option>Needs Topps backfill</option>
+				<option>Enriched</option>
+				<option>Needs enrichment</option>
+				<option>Needs photo</option>
+				<option>Ready to go live</option>
 			</select>
 		</label>
 
