@@ -14,7 +14,11 @@
 {#if note}<p role="status">{note}</p>{/if}
 {#if !busy && proposals.length}
   <p><strong>{proposals.length}</strong> proposed corrections · {selected.length} selected</p>
-  <div class="actions"><button onclick={()=>selected=proposals.filter(x=>x.reason==='Decode HTML entities').map(x=>x.key)} disabled={saving}>Select entity fixes</button><button onclick={()=>selected=[]} disabled={saving}>Clear selection</button></div>
+  <div class="actions">
+  <button onclick={() => selected = proposals.map(p => p.key)} disabled={saving || selected.length === proposals.length}>Select all proposed fixes ({proposals.length})</button>
+  <button onclick={() => selected = proposals.filter(p => p.reason === 'Decode HTML entities').map(p => p.key)} disabled={saving}>Select entity fixes</button>
+  <button onclick={() => selected = []} disabled={saving || !selected.length}>Clear selection</button>
+</div>
   <div class="rows">{#each proposals as p (p.key)}<label class="item"><input type="checkbox" checked={selected.includes(p.key)} onchange={e=>toggle(p.key,e.currentTarget.checked)} disabled={saving}/><span><small>{p.kind} · {p.reason}</small><del>{p.before}</del><strong>→ {p.after}</strong></span></label>{/each}</div>
   <button class="apply" onclick={apply} disabled={!selected.length||saving}>{saving?'Applying…':`Approve ${selected.length} corrections`}</button>
 {:else if !busy && !error && note}<p>No remaining corrections found in this product.</p>{/if}
