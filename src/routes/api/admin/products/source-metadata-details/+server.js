@@ -74,7 +74,7 @@ async function productAndParent(database,id){
  return {product:p,url:unique[0]};
 }
 async function sourcePage(fetchFn,url){
- const r=await fetchFn(url,{redirect:'manual',headers:{accept:'text/html'}});
+ const r=await fetchFn(url,{redirect:'manual',headers:{accept:'text/html'},signal: AbortSignal.timeout(12000)});
  if(!r.ok||!String(r.headers.get('content-type')||'').toLowerCase().includes('text/html'))throw Error('Source returned HTTP '+r.status+' or non-HTML content.');
  if(Number(r.headers.get('content-length')||0)>MAX_HTML)throw Error('Source page too large.');
  const html=await r.text();if(html.length>MAX_HTML)throw Error('Source page too large.');return html;

@@ -5,17 +5,33 @@
   async function lookup(){
     loading=true;error='';details=null;
     try{
-      const [a,b]=await Promise.all([
-        fetch('/api/admin/products/source-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',productId:product.id})}),
-        fetch('/api/admin/products/source-metadata-details',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',productId:product.id})})
-      ]);
+      const [a, b] = await Promise.all([
+  fetch('/api/admin/products/source-metadata', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'preview', productId: product.id }),
+    signal: AbortSignal.timeout(20000)
+  }),
+  fetch('/api/admin/products/source-metadata-details', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mode: 'preview', productId: product.id }),
+    signal: AbortSignal.timeout(20000)
+  })
+]);
       const j=await a.json(),k=await b.json();
       if(!a.ok)throw Error(j.message||'Release directory lookup failed.');
       if(!b.ok)throw Error(k.message||'Metadata lookup failed.');
       dateInfo=j;details=k;useDate=!!j.releaseDate&&!j.existingDate;
       overview=k.overview||'';useOverview=!!overview&&!k.existingOverview;
       selected=Object.keys(k.formats||{}).filter(x=>!k.existingFormats?.[x]||k.existingFormats[x].startsWith('Listed as a '));image='';
-    }catch(e){error=e?.message||'Could not retrieve metadata.';}finally{loading=false;}
+    } catch (e) {
+  error = e?.name === 'TimeoutError' || e?.name === 'AbortError'
+    ? 'Source lookup timed out. Cardsmiths or the metadata service may be responding slowly. Please retry.'
+    : e?.message || 'Could not retrieve metadata.';
+} finally {
+  loading = false;
+}
   }
   function toggle(key,value){selected=value?[...new Set([...selected,key])]:selected.filter(x=>x!==key);}
   async function save(){
