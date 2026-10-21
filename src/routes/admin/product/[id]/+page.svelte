@@ -32,6 +32,20 @@
   <div class="eyebrow">{data.product.sport_name} · {data.product.manufacturer_name} · {data.product.year}</div>
   <h1>{data.product.name}</h1>
   <p class="lede">Only fill in the sections that apply to this product. Empty sections never appear on the public set page.</p>
+  <section class="section sport-section">
+    <div class="section-title"><div class="eyebrow">Classification</div><h2>Sport / category</h2><p>Correct a mistaken import category without deleting or reimporting the checklist.</p></div>
+    {#if data.sports.length}
+      <form method="POST" action="?/changeSport" class="sport-form">
+        <label>Sport / category
+          <select class="input" name="sport_id" value={String(data.product.sport_id)}>
+            {#each data.sports as sport}<option value={String(sport.id)}>{sport.name}</option>{/each}
+          </select>
+        </label>
+        <button type="submit">Save category</button>
+      </form>
+      {#if data.product.sport_id}<p class="art-note">Changing the category does not alter imported cards or their team affiliations. Review affiliations separately if they were linked under the wrong sport.</p>{/if}
+    {:else}<p>No sport categories are configured.</p>{/if}
+  </section>
   {#if form?.message}<div class="error">{form.message}</div>{/if}
 
   <section class="section artwork-section">
@@ -72,6 +86,7 @@
 
 <style>
   .page{padding-top:3rem;padding-bottom:6rem}
+  .sport-section{max-width:700px;margin-bottom:2rem}.sport-form{display:flex;gap:.75rem;align-items:end;flex-wrap:wrap}.sport-form label{flex:1;min-width:220px}.sport-form button{padding:.75rem 1rem;border:0;border-radius:.6rem;background:var(--ink);color:#fff;font:inherit;font-weight:850;cursor:pointer}
   .crumb{display:flex;gap:.45rem;color:var(--muted);font-size:.76rem;margin-bottom:2rem}.crumb a{color:inherit}
   h1{font-size:clamp(2.5rem,5vw,4.5rem);letter-spacing:-.055em;margin:.4rem 0 .65rem}
   .lede{max-width:720px;margin:0 0 2rem;color:var(--muted);line-height:1.55}

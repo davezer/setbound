@@ -129,10 +129,30 @@ export async function load({ platform, params, url }) {
     WHERE product_id = ? ORDER BY sort_order, id
   `).bind(product.id).all();
   const saved = new Map((formatResult.results || []).map(row => [row.format_key, row]));
-  return { product, imageSaved: url.searchParams.has('image-saved'), formats: FORMAT_FIELDS.map(field => ({ ...field, details: conciseBoxDetails(saved.get(field.key)?.details || '') })) };
+  const sports = await database.prepare('SELECT id, name FROM sports ORDER BY name').all();
+  return { product, sports: sports.results || [], imageSaved: url.searchParams.has('image-saved'), formats: FORMAT_FIELDS.map(field => ({ ...field, details: conciseBoxDetails(saved.get(field.key)?.details || '') })) };
 }
 
 export const actions = {
+  changeSport: async ({ platform, params, request }) => {
+    const productId = Number(params.id);
+    if (!Number.isSafeInteger(productId) || productId < 1) return fail(400, { message: 'Invalid product.' });
+    const form = await request.formData();
+    const sportId = Number(form.get('sport_id'));
+    if (!Number.isSafeInteger(sportId) || sportId < 1) return fail(400, { message: 'Choose a valid sport.' });
+    const database = db(platform);
+    const [product, sport] = await Promise.all([
+      database.prepare('SELECT id, sport_id FROM products WHERE id = ?').bind(productId).first(),
+      database.prepare('SELECT id FROM sports WHERE id = ?').bind(sportId).first()
+    ]);
+    if (!product) return fail(404, { message: 'Product not found.' });
+    if (!sport) return fail(400, { message: 'Selected sport does not exist.' });
+    if (Number(product.sport_id) !== sportId) {
+      await database.prepare("UPDATE products SET sport_id = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind(sportId, productId).run();
+    }
+    throw redirect(303, "/admin/product/" + productId + "?sport-saved=1");
+  },
    saveMetadata: async ({ platform, params, request }) => {
     const database = db(platform);
     const productId = Number(params.id);
