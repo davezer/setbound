@@ -24,6 +24,7 @@
 		<nav aria-label="Primary navigation">
 			<a href="/sets">Sets</a>
 			<a href="/search">Search</a>
+			<a href="/mixer">Mixer</a>
 
 			{#if user}
 				<a href="/collection">Collection</a>
