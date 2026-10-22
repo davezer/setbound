@@ -39,11 +39,11 @@
 </header>
 
 <style>
-	.site-header{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--line);background:rgba(252,252,252,.94);backdrop-filter:blur(18px)}
+	.site-header{position:sticky;top:0;z-index:30;border-bottom:1px solid var(--line);background:rgba(255,255,255,.96);backdrop-filter:blur(18px)}
 	.header-row{min-height:5.1rem;display:flex;align-items:center;justify-content:space-between;gap:2rem}
 	nav{display:flex;align-items:center;gap:.25rem}
-	nav a,.account{color:#4d494b;text-decoration:none;font:inherit;font-size:.86rem;font-weight:750;padding:.62rem .72rem;border-radius:.65rem;transition:background .15s ease,color .15s ease}
-	nav a:hover,.account:hover{color:var(--ink);background:#f1f0f0}
+	nav a,.account{color:var(--ink);text-decoration:none;font:inherit;font-size:.86rem;font-weight:750;padding:.62rem .72rem;border-radius:.65rem;transition:background .15s ease,color .15s ease}
+	nav a:hover,.account:hover{color:var(--ink);background:var(--soft)}
 	.account{display:flex;align-items:center;gap:.35rem}
 	.account span{color:var(--blue)}
 	.signin{border:1px solid var(--line-strong)}
