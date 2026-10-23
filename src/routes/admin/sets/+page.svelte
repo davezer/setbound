@@ -1,5 +1,7 @@
 <script>
 	import ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';
+  import { parseSourceCsv } from '$lib/client/source-csv.js';
+  import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
 	import CardsmithsMetadataModal from '$lib/components/CardsmithsMetadataModal.svelte'; // SETBOUND_CARDSMITHS_METADATA_V1
 	let { data, form } = $props();
 
@@ -143,6 +145,42 @@
 	let toggling = $state(null);
 	let message = $state('');
 	let cleanupProduct = $state(null);
+  // SETBOUND_CHECKLIST_REPLACER_V1
+  let replacementProduct = $state(null);
+  let replacementFileName = $state('');
+  let replacementCards = $state([]);
+  let replacementPreview = $state(null);
+  let replacementBusy = $state(false);
+  let replacementError = $state('');
+  function closeReplacement() { if(replacementBusy)return;replacementProduct=null;replacementCards=[];replacementPreview=null;replacementError='';replacementFileName=''; }
+  async function chooseReplacement(event){
+    const file=event.currentTarget.files?.[0];if(!file)return;
+    replacementBusy=true;replacementError='';replacementPreview=null;replacementCards=[];replacementFileName=file.name;
+    try{
+      const ext=file.name.split('.').pop().toLowerCase();
+      const parsed=ext==='csv'?await parseSourceCsv(file):['xlsx','xls'].includes(ext)?await extractSpreadsheetChecklist(file):null;
+      if(!parsed?.cards?.length)throw Error('Choose a valid CSV, XLS, or XLSX checklist.');
+      replacementCards=parsed.cards;
+      await previewReplacement();
+    }catch(e){replacementError=e?.message||'Unable to read checklist.';}
+    finally{replacementBusy=false;}
+  }
+  async function previewReplacement(){
+    const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',cards:replacementCards})});
+    const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Preview failed.');replacementPreview=j;
+  }
+  async function applyReplacement(){
+    if(!replacementPreview?.canApply||replacementBusy)return;
+    if(!confirm('Replace the checklist cards for '+replacementProduct.name+'? Existing product details and artwork will stay. Unmatched untracked card rows will be deleted.'))return;
+    replacementBusy=true;replacementError='';
+    try{
+      const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',cards:replacementCards,confirmation:'REPLACE CHECKLIST'})});
+      const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Replacement failed.');
+      closeReplacement();location.reload();
+    }catch(e){replacementError=e?.message||'Unable to replace checklist.';}
+    finally{replacementBusy=false;}
+  }
+
 	let sourceMetadataProduct = $state(null);
 	// SETBOUND_BULK_OFFLINE_V1
 	let selectedOfflineIds = $state([]);
@@ -575,6 +613,7 @@
 					</button>
 
 					<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>
+          <button class="edit" type="button" onclick={() => {replacementProduct=product;replacementPreview=null;replacementCards=[];replacementError='';replacementFileName='';}}>Replace checklist</button>
 					<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>
 					<a class="edit" href={`/admin/sets/preview/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
@@ -618,6 +657,23 @@
 </section>
 
 
+{#if replacementProduct}
+<div class="setbound-replace-scrim" role="presentation" onclick={e=>{if(e.target===e.currentTarget)closeReplacement()}}>
+  <div class="setbound-replace-dialog" role="dialog" aria-modal="true" aria-label="Replace checklist" tabindex="-1">
+    <div class="setbound-replace-head"><div><div class="eyebrow">Replace checklist</div><h2>{replacementProduct.year} {replacementProduct.name}</h2><p>Only checklist sections and card rows change. Artwork, product details and URL stay.</p></div><button type="button" onclick={closeReplacement} disabled={replacementBusy}>×</button></div>
+    <label>Replacement file <input type="file" accept=".csv,.xls,.xlsx" disabled={replacementBusy} onchange={chooseReplacement}/></label>
+    {#if replacementBusy}<p>Checking replacement…</p>{/if}
+    {#if replacementError}<p class="setbound-replace-error" role="alert">{replacementError}</p>{/if}
+    {#if replacementPreview}
+      {@const r = replacementPreview.report}
+      <div class="setbound-replace-stats"><span><b>{r.existingCards}</b> existing cards</span><span><b>{r.replacementCards}</b> replacement cards</span><span><b>{r.matchedCards}</b> safely matched</span><span><b>{r.removedCards}</b> removed</span><span><b>{r.addedCards}</b> added</span><span><b>{r.existingSections} → {r.replacementSections}</b> sections</span></div>
+      {#if r.unmatchedTrackedCards}<p class="setbound-replace-error">{r.unmatchedTrackedCards} owned/wanted card records cannot be safely matched. This replacement is blocked.</p>{/if}
+      {#if r.blockedOddsSections.length}<p class="setbound-replace-error">Removed sections have linked pack odds: {r.blockedOddsSections.join(', ')}. Replacement blocked to protect odds data.</p>{/if}
+      {#if replacementPreview.canApply}<button type="button" class="setbound-replace-confirm" disabled={replacementBusy} onclick={applyReplacement}>Confirm checklist replacement</button>{/if}
+    {/if}
+  </div>
+</div>
+{/if}
 {#if metadataModalOpen}
   <div class="bulk-meta-overlay" role="presentation" onclick={e=>{if(e.target===e.currentTarget&&!metadataBusy&&!metadataApplying)metadataModalOpen=false}}>
     <section class="bulk-meta-dialog" role="dialog" aria-modal="true" aria-label="Bulk parent metadata review" tabindex="-1">
@@ -823,4 +879,6 @@
 .bulk-meta-images label{display:grid;gap:.3rem;padding:.5rem;border:1px solid #ddd;border-radius:.6rem;min-height:135px;cursor:pointer;align-content:start}.bulk-meta-images label.chosen{border-color:#111;background:#fafafa}
 .bulk-meta-images label img{max-width:100%;width:100%;height:125px;object-fit:contain}.bulk-meta-note{color:#666}.bulk-meta-footer{border-top:1px solid #e5e5e5;border-bottom:0}.bulk-meta-footer .bulk-meta-save{background:#191919;color:white}.bulk-meta-footer button:disabled{opacity:.4}
 @media(max-width:600px){.bulk-meta-dialog{max-height:96vh}.bulk-meta-overlay{padding:.4rem}.bulk-meta-results{padding:.65rem}}
+
+.setbound-replace-scrim{position:fixed;inset:0;background:rgba(10,22,33,.58);z-index:200;display:grid;place-items:center;padding:1rem}.setbound-replace-dialog{width:min(680px,100%);max-height:92vh;overflow:auto;background:white;border-radius:1rem;padding:1.5rem;box-shadow:0 20px 70px rgba(0,0,0,.25)}.setbound-replace-head{display:flex;justify-content:space-between;gap:1rem;margin-bottom:1.4rem}.setbound-replace-head h2{margin:.3rem 0;font-size:1.4rem}.setbound-replace-head p{font-size:.8rem;color:var(--muted)}.setbound-replace-head button{align-self:start;border:0;background:var(--soft);border-radius:.4rem;padding:.35rem .65rem;cursor:pointer}.setbound-replace-dialog label{display:grid;gap:.5rem}.setbound-replace-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin:1.2rem 0}.setbound-replace-stats span{border:1px solid var(--line);padding:.7rem;border-radius:.5rem;font-size:.76rem}.setbound-replace-stats b{display:block;font-size:1.3rem}.setbound-replace-error{color:#a12525;font-size:.8rem}.setbound-replace-confirm{background:var(--ink);color:#fff;border:0;padding:.8rem 1rem;border-radius:.5rem;font-weight:800;cursor:pointer}@media(max-width:540px){.setbound-replace-stats{grid-template-columns:repeat(2,1fr)}}
 </style>
