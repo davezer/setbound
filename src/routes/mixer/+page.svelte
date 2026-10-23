@@ -1,5 +1,6 @@
 <script>
   import { goto } from '$app/navigation';
+  import { productDisplayTitle } from '$lib/product-display.js';
   let { data } = $props();
   let selected = $state(data.products.map(p => p.slug));
   let productQuery = $state('');
@@ -10,21 +11,36 @@
   let copied = $state(false);
   let showPicker = $state(false);
   let displayedLimit = $state(250);
-  const productById = new Map(data.catalog.map(p => [Number(p.id), p]));
-  const productBySlug = new Map(data.catalog.map(p => [p.slug, p]));
+  function normalizeTeam(value) {
+    const raw = String(value || '').trim();
+    if (/^angels$/i.test(raw) || /^la angels$/i.test(raw)) return 'Los Angeles Angels';
+    return raw || 'Unassigned';
+  }
+  function title(product) { return productDisplayTitle(product.name, product.year); }
+  const normalizedCards = $derived(data.cards.map(card => ({...card, team_name: normalizeTeam(card.team_name)})));
+  const productById = $derived(new Map(data.catalog.map(p => [Number(p.id), p])));
+  const productBySlug = $derived(new Map(data.catalog.map(p => [p.slug, p])));
   const chosen = $derived(selected.map(slug => productBySlug.get(slug)).filter(Boolean));
   const options = $derived(data.catalog.filter(p => !selected.includes(p.slug) && `${p.year} ${p.name} ${p.sport_name} ${p.manufacturer_name}`.toLowerCase().includes(productQuery.toLowerCase())).slice(0,60));
-  const teams = $derived([...new Set(data.cards.map(c => c.team_name).filter(Boolean))].sort((a,b) => a.localeCompare(b)));
-  const filtered = $derived(data.cards.filter(c => {
+  const teams = $derived([...new Set(normalizedCards.map(c => c.team_name).filter(Boolean))].sort((a,b) => a.localeCompare(b)));
+  const searchable = $derived(normalizedCards.filter(c => {
     const text = `${c.card_number} ${c.subject_name} ${c.checklist_name} ${c.team_name} ${productById.get(Number(c.product_id))?.name || ''}`.toLowerCase();
     return (!query || text.includes(query.toLowerCase())) &&
-      (team === 'All teams' || c.team_name === team) &&
       (tag === 'All cards' || (tag === 'Autographs' && c.autograph) ||
       (tag === 'Memorabilia' && c.memorabilia) || (tag === 'Rookies' && c.rookie) ||
       (tag === 'Numbered' && c.serial_number));
   }));
-  const perProduct = $derived(chosen.map(p => ({...p,cards:filtered.filter(c => Number(c.product_id) === Number(p.id))})));
-  const summary = $derived(teams.map(name => ({name,count:filtered.filter(c => c.team_name === name).length})).filter(x => x.count));
+  const filtered = $derived(searchable.filter(c => team === 'All teams' || c.team_name === team));
+  const perProduct = $derived.by(() => {
+    const grouped = new Map(chosen.map(p => [Number(p.id), []]));
+    for (const card of filtered) grouped.get(Number(card.product_id))?.push(card);
+    return chosen.map(p => ({...p, cards: grouped.get(Number(p.id)) || []}));
+  });
+  const summary = $derived.by(() => {
+    const counts = new Map();
+    for (const card of searchable) counts.set(card.team_name, (counts.get(card.team_name) || 0) + 1);
+    return [...counts].map(([name,count]) => ({name,count})).sort((a,b) => a.name.localeCompare(b.name));
+  });
   function href(slugs = selected, view = mode) {
     const params = new URLSearchParams();
     for (const slug of slugs) params.append('set', slug);
@@ -60,13 +76,13 @@
     <div class="picker-top"><strong>Products in this mixer <span>{selected.length}/{data.maxProducts}</span></strong><button onclick={() => showPicker = !showPicker} disabled={selected.length>=data.maxProducts}>{showPicker?'Close picker':'＋ Add a product'}</button></div>
     <div class="chips">
       {#each chosen as product (product.id)}
-        <span class="chip">{product.year} {product.name}<button aria-label={`Remove ${product.name}`} onclick={() => setProducts(selected.filter(x => x !== product.slug))}>×</button></span>
+        <span class="chip">{title(product)}<button aria-label={`Remove ${product.name}`} onclick={() => setProducts(selected.filter(x => x !== product.slug))}>×</button></span>
       {/each}
       {#if !selected.length}<p class="hint">Add two or more products to build your mixer. You can start with just one.</p>{/if}
     </div>
     {#if showPicker}
       <div class="product-picker"><input class="input" bind:value={productQuery} placeholder="Search year, product, sport, manufacturer…" aria-label="Find a release" />
-        <div class="results">{#each options as p (p.id)}<button onclick={() => add(p.slug)}><span>{p.year} {p.name}</span><small>{p.sport_name} · {Number(p.card_count).toLocaleString()} cards</small></button>{/each}{#if !options.length}<p>No published releases match.</p>{/if}</div>
+        <div class="results">{#each options as p (p.id)}<button onclick={() => add(p.slug)}><span>{title(p)}</span><small>{p.sport_name} · {Number(p.card_count).toLocaleString()} cards</small></button>{/each}{#if !options.length}<p>No published releases match.</p>{/if}</div>
       </div>
     {/if}
   </div>
@@ -77,19 +93,21 @@
   </div>
   {#if selected.length}
     {#if data.truncated}<p class="warning">Large mixer: only the first {data.cards.length.toLocaleString()} cards were loaded. Reduce your product selection for complete results.</p>{/if}
-    <div class="filters"><label>Search all products<input class="input" bind:value={query} placeholder="Player, checklist, card number…" /></label><label>Team / affiliation<select class="input" bind:value={team}><option>All teams</option>{#each teams as name}<option>{name}</option>{/each}</select></label><label>Card type<select class="input" bind:value={tag}>{#each ['All cards','Autographs','Memorabilia','Rookies','Numbered'] as t}<option>{t}</option>{/each}</select></label></div>
+    <div class="filters"><label>Search all products<input class="input" bind:value={query} placeholder="Player, checklist, card number…" /></label><label>Team / affiliation<select class="input" bind:value={team} onchange={() => displayedLimit = 250}><option>All teams</option>{#each teams as name}<option>{name}</option>{/each}</select></label><label>Card type<select class="input" bind:value={tag}>{#each ['All cards','Autographs','Memorabilia','Rookies','Numbered'] as t}<option>{t}</option>{/each}</select></label></div>
     {#if mode === 'break'}
       <section class="break-head"><div><div class="eyebrow">Live break mode</div><h2>{team === 'All teams' ? 'Every team. Every product.' : team}</h2><p>{filtered.length.toLocaleString()} matching cards across {chosen.length} products</p></div><div class="break-count">{filtered.length.toLocaleString()}<small>matching cards</small></div></section>
       {#if team === 'All teams'}<div class="team-grid">{#each summary as t}<button onclick={() => {team=t.name;displayedLimit=250}}><strong>{t.name}</strong><span>{t.count}</span></button>{/each}</div>{/if}
-      <div class="product-groups">{#each perProduct as p (p.id)}<details open><summary><strong>{p.year} {p.name}</strong><span>{p.cards.length} cards</span></summary><div class="rows">{#each p.cards.slice(0,displayedLimit) as c (c.id)}<div class="card-row"><b>#{c.card_number}</b><span>{c.subject_name}<small>{c.checklist_name} · {c.team_name}</small></span><em>{flags(c)}</em></div>{/each}{#if p.cards.length > displayedLimit}<small>Showing first {displayedLimit} matching cards in this product</small>{/if}</div></details>{/each}</div>
+      {#if team !== 'All teams'}
+      <div class="product-groups">{#each perProduct as p (p.id)}<details open><summary><strong>{title(p)}</strong><span>{p.cards.length} cards</span></summary><div class="rows">{#each p.cards.slice(0,displayedLimit) as c (c.id)}<div class="card-row"><b>#{c.card_number}</b><span>{c.subject_name}<small>{c.checklist_name} · {c.team_name}</small></span><em>{flags(c)}</em></div>{/each}{#if p.cards.length > displayedLimit}<small>Showing first {displayedLimit} matching cards in this product</small>{/if}</div></details>{/each}</div>
+      {:else}<p class="hint">Choose a team above to see its cards grouped by product. This keeps large mixers fast and easy to browse.</p>{/if}
     {:else if mode === 'side'}
-      <p class="hint">Compare products independently. On small screens, columns scroll horizontally.</p><div class="side-grid">{#each perProduct as p (p.id)}<div class="side-col"><h3>{p.year} {p.name} <small>{p.cards.length} cards</small></h3>{#each p.cards.slice(0,displayedLimit) as c (c.id)}<div class="side-card"><b>#{c.card_number}</b> {c.subject_name}<small>{c.checklist_name} · {c.team_name} · {flags(c)}</small></div>{/each}</div>{/each}</div>
+      <p class="hint">Compare products independently. On small screens, columns scroll horizontally.</p><div class="side-grid">{#each perProduct as p (p.id)}<div class="side-col"><h3>{title(p)} <small>{p.cards.length} cards</small></h3>{#each p.cards.slice(0,displayedLimit) as c (c.id)}<div class="side-card"><b>#{c.card_number}</b> {c.subject_name}<small>{c.checklist_name} · {c.team_name} · {flags(c)}</small></div>{/each}</div>{/each}</div>
     {:else if mode === 'team'}
       <div class="team-grid">{#each summary as t}<button onclick={() => {team=t.name;switchMode('break')}}><strong>{t.name}</strong><span>{t.count} cards ↗</span></button>{/each}</div>
     {:else}
-      <div class="table-wrap"><table><thead><tr><th>Card #</th><th>Subject</th><th>Team / affiliation</th><th>Product</th><th>Checklist</th><th>Tags</th></tr></thead><tbody>{#each preview as c (c.id)}<tr><td>{c.card_number}</td><td><strong>{c.subject_name}</strong></td><td>{c.team_name}</td><td>{productById.get(Number(c.product_id))?.name}</td><td>{c.checklist_name}</td><td>{flags(c)}</td></tr>{/each}</tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Card #</th><th>Subject</th><th>Team / affiliation</th><th>Product</th><th>Checklist</th><th>Tags</th></tr></thead><tbody>{#each preview as c (c.id)}<tr><td>{c.card_number}</td><td><strong>{c.subject_name}</strong></td><td>{c.team_name}</td><td>{productById.get(Number(c.product_id)) ? title(productById.get(Number(c.product_id))) : ''}</td><td>{c.checklist_name}</td><td>{flags(c)}</td></tr>{/each}</tbody></table></div>
     {/if}
-    {#if (mode === 'combined' && filtered.length > displayedLimit) || ((mode === 'break' || mode === 'side') && perProduct.some(p => p.cards.length > displayedLimit))}<button class="more" onclick={() => displayedLimit += 250}>Show 250 more cards</button>{/if}
+    {#if (mode === 'combined' && filtered.length > displayedLimit) || ((mode === 'side' || (mode === 'break' && team !== 'All teams')) && perProduct.some(p => p.cards.length > displayedLimit))}<button class="more" onclick={() => displayedLimit += 250}>Show 250 more cards</button>{/if}
     {#if !filtered.length}<p class="empty">No matching cards with these filters.</p>{/if}
   {:else}<div class="empty"><strong>Build your first mixer.</strong><p>Click “Add a product,” select a release, and start combining checklists.</p></div>{/if}
 </section>
