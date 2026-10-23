@@ -1,16 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --ink:#112C43;
+  --ink:#172A37;
   --paper:#FFFFFF;
-  --orange:#F46A22;
-  --blue:#176B9A;
-  --granite:#718391;
-  --muted:#596A78;
-  --line:#E1E8EE;
-  --line-strong:#C4D1DC;
-  --soft:#F2F6FA;
-  --display:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --orange:#B76C50;
+  --blue:#526C7E;
+  --granite:#7C878F;
+  --muted:#68757D;
+  --line:#E5E7E7;
+  --line-strong:#CED5D8;
+  --soft:#F6F6F3;
+  --display:'Manrope', 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   font-family:'DM Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color:var(--ink);
   background:var(--paper);
@@ -63,7 +63,7 @@ footer { border-top:1px solid var(--line); margin-top:0; color:var(--muted); fon
 .btn-secondary { background:white; color:var(--ink); border:1px solid var(--line-strong); }
 .btn-accent { background:var(--blue); color:white; }
 .input { width:100%; border:1px solid var(--line-strong); background:white; color:var(--ink); border-radius:.7rem; padding:.78rem .85rem; outline:0; }
-.input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(23,107,154,.14); }
+.input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(82,108,126,.14); }
 label { font-size:.78rem; font-weight:800; color:var(--muted); display:grid; gap:.4rem; }
 .card-shell { border:1px solid var(--line); background:white; border-radius:1rem; }
 .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:1rem; background:white; }
@@ -82,4 +82,8 @@ tr:last-child td { border-bottom:0; }
 }
 
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-::selection{background:#FCE1D1;color:var(--ink)}
+::selection{background:#EED8CD;color:var(--ink)}
+
+/* Brand refinement: accent belongs in the details, not half the page. */
+.eyebrow{color:var(--orange);letter-spacing:.105em}
+.btn-accent{background:var(--ink)}

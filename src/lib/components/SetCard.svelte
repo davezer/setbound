@@ -67,11 +67,11 @@
 		position: relative;
 		aspect-ratio: 16 / 8.4;
 		overflow: hidden;
-		background: #f2f1ef;
+		background: var(--soft);
 	}
 
 	.art.has-image {
-		background: #eceae6;
+		background: var(--soft);
 	}
 
 	.art img {
@@ -139,13 +139,13 @@
 		display: block;
 		width: 25px;
 		border-radius: 0 14px 4px 4px;
-		background: #12100e;
+		background: var(--ink);
 	}
 
 	.mark i:nth-child(1) { height: 73px; }
-	.mark i:nth-child(2) { height: 62px; background: #ee964b; }
-	.mark i:nth-child(3) { height: 51px; background: #40798c; }
-	.mark i:nth-child(4) { height: 40px; background: #7f7b82; }
+	.mark i:nth-child(2) { height: 62px; background: var(--orange); }
+	.mark i:nth-child(3) { height: 51px; background: var(--blue); }
+	.mark i:nth-child(4) { height: 40px; background: var(--granite); }
 
 	.body {
 		padding: 1.05rem 1.1rem 1rem;

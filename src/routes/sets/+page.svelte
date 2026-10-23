@@ -109,12 +109,12 @@
 	.total{text-align:right;flex:0 0 auto}.total strong,.total span{display:block}.total strong{font-size:2.2rem;letter-spacing:-.04em}.total span{color:var(--muted);font-size:.7rem}
 	.category-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;padding-top:1.4rem}
 	.category{display:grid;grid-template-columns:minmax(190px,.85fr) 1.15fr;min-height:260px;overflow:hidden;border:1px solid var(--line);border-radius:1rem;background:#fff;color:inherit;text-decoration:none;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
-	.category:hover{transform:translateY(-3px);border-color:#bbb8bd;box-shadow:0 16px 44px rgba(18,16,14,.07)}
-	.category-art{min-width:0;background:#efeeeb;overflow:hidden}
+	.category:hover{transform:translateY(-3px);border-color:var(--line-strong);box-shadow:0 16px 44px rgba(18,16,14,.07)}
+	.category-art{min-width:0;background:var(--soft);overflow:hidden}
 	.art-stack{height:100%;display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:#ddd}
 	.art-stack.single{grid-template-columns:1fr}
 	.mini-art{min-width:0;overflow:hidden}.mini-art img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .25s ease}.category:hover .mini-art img{transform:scale(1.025)}
-	.category-fallback{height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#f7f6f3,#ebeae7)}.category-fallback span{font-family:var(--display);font-size:2rem;color:#9a9690}
+	.category-fallback{height:100%;display:grid;place-items:center;background:linear-gradient(135deg,#faf9f6,#f0efeb)}.category-fallback span{font-family:var(--display);font-size:2rem;color:#9a9690}
 	.category-body{display:flex;flex-direction:column;justify-content:space-between;padding:1.25rem}
 	.category-top{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start}.category h2{font-family:var(--display);font-weight:500;font-size:clamp(2rem,3.5vw,3.1rem);letter-spacing:-.05em;line-height:.95;margin:.35rem 0}.arrow{font-size:1.25rem;transition:transform .16s ease}.category:hover .arrow{transform:translateX(4px)}
 	.stats{display:flex;gap:1.1rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--muted);font-size:.7rem}.stats strong{color:var(--ink)}
