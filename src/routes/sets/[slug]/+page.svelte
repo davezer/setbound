@@ -357,6 +357,11 @@
 		</table>
 	</div>
 
+	<div class="checklist-feedback">
+		<span>Problems with this checklist? Let us know!</span>
+		<a href={`mailto:hello.setbound@gmail.com?subject=${encodeURIComponent('Checklist correction: ' + data.product.year + ' ' + data.product.name + ' (' + data.product.slug + ')')}`}>hello.setbound@gmail.com ↗</a>
+	</div>
+
 	<div class="source">
 		<div>
 			<div class="eyebrow">Source</div>
@@ -528,4 +533,8 @@
 	@media(max-width:1050px){.hero{grid-template-columns:1fr;gap:1.35rem}.hero-side{grid-template-columns:minmax(0,1fr) minmax(240px,.7fr);align-items:end}}
 	@media(max-width:800px){.filters{grid-template-columns:1fr}.odds-controls{grid-template-columns:1fr}.browser-headline{align-items:flex-start;flex-direction:column}.hero-side{grid-template-columns:1fr}}
 	@media(max-width:560px){.fact+.fact{border-left:0;padding-left:0}}
+
+	.checklist-feedback{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .65rem;margin-top:1.8rem;padding:1rem 0;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem}
+	.checklist-feedback a{font-weight:800;color:var(--ink);text-decoration:underline;text-decoration-color:var(--orange);text-underline-offset:3px}
+	.checklist-feedback a:hover{color:var(--orange)}
 </style>

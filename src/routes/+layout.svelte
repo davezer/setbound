@@ -6,5 +6,5 @@
 <Header />
 <main>{@render children()}</main>
 <footer>
-  <div class="shell footer-row"><span>setbound</span><span>Built for collectors, not spreadsheets.</span></div>
+  <div class="shell footer-row"><span>setbound</span><span class="footer-links"><a href="/contact">Contact</a><span>Built for collectors, not spreadsheets.</span></span></div>
 </footer>
