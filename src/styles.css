@@ -30,7 +30,13 @@ a { color:inherit; }
 
 main { min-height:calc(100vh - 9rem); }
 footer { border-top:1px solid var(--line); margin-top:0; color:var(--muted); font-size:.8rem; }
-.footer-row { min-height:5rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+.footer-row {
+  min-height: 5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.5rem;
+}
 
 .eyebrow {
   color:var(--blue);
