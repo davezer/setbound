@@ -32,6 +32,16 @@ export async function POST({ request, params, platform, locals }) {
   }
   const product=await database.prepare('SELECT id,name,year,published,image_key,primary_source_id FROM products WHERE id=?').bind(id).first();
   if(!product)return json({message:'Set not found.'},{status:404});
+  // Prevent accidentally replacing a non-Chrome Sapphire product with Chrome
+  // Sapphire (or the reverse). Require a meaningful filename for review.
+  const replacementFilename=clean(body?.sourceFilename);
+  if (!replacementFilename) return json({message:'Replacement filename missing. Reopen Manage Sets and select the file again.'},{status:400});
+  const existingName=clean(product.name).toLowerCase();
+  const incomingName=replacementFilename.toLowerCase().replace(/[_-]+/g,' ');
+  const families=['chrome','sapphire','mega','holiday'];
+  const mismatch=families.find(word => new RegExp('\\b'+word+'\\b','i').test(existingName) !== new RegExp('\\b'+word+'\\b','i').test(incomingName));
+  if (mismatch) return json({message:`Product mismatch: the filename and existing product disagree on "${mismatch}". Upload the checklist for this exact release. Nothing changed.`},{status:409});
+
   const [existingResult,sectionResult,trackedResult,oddsResult]=await Promise.all([
     database.prepare(`SELECT c.id,c.card_number,sub.name AS subject,cl.name AS section
       FROM cards c JOIN subjects sub ON sub.id=c.subject_id JOIN checklists cl ON cl.id=c.checklist_id
@@ -89,6 +99,9 @@ export async function POST({ request, params, platform, locals }) {
         memorabilia=json_extract(j.value,'$.memorabilia'),serial_number=json_extract(j.value,'$.serial'),
         raw_source=json_extract(j.value,'$.raw')
         FROM json_each(?) j WHERE cards.id=CAST(json_extract(j.value,'$.oldId') AS INTEGER) AND cards.product_id=?`).bind(id,encoded,id),
+      // Remove only OLD cards before inserting replacements. Deleting afterwards
+      // also deletes every newly inserted row, leaving the product empty.
+      database.prepare(`DELETE FROM cards WHERE product_id=? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`).bind(id,keepIds),
       database.prepare(`INSERT INTO cards(product_id,checklist_id,subject_id,affiliation_id,affiliation_label,card_number,sort_key,rookie,autograph,memorabilia,serial_number,confidence,raw_source)
         SELECT ?,cl.id,s.id,a.id,NULLIF(json_extract(j.value,'$.affiliation'),''),json_extract(j.value,'$.number'),json_extract(j.value,'$.sort'),
           json_extract(j.value,'$.rookie'),json_extract(j.value,'$.autograph'),json_extract(j.value,'$.memorabilia'),
@@ -98,12 +111,15 @@ export async function POST({ request, params, platform, locals }) {
         JOIN subjects s ON s.normalized_name=json_extract(j.value,'$.subjectKey')
         LEFT JOIN affiliations a ON lower(trim(a.name))=lower(trim(json_extract(j.value,'$.affiliation')))
         WHERE json_extract(j.value,'$.oldId') IS NULL`).bind(id,encoded,id),
-      database.prepare(`DELETE FROM cards WHERE product_id=? AND id NOT IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`).bind(id,keepIds),
+
       database.prepare(`DELETE FROM checklist_details WHERE checklist_id IN (SELECT id FROM checklists WHERE product_id=? AND name NOT IN (SELECT value FROM json_each(?)))`).bind(id,newSections),
       database.prepare(`DELETE FROM checklists WHERE product_id=? AND name NOT IN (SELECT value FROM json_each(?))`).bind(id,newSections),
-      database.prepare(`UPDATE products SET updated_at=datetime('now') WHERE id=?`).bind(id)
+      database.prepare(`UPDATE products SET updated_at=datetime('now') WHERE id=?`).bind(id),
+      database.prepare('SELECT COUNT(*) AS card_count FROM cards WHERE product_id=?').bind(id)
     ]);
     if(result.some(x=>x.success===false))throw Error('Database rejected one or more changes.');
+    const actual=Number(result.at(-1)?.results?.[0]?.card_count ?? -1);
+    if(actual!==incoming.length)throw Error(`Verification failed: expected ${incoming.length} cards, found ${actual}. Contact support and do not retry blindly.`);
     return json({ok:true,report,message:'Checklist replaced. Product details and artwork preserved.'});
   }catch(e){console.error('Checklist replacement failed',e);return json({message:'Replacement failed; no change should have been committed. '+(e?.message||'Database error')},{status:500});}
 }

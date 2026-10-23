@@ -166,7 +166,7 @@
     finally{replacementBusy=false;}
   }
   async function previewReplacement(){
-    const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',cards:replacementCards})});
+    const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',cards:replacementCards,sourceFilename:replacementFileName})});
     const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Preview failed.');replacementPreview=j;
   }
   async function applyReplacement(){
@@ -174,7 +174,7 @@
     if(!confirm('Replace the checklist cards for '+replacementProduct.name+'? Existing product details and artwork will stay. Unmatched untracked card rows will be deleted.'))return;
     replacementBusy=true;replacementError='';
     try{
-      const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',cards:replacementCards,confirmation:'REPLACE CHECKLIST'})});
+      const r=await fetch('/api/admin/products/'+replacementProduct.id+'/replace-checklist',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',cards:replacementCards,sourceFilename:replacementFileName,confirmation:'REPLACE CHECKLIST'})});
       const j=await r.json().catch(()=>({}));if(!r.ok)throw Error(j.message||'Replacement failed.');
       closeReplacement();location.reload();
     }catch(e){replacementError=e?.message||'Unable to replace checklist.';}
