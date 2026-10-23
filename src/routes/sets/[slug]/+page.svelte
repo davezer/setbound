@@ -219,6 +219,11 @@
 		</aside>
 	</section>
 
+	<div class="checklist-feedback">
+		<span>Problems with this checklist? Let us know!</span>
+		<a href={`mailto:hello.setbound@gmail.com?subject=${encodeURIComponent('Checklist correction: ' + data.product.year + ' ' + data.product.name + ' (' + data.product.slug + ')')}`}>hello.setbound@gmail.com ↗</a>
+	</div>
+
 	{#if data.formats.length}
 		<section class="facts">
 			{#each data.formats as format}
@@ -355,11 +360,6 @@
 				</tbody>
 			{/each}
 		</table>
-	</div>
-
-	<div class="checklist-feedback">
-		<span>Problems with this checklist? Let us know!</span>
-		<a href={`mailto:hello.setbound@gmail.com?subject=${encodeURIComponent('Checklist correction: ' + data.product.year + ' ' + data.product.name + ' (' + data.product.slug + ')')}`}>hello.setbound@gmail.com ↗</a>
 	</div>
 
 	<div class="source">
