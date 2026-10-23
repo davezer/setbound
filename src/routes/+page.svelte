@@ -71,7 +71,3 @@
 @media(max-width:950px){.hero,.mixer-layout{grid-template-columns:1fr}.hero{gap:2rem;padding-top:3rem;padding-bottom:3rem}.account-panel{border-left:0;border-top:1px solid var(--line);padding:2rem 0 0}.recent-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:620px){.hero h1{font-size:clamp(3rem,11vw,4.5rem)}.recent-grid,.sports{grid-template-columns:1fr}.section-head{align-items:start;flex-direction:column}.mixer-band{padding:3rem 0}}
 </style>
 
-/* Restrained copper accents link the typography to the new monogram. */
-.hero h1 span::after,.mixer-layout h2 span::after{content:'';display:inline-block;width:.12em;height:.12em;background:var(--orange);border-radius:50%;margin-left:.07em;vertical-align:baseline}
-.hero h1 span::after,.mixer-layout h2 span::after{display:none}
-.preview-top span{color:var(--orange)}
