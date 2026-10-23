@@ -1,82 +1,113 @@
 <script>
-	let { data } = $props();
+  let { data } = $props();
+  const stats = $derived(data.userStats || { total: 0, last7Days: 0, withCollectionActivity: 0, recent: [] });
 
-	const userStats = $derived(data.userStats || {
-		total: 0,
-		last7Days: 0,
-		withCollectionActivity: 0,
-		recent: []
-	});
+  const primary = [
+    { href: '/admin/sets', title: 'Manage sets', detail: 'Review, correct, replace and publish checklists', icon: '▦', type: 'primary' },
+    { href: '/admin/import-bulk', title: 'Bulk import', detail: 'Add multiple CSV checklists at once', icon: '⇩' },
+    { href: '/admin/source-library', title: 'Source Library', detail: 'Discover, inspect and prepare source files', icon: '◎' },
+    { href: '/admin/import', title: 'Single import', detail: 'Review and import a single CSV, PDF or spreadsheet', icon: '＋' }
+  ];
+  const tools = [
+    { href: '/admin/cards', title: 'Edit card data', detail: 'Correct card subjects, teams and tags' },
+    { href: '/admin/odds', title: 'Product odds', detail: 'Import pack and box odds' },
+    { href: '/admin/cleanup', title: 'Clean imports', detail: 'Inspect and remove incorrect rows' },
+    { href: '/admin/users', title: 'Manage users', detail: 'Accounts and collection activity' }
+  ];
+  const advanced = [
+    { href: '/admin/source-harvester', title: 'Source Harvester', detail: 'Manufacturer archives and source discovery' },
+    { href: '/admin/affiliations', title: 'Teams & affiliations', detail: 'Aliases and reference data' },
+    { href: '/admin/subjects', title: 'Subjects', detail: 'Merge or rename subjects' },
+    { href: '/admin/import-studio', title: 'Import Studio', detail: 'Review and edit product facts' }
+  ];
 </script>
 
-<svelte:head><title>Admin — setbound</title></svelte:head>
+<svelte:head><title>Admin dashboard | Setbound</title></svelte:head>
 
-<section class="shell page">
-	<div class="hero">
-		<div>
-			<div class="eyebrow">Admin</div>
-			<h1>Setbound admin</h1>
-			<p>Everything behind the scenes, in one place.</p>
-		</div>
+<section class="shell dashboard">
+  <header class="heading">
+    <div>
+      <div class="eyebrow">Workspace</div>
+      <h1>Setbound admin</h1>
+      <p>Your checklists, imports and maintenance tools. All in one place.</p>
+    </div>
+    <a class="site-link" href="/" target="_blank" rel="noreferrer">View live site ↗</a>
+  </header>
 
-		<a class="view-site" href="/" target="_blank" rel="noreferrer">View site ↗</a>
-	</div>
+  <section class="overview" aria-label="Community overview">
+    <div class="metric"><strong>{stats.total.toLocaleString()}</strong><span>Registered users</span></div>
+    <div class="metric"><strong>{stats.last7Days.toLocaleString()}</strong><span>New this week</span></div>
+    <div class="metric"><strong>{stats.withCollectionActivity.toLocaleString()}</strong><span>Tracking collections</span></div>
+    <a class="overview-link" href="/admin/users">User details →</a>
+  </section>
 
-	<section class="user-overview" aria-labelledby="user-overview-title">
-		<div class="section-head">
-			<div>
-				<div class="eyebrow">Community</div>
-				<h2 id="user-overview-title">Registered users</h2>
-			</div>
-			<a href="/admin/users">View users →</a>
-		</div>
+  <section class="group" aria-labelledby="daily-tools">
+    <div class="section-heading"><div><span class="eyebrow">Start here</span><h2 id="daily-tools">Everyday tools</h2></div><p>Your most-used workflows, without the clutter.</p></div>
+    <div class="main-grid">
+      {#each primary as item (item.href)}
+        <a class="main-tool" class:featured={item.type === 'primary'} href={item.href}>
+          <span class="tool-icon" aria-hidden="true">{item.icon}</span>
+          <span class="tool-copy"><strong>{item.title}</strong><small>{item.detail}</small></span>
+          <span class="arrow" aria-hidden="true">→</span>
+        </a>
+      {/each}
+    </div>
+  </section>
 
-		<div class="stats">
-			<div class="stat"><span>Total users</span><strong>{userStats.total.toLocaleString()}</strong></div>
-			<div class="stat"><span>Joined in last 7 days</span><strong>{userStats.last7Days.toLocaleString()}</strong></div>
-			<div class="stat"><span>Using collection tools</span><strong>{userStats.withCollectionActivity.toLocaleString()}</strong></div>
-		</div>
+  <section class="group" aria-labelledby="other-tools">
+    <div class="section-heading"><div><span class="eyebrow">Operations</span><h2 id="other-tools">Corrections & management</h2></div></div>
+    <div class="link-list">
+      {#each tools as item (item.href)}
+        <a href={item.href}><span><strong>{item.title}</strong><small>{item.detail}</small></span><span aria-hidden="true">→</span></a>
+      {/each}
+    </div>
+  </section>
 
-		{#if userStats.recent.length}
-			<div class="recent-users">
-				<div class="recent-head"><span>Newest accounts</span><span>Joined</span></div>
-				{#each userStats.recent as user}
-					<a href="/admin/users">
-						<div>
-							<strong>{user.display_name || user.email}</strong>
-							{#if user.display_name}<span>{user.email}</span>{/if}
-						</div>
-						<div class="joined">
-							{new Date(`${user.created_at.replace(' ', 'T')}Z`).toLocaleDateString()}
-							{#if user.is_admin}<span class="admin-badge">Admin</span>{/if}
-						</div>
-					</a>
-				{/each}
-			</div>
-		{:else}
-			<div class="empty-users">No registered users yet.</div>
-		{/if}
-	</section>
+  <details class="advanced">
+    <summary><span><strong>Advanced & less-used tools</strong><small>Reference data and specialized workflows</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+    <div class="link-list advanced-list">
+      {#each advanced as item (item.href)}
+        <a href={item.href}><span><strong>{item.title}</strong><small>{item.detail}</small></span><span aria-hidden="true">→</span></a>
+      {/each}
+    </div>
+  </details>
 
-	<div class="admin-grid">
-		<a class="admin-link" href="/admin/source-harvester"><div class="icon">⇣</div><div><span class="kicker">Data acquisition</span><h2>Source Harvester</h2><p>Discover historical checklists and odds from manufacturer archives and Checklist Insider.</p></div><span class="arrow">→</span></a>\n\t\t\n		<a class="admin-link" href="/admin/import"><div class="icon">↓</div><div><span class="kicker">Import</span><h2>Import checklist</h2><p>Add a PDF, XLS, or XLSX checklist.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/odds"><div class="icon">1:</div><div><span class="kicker">Odds</span><h2>Import product odds</h2><p>Parse official odds PDFs and connect pack odds to checklist data.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/cleanup"><div class="icon">×</div><div><span class="kicker">Cleanup</span><h2>Clean imports</h2><p>Remove bad rows or an entire import.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/cards"><div class="icon">#</div><div><span class="kicker">Manual correction</span><h2>Card data</h2><p>Fix a player's team, tags, variation, serial number, notes, or subject on one card.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/affiliations"><div class="icon">T</div><div><span class="kicker">Reference data</span><h2>Teams & affiliations</h2><p>Manage team and school names, sports, leagues, types, and aliases.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/subjects"><div class="icon">Aa</div><div><span class="kicker">Data cleanup</span><h2>Subjects</h2><p>Rename or merge malformed player and subject names.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/sets"><div class="icon">▧</div><div><span class="kicker">Products</span><h2>Manage sets</h2><p>Artwork, release dates, product details, and collector-facing notes.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/admin/users"><div class="icon">◎</div><div><span class="kicker">Community</span><h2>Users</h2><p>See registrations and how collectors are using Setbound.</p></div><span class="arrow">→</span></a>
-		<a class="admin-link" href="/sets"><div class="icon">↗</div><div><span class="kicker">Public</span><h2>Browse sets</h2><p>Check the public library.</p></div><span class="arrow">→</span></a>
-	</div>
+  <details class="advanced recent">
+    <summary><span><strong>Recent registrations</strong><small>{stats.recent.length ? 'See the newest Setbound accounts' : 'No recent accounts'}</small></span><span class="chevron" aria-hidden="true">⌄</span></summary>
+    <div class="recent-list">
+      {#each stats.recent as user (user.id)}
+        <div class="user-row"><span><strong>{user.display_name || user.email}</strong><small>{user.email}{user.is_admin ? ' · Admin' : ''}</small></span><time>{new Date(`${String(user.created_at).replace(' ', 'T')}Z`).toLocaleDateString()}</time></div>
+      {:else}
+        <p class="empty">No registered users yet.</p>
+      {/each}
+    </div>
+  </details>
 </section>
 
 <style>
-	.page{padding-top:3.5rem;padding-bottom:5rem}.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:2rem;padding-bottom:2rem;border-bottom:1px solid var(--line)}
-	h1{margin:.45rem 0 .55rem;font-size:clamp(2.8rem,6vw,5.2rem);line-height:.95;letter-spacing:-.06em}.hero p{margin:0;color:var(--muted)}.view-site{margin-top:.55rem;color:var(--blue);text-decoration:none;font-size:.76rem;font-weight:850}
-	.user-overview{padding:1.35rem 0 1.5rem;border-bottom:1px solid var(--line)}.section-head{display:flex;justify-content:space-between;align-items:end;gap:1rem;margin-bottom:1rem}.section-head h2{margin:.25rem 0 0;font-size:1.75rem}.section-head>a{color:var(--blue);text-decoration:none;font-size:.72rem;font-weight:850}
-	.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}.stat{padding:1rem 1.05rem;border:1px solid var(--line);border-radius:.85rem;background:white}.stat span{display:block;color:var(--muted);font-size:.65rem;font-weight:850;text-transform:uppercase;letter-spacing:.07em}.stat strong{display:block;margin-top:.25rem;font-size:2rem;letter-spacing:-.04em}
-	.recent-users{margin-top:.85rem;border:1px solid var(--line);border-radius:.85rem;overflow:hidden;background:white}.recent-head,.recent-users>a{display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:center;padding:.7rem .9rem}.recent-head{background:#faf9f7;border-bottom:1px solid var(--line);color:var(--muted);font-size:.6rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.recent-users>a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}.recent-users>a:last-child{border-bottom:0}.recent-users>a:hover{background:#fafafa}.recent-users strong,.recent-users span{display:block}.recent-users div>span{margin-top:.15rem;color:var(--muted);font-size:.68rem}.joined{display:flex;align-items:center;gap:.45rem;color:var(--muted);font-size:.72rem}.admin-badge{display:inline-block!important;margin:0!important;padding:.18rem .35rem;border-radius:999px;background:#f0efed;color:var(--ink)!important;font-size:.55rem!important;font-weight:900}.empty-users{margin-top:.85rem;padding:1rem;border:1px dashed var(--line-strong);border-radius:.85rem;color:var(--muted);font-size:.8rem}
-	.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;padding-top:1.2rem}.admin-link{display:grid;grid-template-columns:46px 1fr auto;gap:1rem;align-items:start;min-height:145px;padding:1.2rem;border:1px solid var(--line);border-radius:1rem;background:white;color:inherit;text-decoration:none;transition:.18s ease}.admin-link:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(18,16,14,.07)}.icon{display:grid;place-items:center;width:42px;height:42px;border-radius:.8rem;background:#f1f0ee;border:1px solid var(--line);font-size:.9rem;font-weight:900}.kicker{display:block;color:var(--blue);font-size:.64rem;font-weight:900;text-transform:uppercase;letter-spacing:.1em}.admin-link h2{margin:.3rem 0 .45rem;font-size:1.25rem}.admin-link p{margin:0;color:var(--muted);font-size:.8rem;line-height:1.5}.arrow{align-self:center}
-	@media(max-width:760px){.stats{grid-template-columns:1fr}.admin-grid{grid-template-columns:1fr}.recent-head,.recent-users>a{grid-template-columns:1fr}.joined{justify-content:flex-start}}
+  .dashboard{max-width:1320px;padding-top:2.6rem;padding-bottom:5.5rem}
+  .heading{display:flex;justify-content:space-between;align-items:flex-start;gap:2rem;padding-bottom:1.8rem}
+  .heading h1{font-family:var(--display);font-size:clamp(2.5rem,5vw,4.3rem);line-height:1.05;letter-spacing:-.06em;margin:.4rem 0 .45rem}
+  .heading p{font-size:.9rem;color:var(--muted);margin:0;line-height:1.5}
+  .site-link{white-space:nowrap;text-decoration:none;color:var(--ink);font-size:.79rem;font-weight:750;margin-top:.6rem;border-bottom:1px solid var(--line-strong);padding-bottom:.25rem}
+  .overview{display:flex;align-items:center;gap:0;padding:1.05rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .metric{display:flex;align-items:baseline;gap:.65rem;min-width:0;padding:.3rem 2.1rem .3rem 0;margin-right:2.1rem;border-right:1px solid var(--line)}
+  .metric strong{font-size:1.65rem;font-weight:800;line-height:1;letter-spacing:-.05em}
+  .metric span{font-size:.75rem;color:var(--muted)}
+  .overview-link{margin-left:auto;font-size:.76rem;color:var(--ink);text-decoration:none;font-weight:750;white-space:nowrap}
+  .group{padding-top:2.2rem}.section-heading{display:flex;justify-content:space-between;align-items:end;gap:1.2rem;margin-bottom:1rem}
+  .section-heading h2{font-family:var(--display);font-size:1.65rem;letter-spacing:-.035em;margin:.2rem 0 0}.section-heading p{margin:0;color:var(--muted);font-size:.78rem}
+  .main-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+  .main-tool{display:flex;align-items:center;gap:1rem;border:1px solid var(--line);border-radius:.7rem;padding:1.2rem;background:#fff;color:var(--ink);text-decoration:none;min-height:105px;transition:border-color .15s,background .15s}
+  .main-tool:hover{border-color:var(--line-strong);background:var(--soft)}.main-tool.featured{background:var(--soft);border-color:var(--line-strong)}
+  .tool-icon{display:grid;place-items:center;flex:0 0 2.35rem;height:2.35rem;border:1px solid var(--line-strong);border-radius:.55rem;color:var(--ink);font-size:1.15rem;font-weight:800;background:white}
+  .tool-copy{display:grid;gap:.25rem;min-width:0}.tool-copy strong{font-family:var(--display);font-size:1.13rem;letter-spacing:-.02em}.tool-copy small{font-size:.76rem;line-height:1.4;color:var(--muted)}.arrow{margin-left:auto;align-self:center;color:var(--muted)}
+  .link-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 2rem;border-top:1px solid var(--line)}
+  .link-list a{display:flex;gap:.7rem;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:1rem .2rem;color:var(--ink);text-decoration:none}
+  .link-list a:hover strong{color:var(--orange)}.link-list a>span:first-child{display:grid;gap:.25rem}.link-list strong{font-size:.85rem}.link-list small{font-size:.73rem;color:var(--muted)}
+  .advanced{border-bottom:1px solid var(--line);margin-top:1.5rem}.advanced summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem .2rem}.advanced summary::-webkit-details-marker{display:none}
+  .advanced summary>span:first-child{display:grid;gap:.25rem}.advanced summary strong{font-size:.86rem}.advanced summary small{font-size:.73rem;color:var(--muted)}.chevron{font-size:1.15rem;color:var(--muted)}.advanced[open] .chevron{transform:rotate(180deg)}.advanced-list{margin-bottom:.75rem}
+  .recent{margin-top:0}.recent-list{padding:.2rem 0 .8rem}.user-row{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.8rem .2rem;border-top:1px solid var(--line)}.user-row>span{display:grid;gap:.2rem}.user-row strong{font-size:.82rem}.user-row small,.user-row time{font-size:.72rem;color:var(--muted)}.empty{color:var(--muted);font-size:.8rem}
+  @media(max-width:850px){.overview{flex-wrap:wrap;gap:.8rem}.metric{margin-right:0;padding-right:1rem}.main-grid,.link-list{grid-template-columns:1fr}}
+  @media(max-width:600px){.heading{flex-direction:column;gap:.6rem}.site-link{margin-top:0}.overview{align-items:flex-start}.metric{display:grid;gap:.25rem;width:calc(50% - .5rem);border:0;padding:.3rem 0}.overview-link{margin-left:0}.section-heading{display:block}.section-heading p{margin-top:.4rem}.main-tool{padding:1rem}.user-row{align-items:flex-start;flex-direction:column}}
 </style>
