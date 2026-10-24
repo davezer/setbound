@@ -138,33 +138,63 @@ function listParallelDefinitions(chunk) {
   return entries;
 }
 function sectionsFromHtml(html) {
-  const renderedRows=rowParallelDefinitions(html);
-  const headings=[];
-  // Source accordion headings often mix the checklist name with badges such
-  // as '100 cards' and '22 parallels', rather than using heading tags.
-  for (const m of html.matchAll(/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)) {
-    const label=plain(m[2]);
-    const count=label.match(/\b(\d{1,3})\s+parallels?\b/i);
-    if(!count)continue;
-    const name=label.slice(0,count.index).replace(/\b[\d,]+\s+cards?\b.*$/i,'').trim();
-    if(!name||/every parallel|numbered ladder|parallel guide/i.test(name))continue;
-    headings.push({start:m.index+m[0].length,name,expected:Number(count[1])});
-  }
-  const sections=[];
-  for(let i=0;i<headings.length;i++){
+  // The page's checklist headings have card counts, NOT "N parallels" counts.
+  // Read the parallel badges between each checklist heading and its card table.
+  // The global AJAX ladder is deliberately ignored: its ALLBASE rows cannot
+  // safely be attributed to a specific checklist.
+  const headings = [...html.matchAll(/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)];
+  const sections = [];
+  const seen = new Set();
+  for(let i=0;i<headings.length;i++) {
     const h=headings[i];
-    const next=headings[i+1]?.start||html.length;
-    const chunk=html.slice(h.start,Math.min(next,h.start+25000));
-    // Try the section accordion text, then section-keyed rows if present.
-    // Non-sectioned __ALLBASE__ rows cannot prove a per-section match.
-    const fromList=listParallelDefinitions(chunk.split(/<h[1-6]\b[^>]*>\s*Parallel Guide/i)[0]);
-    const fromRows=renderedRows.get(h.name)||[];
-    const entries=fromList.length===h.expected?fromList:fromRows.length===h.expected?fromRows:fromList;
-    sections.push({name:h.name,expected:h.expected,parallels:entries});
+    const name=plain(h[2]).replace(/\b[\d,]+\s+cards?\b.*$/i,'').trim();
+    if(!name||name.length>140||/every parallel|numbered ladder|parallel guide|checklist$|box|odds|what to expect/i.test(name)) continue;
+    const from=h.index+h[0].length;
+    const next=headings[i+1]?.index??html.length;
+    const after=html.slice(from,Math.min(next,from+16000));
+    const cardTable=after.search(/<table\b/i);
+    if(cardTable<0) continue;
+    const chunk=after.slice(0,cardTable);
+    // Avoid interpreting intro, box specs, or the interactive ladder as a
+    // card-checklist parallel list. Only heading-adjacent badge content counts.
+    if(!/parallel|\/\s*\d+|1\s*\/\s*1|printing plate/i.test(chunk)) continue;
+    const parallels=[];
+    const dedupe=new Set();
+    const add=(raw)=>{
+      const text=plain(raw).replace(/\s+/g,' ').trim();
+      if(!text||text.length>145) return;
+      const m=text.match(/^(.*?)\s*(\/\s*\d{1,5}|1\s*\/\s*1)\s*$/);
+      const name=m?m[1].trim():text;
+      const number=m?formatNumber(m[2]):'Unnumbered';
+      if(!name||/^(?:base|parallel|parallels|view odds|show more)$/i.test(name))return;
+      if(/\b(?:pack|box|case|odds|cards? per|per box)\b/i.test(name))return;
+      if(name.length>85)return;
+      const key=norm(name)+'|'+number;
+      if(dedupe.has(key))return;
+      dedupe.add(key);
+      parallels.push({name,number,availability:formatAvailability(text)});
+    };
+    // The live page renders parallel chips/spans just before each card table.
+    // Require a parallel-specific container when available.
+    const containers=[...chunk.matchAll(/<(?:div|ul)\b[^>]*class=["'][^"']*(?:parallel|variant|ladder)[^"']*["'][^>]*>([\s\S]*?)<\/(?:div|ul)>/gi)];
+    let candidates=containers.length?containers.map(m=>m[1]).join(' '):chunk;
+    for(const element of candidates.matchAll(/<(?:span|li|a|button)\b[^>]*>([\s\S]*?)<\/(?:span|li|a|button)>/gi)) {
+      if(/<(?:span|li|a|button|div|table)\b/i.test(element[1])) continue;
+      add(element[1]);
+    }
+    // On simpler markup the definitions can be plain lines rather than chips.
+    if(!parallels.length) {
+      const lines=candidates.split(/<br\s*\/?\s*>|<\/p>|<\/li>/i);
+      for(const line of lines)if(!/<(?:table|tr|td)\b/i.test(line))add(line);
+    }
+    if(!parallels.length)continue;
+    const key=norm(name);
+    if(seen.has(key))continue;
+    seen.add(key);
+    sections.push({name,expected:parallels.length,parallels});
   }
   return sections;
 }
-
 async function build(database, id, fetcher) {
   const product = await database.prepare('SELECT p.id,p.slug,p.name,p.year,s.source_url,s.original_filename FROM products p LEFT JOIN sources s ON s.id=p.primary_source_id WHERE p.id=?').bind(id).first();
   if (!product) throw Error('Product not found.');
@@ -175,7 +205,7 @@ async function build(database, id, fetcher) {
   const html = await response.text();
   if (html.length > MAX_HTML) throw Error('Source page exceeds limit.');
   const raw = sectionsFromHtml(html);
-  if (!raw.length) throw Error('No per-checklist parallel counts found. Source layout is unsupported; nothing saved.');
+  if (!raw.length) throw Error('No heading-linked parallel badges found. Source layout unsupported; nothing saved.');
   const rows = await database.prepare('SELECT cl.id, cl.name, cd.parallels_json FROM checklists cl LEFT JOIN checklist_details cd ON cd.checklist_id=cl.id WHERE cl.product_id=? ORDER BY cl.sort_order').bind(id).all();
   const lists = rows.results || [];
   const proposals = []; const incomplete = []; const unmatched = [];
