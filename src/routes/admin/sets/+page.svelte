@@ -724,9 +724,15 @@
   <div class="bulk-meta-results">{#each parallelResults as item (item.id)}<article class="bulk-meta-item">
     <strong>{item.name}</strong>
     {#if item.error}<p>{item.error}</p>{:else}<p>{item.entries} extracted parallels · {item.proposals?.length||0} verified sections / {item.declaredSections||0} source sections · {item.unmatchedCount} unmatched sections</p>
-      {#each item.proposals||[] as match}<p><b>{match.checklistName}</b> — {match.parallels.length} parallels: {match.parallels.slice(0,8).map(p=>p.name+' '+p.number).join(', ')}{match.parallels.length>8?' …':''}</p>{/each}
-      {#if !item.complete}<p style="color:#9a3e2e;font-weight:800">Incomplete extraction — saving is blocked.</p>{#each item.incomplete||[] as issue}<p>{issue.section}: found {issue.found} of {issue.expected} declared parallels.</p>{/each}{#if item.unmatchedCount}<p>{item.unmatchedCount} source sections could not be matched exactly.</p>{/if}{/if}
-      {#if item.saved!==undefined}<p>Saved in {item.saved} sections.</p>{:else if item.complete && item.proposals?.length}<label><input type="checkbox" checked={item.approved} onchange={e=>parallelResults=parallelResults.map(x=>x.id===item.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve matched sections</label>{/if}
+      {#each item.proposals||[] as match}
+<details class="parallel-review"><summary><strong>{match.checklistName}</strong> · {match.parallels.length} parallels <span>View rows</span></summary>
+<div class="parallel-review-scroll"><table><thead><tr><th>Print run</th><th>Parallel</th><th>Exclusive</th></tr></thead><tbody>
+{#each match.parallels as p,i (i)}<tr><td>{p.number === 'Unnumbered' ? '—' : p.number}</td><td>{p.name}</td><td>{p.availability || '—'}</td></tr>{/each}
+</tbody></table></div></details>{/each}
+      {#if !item.complete}<p style="color:#9a3e2e;font-weight:800">No safely matched sections — saving is blocked.</p>{#each item.incomplete||[] as issue}<p>{issue.section}: found {issue.found} of {issue.expected} declared parallels.</p>{/each}{#if item.unmatchedCount}<p>{item.unmatchedCount} source sections will be skipped without changing their existing definitions.</p>{/if}{/if}
+      {#if item.unmatchedCount}{#each item.unmatched||[] as u}<p class="parallel-unmatched">{u.section} — {u.reason}</p>{/each}{/if}
+{#if item.complete && item.unmatchedCount}<p style="color:#986122">Partial import: only exact-matched checklist sections will be saved.</p>{/if}
+{#if item.saved!==undefined}<p>Saved in {item.saved} sections.</p>{:else if item.complete && item.proposals?.length}<label><input type="checkbox" checked={item.approved} onchange={e=>parallelResults=parallelResults.map(x=>x.id===item.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve matched sections</label>{/if}
     {/if}
   </article>{/each}</div>
   <div class="bulk-meta-toolbar"><button type="button" disabled={parallelBusy||!readyParallel.length} onclick={applyParallels}>Save {readyParallel.length} approved products</button></div>
@@ -940,4 +946,13 @@
 @media(max-width:600px){.bulk-meta-dialog{max-height:96vh}.bulk-meta-overlay{padding:.4rem}.bulk-meta-results{padding:.65rem}}
 
 .setbound-replace-scrim{position:fixed;inset:0;background:rgba(10,22,33,.58);z-index:200;display:grid;place-items:center;padding:1rem}.setbound-replace-dialog{width:min(680px,100%);max-height:92vh;overflow:auto;background:white;border-radius:1rem;padding:1.5rem;box-shadow:0 20px 70px rgba(0,0,0,.25)}.setbound-replace-head{display:flex;justify-content:space-between;gap:1rem;margin-bottom:1.4rem}.setbound-replace-head h2{margin:.3rem 0;font-size:1.4rem}.setbound-replace-head p{font-size:.8rem;color:var(--muted)}.setbound-replace-head button{align-self:start;border:0;background:var(--soft);border-radius:.4rem;padding:.35rem .65rem;cursor:pointer}.setbound-replace-dialog label{display:grid;gap:.5rem}.setbound-replace-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;margin:1.2rem 0}.setbound-replace-stats span{border:1px solid var(--line);padding:.7rem;border-radius:.5rem;font-size:.76rem}.setbound-replace-stats b{display:block;font-size:1.3rem}.setbound-replace-error{color:#a12525;font-size:.8rem}.setbound-replace-confirm{background:var(--ink);color:#fff;border:0;padding:.8rem 1rem;border-radius:.5rem;font-weight:800;cursor:pointer}@media(max-width:540px){.setbound-replace-stats{grid-template-columns:repeat(2,1fr)}}
+
+.parallel-review{border-top:1px solid var(--line);padding:.3rem 0}
+.parallel-review summary{cursor:pointer;padding:.65rem .2rem;font-size:.82rem}
+.parallel-review summary span{float:right;color:var(--muted);font-size:.72rem}
+.parallel-review-scroll{overflow:auto;max-height:300px}
+.parallel-review table{width:100%;border-collapse:collapse;font-size:.76rem}
+.parallel-review th,.parallel-review td{padding:.45rem .6rem;text-align:left;border-bottom:1px solid var(--line)}
+.parallel-review th{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em}
+.parallel-unmatched{font-size:.73rem;color:var(--muted);margin:.2rem 0}
 </style>

@@ -223,7 +223,7 @@ async function build(database, id, fetcher) {
   }
   const existing = lists.filter(item => item.parallels_json && item.parallels_json.trim() !== '[]').map(item => item.name);
   // For bulk safety, all declared source sections must be extractable and matched.
-  const complete = !incomplete.length && !unmatched.length && proposals.length === raw.length && proposals.length > 0;
+  const complete = !incomplete.length && proposals.length > 0; // Save only exact-matched sections; skip unmatched.
   return { url, entries, proposals, unmatched: unmatched.slice(0,15), unmatchedCount: unmatched.length, incomplete, declaredSections: raw.length, complete, existing };
 }
 export async function POST({ request, platform, fetch, locals }) {
@@ -237,7 +237,7 @@ export async function POST({ request, platform, fetch, locals }) {
     const report = await build(database, id, fetch);
     if (body.mode === 'preview') return json({ ok: true, productId: id, ...report });
     if (body.confirmed !== true) return json({ message: 'Review confirmation required.' }, { status: 400 });
-    if (!report.complete) return json({ message: `Incomplete parallel extraction (${report.incomplete.length} count mismatches, ${report.unmatchedCount} unmatched sections). No data saved.`, incomplete: report.incomplete }, { status: 409 });
+    if (!report.complete) return json({ message: `No safely importable parallel sections (${report.incomplete.length} count mismatches). Nothing saved.`, incomplete: report.incomplete }, { status: 409 });
     const statements = report.proposals.map(item => database.prepare(`INSERT INTO checklist_details (checklist_id,parallels_json,notes_json,updated_at) VALUES (?,?,'[]',datetime('now')) ON CONFLICT(checklist_id) DO UPDATE SET parallels_json=excluded.parallels_json,updated_at=datetime('now') WHERE checklist_details.parallels_json IS NULL OR TRIM(checklist_details.parallels_json)='' OR TRIM(checklist_details.parallels_json)='[]'`).bind(item.checklistId, JSON.stringify(item.parallels)));
     const results = await database.batch(statements);
     return json({ ok: true, saved: results.reduce((n, item) => n + Number(item.meta?.changes || 0), 0), sections: report.proposals.length, skippedExisting: report.existing.length });
