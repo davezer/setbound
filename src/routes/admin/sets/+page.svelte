@@ -77,7 +77,7 @@
   let parallelProgress = $state('');
   let parallelModalOpen = $state(false);
   let parallelSelectedIds = $state([]);
-  const readyParallel = $derived(parallelResults.filter(x=>x.ok&&x.proposals?.length&&x.approved));
+  const readyParallel = $derived(parallelResults.filter(x=>x.ok&&x.complete===true&&x.proposals?.length&&x.approved));
   async function scanParallels(){
     if(parallelBusy||!parallelSelectedIds.length)return;
     parallelResults=[];parallelBusy=true;parallelStop=false;parallelModalOpen=true;
@@ -719,14 +719,14 @@
 <div class="bulk-meta-overlay" role="presentation" onclick={e=>{if(e.target===e.currentTarget&&!parallelBusy)parallelModalOpen=false}}>
  <section class="bulk-meta-dialog" role="dialog" aria-modal="true" aria-label="Review parallel definitions" tabindex="-1">
   <header class="bulk-meta-head"><div><h2>Parallel definitions</h2><p>Preview first. Existing parallel definitions remain untouched.</p></div><button type="button" disabled={parallelBusy} onclick={()=>parallelModalOpen=false}>✕</button></header>
-  <div class="bulk-meta-toolbar"><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:!!x.ok&&!!x.proposals?.length}))} disabled={parallelBusy}>Approve all matched</button><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:false}))} disabled={parallelBusy}>Deselect all</button>{#if parallelBusy}<button onclick={()=>parallelStop=true}>Stop after current</button>{/if}</div>
+  <div class="bulk-meta-toolbar"><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:!!x.ok&&x.complete===true&&!!x.proposals?.length}))} disabled={parallelBusy}>Approve all matched</button><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:false}))} disabled={parallelBusy}>Deselect all</button>{#if parallelBusy}<button onclick={()=>parallelStop=true}>Stop after current</button>{/if}</div>
   <p role="status">{parallelProgress}</p>
   <div class="bulk-meta-results">{#each parallelResults as item (item.id)}<article class="bulk-meta-item">
     <strong>{item.name}</strong>
-    {#if item.error}<p>{item.error}</p>{:else}<p>{item.entries} source entries · {item.proposals?.length||0} matched checklist sections · {item.unmatchedCount} unmatched entries</p>
+    {#if item.error}<p>{item.error}</p>{:else}<p>{item.entries} extracted parallels · {item.proposals?.length||0} verified sections / {item.declaredSections||0} source sections · {item.unmatchedCount} unmatched sections</p>
       {#each item.proposals||[] as match}<p><b>{match.checklistName}</b> — {match.parallels.length} parallels: {match.parallels.slice(0,8).map(p=>p.name+' '+p.number).join(', ')}{match.parallels.length>8?' …':''}</p>{/each}
-      {#if item.unmatchedCount}<p>Skipped ambiguous source sections. No guessed mappings.</p>{/if}
-      {#if item.saved!==undefined}<p>Saved in {item.saved} sections.</p>{:else if item.proposals?.length}<label><input type="checkbox" checked={item.approved} onchange={e=>parallelResults=parallelResults.map(x=>x.id===item.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve matched sections</label>{/if}
+      {#if !item.complete}<p style="color:#9a3e2e;font-weight:800">Incomplete extraction — saving is blocked.</p>{#each item.incomplete||[] as issue}<p>{issue.section}: found {issue.found} of {issue.expected} declared parallels.</p>{/each}{#if item.unmatchedCount}<p>{item.unmatchedCount} source sections could not be matched exactly.</p>{/if}{/if}
+      {#if item.saved!==undefined}<p>Saved in {item.saved} sections.</p>{:else if item.complete && item.proposals?.length}<label><input type="checkbox" checked={item.approved} onchange={e=>parallelResults=parallelResults.map(x=>x.id===item.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve matched sections</label>{/if}
     {/if}
   </article>{/each}</div>
   <div class="bulk-meta-toolbar"><button type="button" disabled={parallelBusy||!readyParallel.length} onclick={applyParallels}>Save {readyParallel.length} approved products</button></div>
