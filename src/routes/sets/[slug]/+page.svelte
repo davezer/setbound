@@ -238,31 +238,34 @@
 	{/if}
 
   {#if data.checklists.some(c=>c.parallels?.length)}
-    <details class="parallel-guide">
-      <summary><span><strong>Parallels & variations</strong><small>Names, print runs and exclusives by checklist</small></span><span>Explore ↗</span></summary>
-      <div class="compact-parallels">
-        <div class="compact-parallel-controls">
-          <label for="parallel-set-choice">Checklist section</label>
-          <select id="parallel-set-choice" class="input" bind:value={parallelSection}>
-            {#each data.checklists.filter(c=>c.parallels?.length) as c (c.id)}
-              <option value={String(c.id)}>{c.name} ({c.parallels.length})</option>
-            {/each}
-          </select>
+    <details class="parallel-guide parallel-guide-refined">
+      <summary>
+        <span class="parallel-guide-title"><strong>Parallels & variations</strong><small>Serial numbering and release exclusives</small></span>
+        <span class="parallel-guide-toggle">View parallels <span aria-hidden="true">⌄</span></span>
+      </summary>
+      <div class="parallel-ref-panel">
+        <div class="parallel-ref-toolbar">
+          <div class="parallel-ref-context"><span class="parallel-ref-eyebrow">CHECKLIST SECTION</span><strong>{currentParallelSection?.name || 'Select a checklist'}</strong></div>
+          <div class="parallel-ref-select-wrap">
+            <label for="parallel-set-choice" class="sr-only">Choose checklist section</label>
+            <select id="parallel-set-choice" bind:value={parallelSection} aria-label="Choose checklist section">
+              {#each data.checklists.filter(c=>c.parallels?.length) as c (c.id)}
+                <option value={String(c.id)}>{c.name} ({c.parallels.length})</option>
+              {/each}
+            </select>
+          </div>
         </div>
         {#if currentParallelSection}
-          <p class="compact-parallel-count">{currentParallelSection.parallels.length} parallels · {currentParallelSection.name}</p>
-          <div class="compact-parallel-scroll">
-            <table class="compact-parallel-table">
-              <thead><tr><th>Print run</th><th>Parallel</th></tr></thead>
-              <tbody>
-                {#each currentParallelSection.parallels as item,i (i)}
-                  <tr>
-                    <td class="compact-parallel-run">{typeof item==='string'?'—':((item.number||item.serial_number||item.print_run||'Unnumbered')==='Unnumbered'?'—':(item.number||item.serial_number||item.print_run))}</td>
-                    <td>{typeof item==='string'?item:(item.name||item.label||'Parallel')}{#if typeof item==='object'&&item.availability}<small class="parallel-exclusive">{item.availability}</small>{/if}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+          <div class="parallel-ref-heading"><span>PRINT RUN</span><span>PARALLEL</span><span class="parallel-ref-total">{currentParallelSection.parallels.length} total</span></div>
+          <div class="parallel-ref-scroll">
+            <div class="parallel-ref-rows">
+              {#each currentParallelSection.parallels as item,i (i)}
+                <div class="parallel-ref-row">
+                  <strong class="parallel-ref-run">{typeof item==='string'?'—':((item.number||item.serial_number||item.print_run||'Unnumbered')==='Unnumbered'?'—':(item.number||item.serial_number||item.print_run))}</strong>
+                  <span class="parallel-ref-name">{typeof item==='string'?item:(item.name||item.label||'Parallel')}{#if typeof item==='object'&&item.availability}<small class="parallel-ref-exclusive">{item.availability}</small>{/if}</span>
+                </div>
+              {/each}
+            </div>
           </div>
         {/if}
       </div>
@@ -592,4 +595,32 @@
 .compact-parallel-table tr:last-child td{border-bottom:0}
 .compact-parallel-run{width:115px;white-space:nowrap;font-weight:800}
 @media(max-width:600px){.compact-parallel-controls{display:block}.compact-parallel-controls select{margin-top:.35rem;width:100%}.compact-parallel-scroll{max-height:330px}}
+
+/* Refined, space-efficient parallel directory */
+.parallel-guide-refined{margin:1.3rem 0 1.5rem;padding:.9rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.parallel-guide-refined>summary{align-items:center;gap:1rem}
+.parallel-guide-refined>summary .parallel-guide-title strong{font-size:1.15rem;letter-spacing:-.035em}
+.parallel-guide-refined>summary .parallel-guide-title small{margin-top:.22rem;color:var(--muted);font-size:.75rem}
+.parallel-guide-toggle{display:inline-flex;gap:.5rem;align-items:center;white-space:nowrap;font-weight:750;font-size:.76rem;color:var(--ink)}
+.parallel-guide-toggle>span{font-size:1.15rem;transition:transform .15s}
+.parallel-guide-refined[open] .parallel-guide-toggle>span{transform:rotate(180deg)}
+.parallel-ref-panel{margin-top:1rem;max-width:100%;border:1px solid var(--line);border-radius:.75rem;overflow:hidden;background:white}
+.parallel-ref-toolbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.9rem 1.1rem;border-bottom:1px solid var(--line);background:var(--soft)}
+.parallel-ref-context{display:grid;gap:.15rem;min-width:0}
+.parallel-ref-eyebrow{font-size:.59rem;letter-spacing:.09em;color:var(--muted);font-weight:800}
+.parallel-ref-context strong{font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.parallel-ref-select-wrap{width:min(360px,48%);flex-shrink:0;position:relative}
+.parallel-ref-select-wrap select{appearance:none;width:100%;background:#fff;border:1px solid var(--line-strong);border-radius:.45rem;font:inherit;font-weight:650;color:var(--ink);font-size:.76rem;padding:.62rem 2rem .62rem .75rem;cursor:pointer}
+.parallel-ref-select-wrap:after{content:'⌄';position:absolute;right:.75rem;top:50%;transform:translateY(-55%);pointer-events:none;color:var(--ink)}
+.parallel-ref-heading{display:grid;grid-template-columns:115px minmax(0,1fr) auto;align-items:center;gap:.8rem;padding:.65rem 1.1rem;border-bottom:1px solid var(--line);font-size:.59rem;letter-spacing:.085em;font-weight:850;color:var(--muted)}
+.parallel-ref-total{font-size:.67rem;letter-spacing:0;text-transform:none;font-weight:600}
+.parallel-ref-scroll{max-height:340px;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+.parallel-ref-row{display:grid;grid-template-columns:115px minmax(0,1fr);gap:.8rem;align-items:center;padding:.63rem 1.1rem;border-bottom:1px solid var(--line);font-size:.78rem;line-height:1.5}
+.parallel-ref-row:last-child{border-bottom:0}
+.parallel-ref-row:hover{background:var(--soft)}
+.parallel-ref-run{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
+.parallel-ref-name{min-width:0;overflow-wrap:anywhere}
+.parallel-ref-exclusive{display:inline-block;margin-left:.65rem;padding:.1rem .42rem;border-radius:999px;border:1px solid var(--line-strong);font-size:.62rem;font-weight:750;color:var(--muted);white-space:nowrap}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:640px){.parallel-ref-toolbar{align-items:stretch;flex-direction:column;gap:.6rem}.parallel-ref-select-wrap{width:100%}.parallel-ref-heading{grid-template-columns:88px minmax(0,1fr) auto;padding:.55rem .8rem}.parallel-ref-row{grid-template-columns:88px minmax(0,1fr);padding:.6rem .8rem}.parallel-ref-scroll{max-height:300px}}
 </style>
