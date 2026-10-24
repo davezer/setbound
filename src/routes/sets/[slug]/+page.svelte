@@ -235,6 +235,20 @@
 		</section>
 	{/if}
 
+  {#if data.checklists.some(c=>c.parallels?.length)}
+    <details class="parallel-guide">
+      <summary><span><strong>Parallels & variations</strong><small>Names and print runs by checklist</small></span><span>Explore ↗</span></summary>
+      <div class="parallel-inner">
+        {#each data.checklists.filter(c=>c.parallels?.length) as checklist (checklist.id)}
+          <div class="parallel-group"><h3>{checklist.name} <small>{checklist.parallels.length} parallels</small></h3>
+            <div class="parallel-items">{#each checklist.parallels as item,i (i)}
+              <div><strong>{typeof item==='string'?item:(item.name||item.label||'Parallel')}</strong><span>{typeof item==='string'?'':(item.number||item.serial_number||item.print_run||'Unnumbered')}</span>{#if typeof item==='object'&&item.availability}<small>{item.availability}</small>{/if}</div>
+            {/each}</div>
+          </div>
+        {/each}
+      </div>
+    </details>
+  {/if}
 	<section class="browser">
 		<div class="browser-headline">
 			<div>
@@ -537,4 +551,5 @@
 	.checklist-feedback{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .65rem;margin-top:1.8rem;padding:1rem 0;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem}
 	.checklist-feedback a{font-weight:800;color:var(--ink);text-decoration:underline;text-decoration-color:var(--orange);text-underline-offset:3px}
 	.checklist-feedback a:hover{color:var(--orange)}
+  .parallel-guide{margin:1.7rem 0;border-block:1px solid var(--line);padding:1rem 0}.parallel-guide>summary{display:flex;align-items:center;justify-content:space-between;gap:1rem;cursor:pointer;list-style:none}.parallel-guide>summary::-webkit-details-marker{display:none}.parallel-guide>summary strong{display:block;font-family:var(--display);font-size:1.25rem}.parallel-guide>summary small{display:block;color:var(--muted);font-size:.76rem;margin-top:.2rem}.parallel-guide>summary>span:last-child{color:var(--blue);font-size:.77rem;font-weight:800}.parallel-inner{padding:1.2rem 0 .2rem}.parallel-group{margin-bottom:1.3rem}.parallel-group h3{font-size:1rem;margin:0 0 .5rem}.parallel-group h3 small{color:var(--muted);font-size:.72rem;font-weight:400;margin-left:.5rem}.parallel-items{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 1.5rem}.parallel-items>div{display:flex;align-items:baseline;gap:.6rem;border-bottom:1px solid var(--line);padding:.55rem 0;font-size:.78rem}.parallel-items>div strong{flex:1;font-weight:650}.parallel-items>div span{font-weight:800;white-space:nowrap}.parallel-items>div small{color:var(--muted);font-size:.65rem}@media(max-width:850px){.parallel-items{grid-template-columns:repeat(2,1fr)}}@media(max-width:540px){.parallel-items{grid-template-columns:1fr}}
 </style>

@@ -71,6 +71,39 @@
 	let publishing = $state(false);
 	const visibleDraftIds = $derived(visible.filter(p => !p.published).map(p => Number(p.id)));
 	const selectedDraftIds = $derived(selectedPublishIds.filter(id => products.some(p => Number(p.id)===id && !p.published)));
+	let parallelResults = $state([]);
+  let parallelBusy = $state(false);
+  let parallelStop = $state(false);
+  let parallelProgress = $state('');
+  let parallelModalOpen = $state(false);
+  let parallelSelectedIds = $state([]);
+  const readyParallel = $derived(parallelResults.filter(x=>x.ok&&x.proposals?.length&&x.approved));
+  async function scanParallels(){
+    if(parallelBusy||!parallelSelectedIds.length)return;
+    parallelResults=[];parallelBusy=true;parallelStop=false;parallelModalOpen=true;
+    const ids=[...parallelSelectedIds];
+    for(let i=0;i<ids.length;i++){
+      if(parallelStop)break;
+      const product=products.find(x=>Number(x.id)===ids[i]);if(!product)continue;
+      parallelProgress='Scanning '+(i+1)+' / '+ids.length+': '+product.name;
+      try{const r=await fetch('/api/admin/products/parallel-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',productId:product.id})});const j=await r.json();
+        if(!r.ok)throw Error(j.message||'Could not extract parallel guide.');
+        parallelResults=[...parallelResults,{id:product.id,name:product.name,...j,approved:false}];
+      }catch(e){parallelResults=[...parallelResults,{id:product.id,name:product.name,ok:false,error:e?.message||'Scan failed',approved:false}];}
+    }
+    parallelBusy=false;parallelProgress='Scanned '+parallelResults.length+' of '+ids.length+' products.';
+  }
+  async function applyParallels(){
+    if(parallelBusy||!readyParallel.length)return;
+    if(!confirm('Apply reviewed parallel definitions to '+readyParallel.length+' products? Existing curated parallel data will not be overwritten.'))return;
+    parallelBusy=true;parallelStop=false;
+    for(let i=0;i<readyParallel.length;i++){
+      if(parallelStop)break;const row=readyParallel[i];parallelProgress='Saving '+(i+1)+' / '+readyParallel.length+': '+row.name;
+      try{const r=await fetch('/api/admin/products/parallel-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,confirmed:true})});const j=await r.json();if(!r.ok)throw Error(j.message||'Save failed');parallelResults=parallelResults.map(x=>x.id===row.id?{...x,approved:false,saved:j.saved}:x);}
+      catch(e){parallelResults=parallelResults.map(x=>x.id===row.id?{...x,approved:false,error:e?.message}:x);}
+    }
+    parallelBusy=false;parallelProgress='Parallel save pass finished.';
+  }
 	let metadataSelectedIds = $state([]);
 	let metadataResults = $state([]);
 	let metadataBusy = $state(false);
@@ -614,7 +647,8 @@
 
 					<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>
           <button class="edit" type="button" onclick={() => {replacementProduct=product;replacementPreview=null;replacementCards=[];replacementError='';replacementFileName='';}}>Replace checklist</button>
-					<button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>
+					<button class="edit" type="button" onclick={() => {parallelSelectedIds=[Number(product.id)];scanParallels();}}>Parallels</button>
+                    <button class="edit" type="button" onclick={() => sourceMetadataProduct = product}>Source metadata</button>
 					<a class="edit" href={`/admin/sets/preview/${encodeURIComponent(product.slug)}`} target="_blank" rel="noopener noreferrer">Preview ↗</a>
 					<a class="edit" href={`/admin/product/${product.id}`}>Edit details</a>
 
@@ -672,6 +706,31 @@
       {#if replacementPreview.canApply}<button type="button" class="setbound-replace-confirm" disabled={replacementBusy} onclick={applyReplacement}>Confirm checklist replacement</button>{/if}
     {/if}
   </div>
+</div>
+{/if}
+<div style="margin:1rem auto;max-width:1420px;padding:0 1.25rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
+  <strong style="font-size:.8rem">Parallel metadata:</strong>
+  <button type="button" onclick={()=>parallelSelectedIds=visible.filter(p=>p.published).map(p=>Number(p.id))}>Select all visible live ({visible.filter(p=>p.published).length})</button>
+  <button type="button" onclick={()=>parallelSelectedIds=[]}>Clear</button>
+  <button type="button" onclick={scanParallels} disabled={parallelBusy||!parallelSelectedIds.length}>Review parallels for {parallelSelectedIds.length} sets</button>
+  <span style="font-size:.75rem;color:var(--muted)">Runs one product at a time; review before saving.</span>
+</div>
+{#if parallelModalOpen}
+<div class="bulk-meta-overlay" role="presentation" onclick={e=>{if(e.target===e.currentTarget&&!parallelBusy)parallelModalOpen=false}}>
+ <section class="bulk-meta-dialog" role="dialog" aria-modal="true" aria-label="Review parallel definitions" tabindex="-1">
+  <header class="bulk-meta-head"><div><h2>Parallel definitions</h2><p>Preview first. Existing parallel definitions remain untouched.</p></div><button type="button" disabled={parallelBusy} onclick={()=>parallelModalOpen=false}>✕</button></header>
+  <div class="bulk-meta-toolbar"><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:!!x.ok&&!!x.proposals?.length}))} disabled={parallelBusy}>Approve all matched</button><button onclick={()=>parallelResults=parallelResults.map(x=>({...x,approved:false}))} disabled={parallelBusy}>Deselect all</button>{#if parallelBusy}<button onclick={()=>parallelStop=true}>Stop after current</button>{/if}</div>
+  <p role="status">{parallelProgress}</p>
+  <div class="bulk-meta-results">{#each parallelResults as item (item.id)}<article class="bulk-meta-item">
+    <strong>{item.name}</strong>
+    {#if item.error}<p>{item.error}</p>{:else}<p>{item.entries} source entries · {item.proposals?.length||0} matched checklist sections · {item.unmatchedCount} unmatched entries</p>
+      {#each item.proposals||[] as match}<p><b>{match.checklistName}</b> — {match.parallels.length} parallels: {match.parallels.slice(0,8).map(p=>p.name+' '+p.number).join(', ')}{match.parallels.length>8?' …':''}</p>{/each}
+      {#if item.unmatchedCount}<p>Skipped ambiguous source sections. No guessed mappings.</p>{/if}
+      {#if item.saved!==undefined}<p>Saved in {item.saved} sections.</p>{:else if item.proposals?.length}<label><input type="checkbox" checked={item.approved} onchange={e=>parallelResults=parallelResults.map(x=>x.id===item.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve matched sections</label>{/if}
+    {/if}
+  </article>{/each}</div>
+  <div class="bulk-meta-toolbar"><button type="button" disabled={parallelBusy||!readyParallel.length} onclick={applyParallels}>Save {readyParallel.length} approved products</button></div>
+ </section>
 </div>
 {/if}
 {#if metadataModalOpen}
