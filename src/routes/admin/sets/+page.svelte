@@ -104,6 +104,84 @@
     }
     parallelBusy=false;parallelProgress='Parallel save pass finished.';
   }
+
+  // SETBOUND_PARALLEL_BACKFILL_V1 — browser-resumable 25-set review batches.
+  const PB_KEY = 'setbound.parallel-backfill.v1';
+  const PB_SIZE = 25;
+  let pbHistory = $state({});
+  let pbShow = $state(false);
+  let pbRunning = $state(false);
+  let pbStop = $state(false);
+  let pbMessage = $state('');
+  let pbProgress = $state('');
+  let pbRows = $state([]);
+  let pbOnlyLive = $state(true);
+  let pbShowCompleted = $state(false);
+  let pbRunFailures = $state(false);
+  let pbInitialized = $state(false);
+  const pbEligible = $derived(products.filter(p => (!pbOnlyLive || p.published) && (!pbRunFailures || pbHistory[p.id]?.state === 'failed')));
+  const pbPending = $derived(pbEligible.filter(p => !pbHistory[p.id] && (!Number(p.parallel_section_count) || pbShowCompleted)));
+  const pbReady = $derived(pbRows.filter(x => x.state === 'ready' && x.approved));
+  const pbStats = $derived({
+    saved:Object.values(pbHistory).filter(x=>x.state==='saved').length,
+    failed:Object.values(pbHistory).filter(x=>x.state==='failed').length,
+    reviewed:Object.values(pbHistory).filter(x=>x.state==='reviewed').length,
+    already:products.filter(p=>Number(p.parallel_section_count)>0).length
+  });
+  $effect(() => {
+    if (pbInitialized || typeof window === 'undefined') return;
+    pbInitialized = true;
+    try {const stored=JSON.parse(localStorage.getItem(PB_KEY)||'{}');if(stored&&typeof stored==='object'&&!Array.isArray(stored))pbHistory=stored;}catch {pbHistory={};}
+  });
+  function pbRemember(id, state, extra={}) {
+    pbHistory = {...pbHistory,[id]:{state,when:new Date().toISOString(),...extra}};
+    try {localStorage.setItem(PB_KEY,JSON.stringify(pbHistory));}catch {pbMessage='Browser storage unavailable; progress lasts only until you refresh.';}
+  }
+  function pbForgetFailures(){
+    const next={...pbHistory};for(const [id,row] of Object.entries(next))if(row.state==='failed')delete next[id];
+    pbHistory=next;try{localStorage.setItem(PB_KEY,JSON.stringify(next));}catch{}
+    pbRunFailures=false;pbMessage='Failures returned to the pending queue.';
+  }
+  async function pbScan() {
+    if(pbRunning)return;
+    const targets = (pbRunFailures ? pbEligible : pbPending).slice(0,PB_SIZE);
+    if(!targets.length){pbMessage='No eligible sets left to scan with these filters.';return;}
+    pbRows=[];pbStop=false;pbRunning=true;pbMessage='';
+    for(let i=0;i<targets.length;i++) {
+      if(pbStop)break;
+      const p=targets[i];pbProgress='Scanning '+(i+1)+' of '+targets.length+': '+p.name;
+      try {
+        const response=await fetch('/api/admin/products/parallel-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'preview',productId:p.id}),signal:AbortSignal.timeout(30000)});
+        const value=await response.json().catch(()=>({}));
+        if(!response.ok)throw Error(value.message||'Source extraction failed (HTTP '+response.status+').');
+        const row={id:Number(p.id),name:p.name,...value,approved:false,state:value.complete&&value.proposals?.length?'ready':'failed'};
+        pbRows=[...pbRows,row];
+        if(row.state==='failed')pbRemember(p.id,'failed',{reason:'No safely matched parallels'});
+        // Successful preview is intentionally not persisted until reviewed and approved.
+      }catch(error){const reason=error?.message||'Scan failed';pbRows=[...pbRows,{id:Number(p.id),name:p.name,state:'failed',error:reason,approved:false}];pbRemember(p.id,'failed',{reason});}
+    }
+    pbRunning=false;pbProgress='Scanned '+pbRows.length+' of '+targets.length+'. Review the ready results before saving.';
+  }
+  function pbSelectReady(value){pbRows=pbRows.map(r=>r.state==='ready'?{...r,approved:value}:r);}
+  async function pbSave() {
+    if(pbRunning||!pbReady.length)return;
+    if(!confirm('Save reviewed parallel definitions for '+pbReady.length+' sets? Existing definitions remain unchanged; unmatched sections will be skipped.'))return;
+    pbRunning=true;pbStop=false;
+    const targets=[...pbReady];let saved=0,errors=0;
+    for(let i=0;i<targets.length;i++){
+      if(pbStop)break;
+      const row=targets[i];pbProgress='Saving '+(i+1)+' of '+targets.length+': '+row.name;
+      try{
+        const response=await fetch('/api/admin/products/parallel-metadata',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'apply',productId:row.id,confirmed:true}),signal:AbortSignal.timeout(30000)});
+        const value=await response.json().catch(()=>({}));if(!response.ok)throw Error(value.message||'Save failed');
+        pbRows=pbRows.map(r=>r.id===row.id?{...r,state:'saved',approved:false,saved:value.saved,skippedExisting:value.skippedExisting}:r);
+        pbRemember(row.id,'saved',{sections:Number(value.saved||0)});saved++;
+        products=products.map(p=>Number(p.id)===row.id?{...p,parallel_section_count:Number(p.parallel_section_count||0)+Number(value.saved||0)}:p);
+      }catch(error){const reason=error?.message||'Save failed';pbRows=pbRows.map(r=>r.id===row.id?{...r,state:'failed',approved:false,error:reason}:r);pbRemember(row.id,'failed',{reason});errors++;}
+    }
+    pbRunning=false;pbProgress='Saved '+saved+' product(s); '+errors+' failed.';
+  }
+
 	let metadataSelectedIds = $state([]);
 	let metadataResults = $state([]);
 	let metadataBusy = $state(false);
@@ -708,6 +786,28 @@
   </div>
 </div>
 {/if}
+
+<!-- SETBOUND_PARALLEL_BACKFILL_V1: review batches; nothing is saved automatically. -->
+<section class="pb-manager" aria-label="Parallel backfill manager">
+ <div class="pb-manager-title"><div><div class="eyebrow">Data completeness</div><h2>Parallel backfill</h2><p>Scan 25 sets at a time, review matches, then save. Your progress is kept in this browser.</p></div><button type="button" onclick={()=>pbShow=!pbShow}>{pbShow?'Hide manager':'Open manager'} {pbShow?'↑':'↓'}</button></div>
+ <div class="pb-pulse"><span><strong>{pbStats.already}</strong> sets with parallels</span><span><strong>{pbStats.saved}</strong> saved in this workflow</span><span><strong>{pbStats.failed}</strong> needs retry</span><span><strong>{pbPending.length}</strong> pending</span></div>
+ {#if pbShow}
+  <div class="pb-controls"><label><input type="checkbox" bind:checked={pbOnlyLive} disabled={pbRunning}/> Live sets only</label><label><input type="checkbox" bind:checked={pbShowCompleted} disabled={pbRunning}/> Include sets already containing parallels</label><label><input type="checkbox" bind:checked={pbRunFailures} disabled={pbRunning}/> Retry failed sets</label></div>
+  <div class="pb-actions"><button type="button" onclick={pbScan} disabled={pbRunning || (!pbRunFailures&&!pbPending.length) || (pbRunFailures&&!pbEligible.length)}>Scan next 25</button><button type="button" onclick={pbSelectReady.bind(null,true)} disabled={pbRunning||!pbRows.some(r=>r.state==='ready')}>Approve ready</button><button type="button" onclick={pbSelectReady.bind(null,false)} disabled={pbRunning}>Deselect</button><button type="button" onclick={pbSave} disabled={pbRunning||!pbReady.length}>Save {pbReady.length} approved</button>{#if pbRunning}<button type="button" onclick={()=>pbStop=true} disabled={pbStop}>Stop after current</button>{/if}{#if pbStats.failed}<button type="button" onclick={pbForgetFailures} disabled={pbRunning}>Reset failed to pending</button>{/if}</div>
+  {#if pbMessage}<p class="pb-message" role="status">{pbMessage}</p>{/if}
+  {#if pbProgress}<p class="pb-message" role="status">{pbProgress}</p>{/if}
+  <div class="pb-results">
+   {#each pbRows as row (row.id)}
+    <article class="pb-result">
+     <div class="pb-result-heading"><div><strong>{row.name}</strong><small>{row.state==='saved'?'Saved '+(row.saved||0)+' sections':row.state==='ready'?'Ready · '+row.proposals.length+' matched sections'+(row.unmatchedCount?' · '+row.unmatchedCount+' unmatched':''):row.error||'No safe matches found'}</small></div>{#if row.state==='ready'}<label><input type="checkbox" checked={row.approved} onchange={e=>pbRows=pbRows.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve</label>{/if}</div>
+     {#if row.state==='ready'}<details><summary>Review extracted sections</summary><div class="pb-section-list">{#each row.proposals as proposal}<div><strong>{proposal.checklistName}</strong><span>{proposal.parallels.length} parallels</span></div>{/each}{#if row.unmatchedCount}<p>{row.unmatchedCount} unmatched sections will be skipped.</p>{/if}</div></details>{/if}
+    </article>
+   {/each}
+  </div>
+  <p class="pb-note">Progress is local to this browser. Scanned but unapproved results must be reviewed and saved before refreshing. Failed sets remain retryable; existing data is never overwritten.</p>
+ {/if}
+</section>
+
 <div style="margin:1rem auto;max-width:1420px;padding:0 1.25rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
   <strong style="font-size:.8rem">Parallel metadata:</strong>
   <button type="button" onclick={()=>parallelSelectedIds=visible.filter(p=>p.published).map(p=>Number(p.id))}>Select all visible live ({visible.filter(p=>p.published).length})</button>
@@ -955,4 +1055,33 @@
 .parallel-review th,.parallel-review td{padding:.45rem .6rem;text-align:left;border-bottom:1px solid var(--line)}
 .parallel-review th{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em}
 .parallel-unmatched{font-size:.73rem;color:var(--muted);margin:.2rem 0}
+
+/* Parallel backfill manager: compact workflow, not another grid of giant cards. */
+.pb-manager{max-width:1420px;margin:1.4rem auto;padding:1.1rem 1.25rem;border-block:1px solid var(--line);background:var(--paper)}
+.pb-manager-title{display:flex;justify-content:space-between;align-items:center;gap:1rem}
+.pb-manager-title h2{font-size:1.35rem;margin:.15rem 0}
+.pb-manager-title p,.pb-note{font-size:.75rem;color:var(--muted);margin:.3rem 0}
+.pb-manager button{border:1px solid var(--line-strong);border-radius:.45rem;padding:.48rem .7rem;cursor:pointer;font:inherit;font-size:.74rem;font-weight:750;background:white}
+.pb-manager button:disabled{cursor:not-allowed;opacity:.55}
+.pb-pulse{display:flex;flex-wrap:wrap;gap:.65rem 1.6rem;margin-top:1rem;font-size:.75rem;color:var(--muted)}
+.pb-pulse strong{color:var(--ink);font-size:1rem}
+.pb-controls,.pb-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem 1rem;margin-top:1rem;font-size:.75rem}
+.pb-controls label{display:flex;align-items:center;gap:.4rem;cursor:pointer}
+.pb-actions{gap:.4rem}
+.pb-actions button:first-child,.pb-actions button:nth-child(4){background:var(--ink);color:white;border-color:var(--ink)}
+.pb-message{font-size:.75rem;color:var(--muted);margin:.7rem 0}
+.pb-results{margin-top:.7rem;max-height:440px;overflow:auto;border-top:1px solid var(--line)}
+.pb-result{border-bottom:1px solid var(--line);padding:.7rem 0}
+.pb-result-heading{display:flex;justify-content:space-between;gap:1rem;align-items:center}
+.pb-result-heading strong,.pb-result-heading small{display:block;font-size:.77rem}
+.pb-result-heading small{color:var(--muted);margin-top:.2rem}
+.pb-result-heading label{white-space:nowrap;display:flex;align-items:center;gap:.4rem;font-size:.75rem}
+.pb-result details{margin-top:.5rem;font-size:.75rem}
+.pb-result details summary{cursor:pointer;color:var(--blue)}
+.pb-section-list{margin:.4rem 0 0 1rem;max-height:190px;overflow:auto}
+.pb-section-list div{display:flex;justify-content:space-between;gap:1rem;border-bottom:1px solid var(--line);padding:.3rem 0;font-size:.72rem}
+.pb-section-list p{color:var(--muted);font-size:.72rem}
+.pb-note{margin-top:1rem}
+@media(max-width:640px){.pb-manager-title{align-items:flex-start;flex-direction:column}}
+
 </style>

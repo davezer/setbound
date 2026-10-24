@@ -32,12 +32,14 @@ export async function load({ platform }) {
 				  AND CAST(json_extract(shc.entry_json, '$.productId') AS INTEGER) = p.id
 			) THEN 1 ELSE 0 END AS has_topps_backfill,
 			COUNT(DISTINCT c.id) AS card_count,
-			COUNT(DISTINCT cl.id) AS checklist_count
+			COUNT(DISTINCT cl.id) AS checklist_count,
+            COUNT(DISTINCT CASE WHEN cd.parallels_json IS NOT NULL AND TRIM(cd.parallels_json) NOT IN ('', '[]', 'null') THEN cl.id END) AS parallel_section_count
 		FROM products p
 		JOIN manufacturers m ON m.id = p.manufacturer_id
 		JOIN sports s ON s.id = p.sport_id
 		LEFT JOIN cards c ON c.product_id = p.id
 		LEFT JOIN checklists cl ON cl.product_id = p.id
+        LEFT JOIN checklist_details cd ON cd.checklist_id = cl.id
 		GROUP BY p.id
 		ORDER BY p.year DESC, p.name
 	`).all();
