@@ -88,29 +88,83 @@ function parseParallelChunk(html) {
   }
   return items;
 }
-function sectionsFromHtml(html) {
-  // Per-checklist headings describe counts: "Base Cards 100 cards 22 parallels".
-  // Prefer those headings to the single combined on-screen parallel ladder.
-  const headings = [];
-  for (const match of html.matchAll(/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)) {
-    const text = plain(match[2]);
-    const counts = text.match(/\b(\d{1,3})\s+parallels?\b/i);
-    if (!counts) continue;
-    const prefix = text.slice(0, counts.index).replace(/\b\d[\d,]*\s+cards?\b.*$/i, '').trim();
-    if (!prefix || /every parallel|numbered ladder|parallel guide/i.test(prefix)) continue;
-    headings.push({ start: match.index + match[0].length, name: prefix, expected: Number(counts[1]), level: Number(match[1]) });
+
+// Capture HTML elements without assuming the source's expandable ladder is a heading.
+// A selector option is NOT a parallel definition. The initially rendered ladder is
+// often for __ALLBASE__ and must never be attributed to every checklist.
+function htmlAttr(tag, key) {
+  const match=tag.match(new RegExp('\\b'+key+'\\s*=\\s*(?:"([^"]*)"|\x27([^\x27]*)\x27)','i'));
+  return decode(match?.[1]??match?.[2]??'');
+}
+function rowParallelDefinitions(html) {
+  const groups = new Map();
+  const table = html.match(/<table\b[^>]*class\s*=\s*["'][^"']*ladw-table[^"']*["'][^>]*>[\s\S]*?<\/table>/i)
+    || html.match(/<tbody\b[^>]*class\s*=\s*["'][^"']*ladw-rows[^"']*["'][^>]*>[\s\S]*?<\/tbody>/i);
+  if (!table) return groups;
+  for (const m of table[0].matchAll(/<tr\b([^>]*)>([\s\S]*?)<\/tr>/gi)) {
+    const attrs=m[1], cells=[...m[2].matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(c=>c[1]);
+    if(cells.length<2)continue;
+    const key=htmlAttr(attrs,'data-k');
+    const section=key.split('|')[0];
+    if(!section || /^__allbase__$/i.test(section))continue;
+    const num=formatNumber(cells[0]), name=cleanParallelName(cells[1]);
+    if(!num||!name||/^base$/i.test(name))continue;
+    const availability=formatAvailability(cells[1]);
+    const items=groups.get(section)||[];
+    if(!items.some(x=>norm(x.name)===norm(name)&&x.number===num))items.push({name,number:num,availability});
+    groups.set(section,items);
   }
-  const sections = [];
-  for (let i = 0; i < headings.length; i++) {
-    const item = headings[i];
-    // Stop at next heading or table of individual cards. Don't ingest the card rows.
-    const rest = html.slice(item.start, Math.min(html.length, item.start + 22000));
-    const cutoff = [rest.search(/<table\b/i), rest.search(/<h[1-6]\b/i)].filter(n => n >= 0);
-    const chunk = rest.slice(0, cutoff.length ? Math.min(...cutoff) : 9000);
-    sections.push({ name: item.name, expected: item.expected, parallels: parseParallelChunk(chunk) });
+  return groups;
+}
+function listParallelDefinitions(chunk) {
+  // The checklist accordion prints each parallel name as a distinct item.
+  // Support both separated badges and inline strings such as 'Sky Blue/499'.
+  const entries=[];const seen=new Set();
+  const add=(rawName,rawNumber,availability='')=>{
+    const name=cleanParallelName(rawName).replace(/^[\s|:,·–-]+|[\s|:,·–-]+$/g,'');
+    const number=formatNumber(rawNumber);
+    if(!name||!number||name.length>100||/^base$/i.test(name))return;
+    const key=norm(name)+'|'+number;if(seen.has(key))return;seen.add(key);
+    entries.push({name,number,availability:formatAvailability(availability||rawName)});
+  };
+  const text=decode(chunk.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<\/\s*(?:li|span|div|p|a|strong|b|td|button)\s*>/gi,' | ').replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim();
+  for(const unit of text.split(/\s*\|\s*/).filter(Boolean)){
+    const piece=unit.replace(/\s+/g,' ').trim();
+    let m=piece.match(/^(.+?)\s*(\/\d{1,5}|1\s*\/\s*1)(?:\s|$)/i);
+    if(m)add(m[1],m[2],piece);
+    else if((m=piece.match(/^(.+?)\s+(unnumbered)\b/i)))add(m[1],m[2],piece);
+    // Do not guess that a bare name is unnumbered. The text may be incomplete.
+  }
+  return entries;
+}
+function sectionsFromHtml(html) {
+  const renderedRows=rowParallelDefinitions(html);
+  const headings=[];
+  // Source accordion headings often mix the checklist name with badges such
+  // as '100 cards' and '22 parallels', rather than using heading tags.
+  for (const m of html.matchAll(/<h([2-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi)) {
+    const label=plain(m[2]);
+    const count=label.match(/\b(\d{1,3})\s+parallels?\b/i);
+    if(!count)continue;
+    const name=label.slice(0,count.index).replace(/\b[\d,]+\s+cards?\b.*$/i,'').trim();
+    if(!name||/every parallel|numbered ladder|parallel guide/i.test(name))continue;
+    headings.push({start:m.index+m[0].length,name,expected:Number(count[1])});
+  }
+  const sections=[];
+  for(let i=0;i<headings.length;i++){
+    const h=headings[i];
+    const next=headings[i+1]?.start||html.length;
+    const chunk=html.slice(h.start,Math.min(next,h.start+25000));
+    // Try the section accordion text, then section-keyed rows if present.
+    // Non-sectioned __ALLBASE__ rows cannot prove a per-section match.
+    const fromList=listParallelDefinitions(chunk.split(/<h[1-6]\b[^>]*>\s*Parallel Guide/i)[0]);
+    const fromRows=renderedRows.get(h.name)||[];
+    const entries=fromList.length===h.expected?fromList:fromRows.length===h.expected?fromRows:fromList;
+    sections.push({name:h.name,expected:h.expected,parallels:entries});
   }
   return sections;
 }
+
 async function build(database, id, fetcher) {
   const product = await database.prepare('SELECT p.id,p.slug,p.name,p.year,s.source_url,s.original_filename FROM products p LEFT JOIN sources s ON s.id=p.primary_source_id WHERE p.id=?').bind(id).first();
   if (!product) throw Error('Product not found.');
