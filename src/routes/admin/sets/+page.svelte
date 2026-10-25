@@ -679,7 +679,19 @@
 	   {#each pbRows as row (row.id)}
 	    <article class="pb-result">
 	     <div class="pb-result-heading"><div><strong>{row.name}</strong><small>{row.state==='saved'?'Saved '+(row.saved||0)+' sections':row.state==='ready'?'Ready · '+row.proposals.length+' matched sections'+(row.unmatchedCount?' · '+row.unmatchedCount+' unmatched':''):row.error||'No safe matches found'}</small></div>{#if row.state==='ready'}<label><input type="checkbox" checked={row.approved} onchange={e=>pbRows=pbRows.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve</label>{/if}</div>
-	     {#if row.state==='ready'}<details><summary>Review extracted sections</summary><div class="pb-section-list">{#each row.proposals as proposal}<div><strong>{proposal.checklistName}</strong><span>{proposal.parallels.length} parallels</span></div>{/each}{#if row.unmatchedCount}<p>{row.unmatchedCount} unmatched sections will be skipped.</p>{/if}</div></details>{/if}
+	     {#if row.state==='ready'}
+       <details><summary>Review extracted sections</summary><div class="pb-section-list">{#each row.proposals as proposal}<div><strong>{proposal.checklistName}</strong><span>{proposal.parallels.length} parallels</span></div>{/each}</div></details>
+       {#if row.unmatchedCount}
+         <details class="pb-unmatched"><summary>{row.unmatchedCount} unmatched section{row.unmatchedCount===1?'':'s'} — view skipped names</summary>
+           <div class="pb-unmatched-list">
+             {#each row.unmatched || [] as missing, idx (idx)}
+               <div><strong>{missing.section}</strong><span>{missing.reason || 'Could not match to an existing checklist'}</span></div>
+             {/each}
+             {#if row.unmatchedCount > (row.unmatched?.length || 0)}<p>Only the first {row.unmatched?.length || 0} names were returned by the scanner.</p>{/if}
+           </div>
+         </details>
+       {/if}
+     {/if}
 	    </article>
 	   {/each}
 	  </div>
@@ -1085,4 +1097,12 @@
 .pb-note{margin-top:1rem}
 @media(max-width:640px){.pb-manager-title{align-items:flex-start;flex-direction:column}}
 
+
+/* Bulk parallel backfill: show specifically which checklist sections were skipped. */
+.pb-unmatched{margin-top:.35rem;font-size:.76rem}
+.pb-unmatched>summary{color:#a05b33;cursor:pointer;font-weight:700;padding:.25rem 0}
+.pb-unmatched-list{margin:.45rem 0 .75rem;border-left:2px solid var(--line-strong);padding-left:.8rem}
+.pb-unmatched-list>div{display:flex;flex-wrap:wrap;gap:.3rem .8rem;padding:.35rem 0}
+.pb-unmatched-list strong{font-size:.75rem}
+.pb-unmatched-list span,.pb-unmatched-list p{color:var(--muted);font-size:.72rem}
 </style>
