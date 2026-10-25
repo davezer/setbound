@@ -12,7 +12,9 @@
 <section class="shell page">
 	<div class="crumb"><a href="/admin">Admin</a><span>/</span>Users</div>
 
-	<div class="hero">
+	<!-- SETBOUND_BREAKER_ALIAS_LINK_V1 -->
+<p style="margin:.8rem 0"><a href="/admin/breaker-aliases">Review breaker aliases →</a></p>
+<div class="hero">
 		<div>
 			<div class="eyebrow">Community</div>
 			<h1>Users</h1>
