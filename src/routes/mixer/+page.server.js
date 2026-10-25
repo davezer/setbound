@@ -3,7 +3,7 @@ import { db } from '$lib/server/db';
 const MAX_PRODUCTS = 10;
 const MAX_CARDS = 30000;
 
-export async function load({ platform, url }) {
+export async function load({ platform, url, locals }) {
   const database = db(platform);
   const selected = [...new Set(url.searchParams.getAll('set').flatMap(value => value.split(',')).map(x => x.trim()).filter(Boolean))].slice(0, MAX_PRODUCTS);
   const catalog = await database.prepare(`
@@ -53,6 +53,6 @@ export async function load({ platform, url }) {
   }
   return {
     catalog: catalog.results || [], products, cards, truncated,
-    maxProducts: MAX_PRODUCTS, initialView: url.searchParams.get('view') || 'break'
+    maxProducts: MAX_PRODUCTS, canExport: Boolean(locals.isAdmin || locals.user?.is_admin || locals.user?.is_breaker), initialView: url.searchParams.get('view') || 'break'
   };
 }

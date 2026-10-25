@@ -1,5 +1,6 @@
 <script>
   import { goto } from '$app/navigation';
+  import BreakerNameExport from '$lib/components/BreakerNameExport.svelte';
   import { productDisplayTitle } from '$lib/product-display.js';
   let { data } = $props();
   let selected = $state(data.products.map(p => p.slug));
@@ -95,6 +96,9 @@
       </div>
     {/if}
   </div>
+  {#if data.canExport && selected.length}
+    <BreakerNameExport slugs={selected} label="Copy mixer names" />
+  {/if}
   <div class="modes" aria-label="Mixer view">
     {#each [{key:'break',name:'Break mode'},{key:'combined',name:'Combined'},{key:'side',name:'Side by side'},{key:'team',name:'By team'}] as item}
       <button class:active={mode === item.key} onclick={() => switchMode(item.key)}>{item.name}</button>

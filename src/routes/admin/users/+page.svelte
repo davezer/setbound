@@ -1,5 +1,5 @@
 <script>
-	let { data } = $props();
+	let { data, form } = $props();
 
 	function joinedDate(value) {
 		if (!value) return '—';
@@ -32,11 +32,12 @@
 		{#if data.q}<a href="/admin/users">Clear</a>{/if}
 	</form>
 
+	{#if form?.message}<p role="status" class="role-message">{form.message}</p>{/if}
 	<div class="result-count">{data.users.length.toLocaleString()} user{data.users.length === 1 ? '' : 's'} shown</div>
 
 	<div class="table-wrap">
 		<table>
-			<thead><tr><th>User</th><th>Joined</th><th>Owned</th><th>Wanted</th><th>Tracked</th><th>Role</th></tr></thead>
+			<thead><tr><th>User</th><th>Joined</th><th>Owned</th><th>Wanted</th><th>Tracked</th><th>Role</th><th>Breaker beta</th></tr></thead>
 			<tbody>
 				{#each data.users as user}
 					<tr>
@@ -46,9 +47,10 @@
 						<td>{user.wanted_count.toLocaleString()}</td>
 						<td>{user.tracked_count.toLocaleString()}</td>
 						<td>{#if user.is_admin}<span class="role admin">Admin</span>{:else}<span class="role">Collector</span>{/if}</td>
+                        <td><form method="POST" action="?/breaker"><input type="hidden" name="user_id" value={user.id}/><input type="hidden" name="enabled" value={user.is_breaker?0:1}/><button type="submit" class="breaker-toggle">{user.is_breaker?'Revoke':'Grant'} Breaker</button></form></td>
 					</tr>
 				{/each}
-				{#if !data.users.length}<tr><td colspan="6" class="empty">No users matched your search.</td></tr>{/if}
+				{#if !data.users.length}<tr><td colspan="7" class="empty">No users matched your search.</td></tr>{/if}
 			</tbody>
 		</table>
 	</div>
@@ -60,4 +62,6 @@
 	.search{display:flex;gap:.65rem;align-items:end;padding:1rem 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.search label{display:grid;gap:.3rem;min-width:min(420px,100%)}.search label>span{font-size:.59rem;font-weight:900;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}.search button,.search a{height:42px;display:inline-grid;place-items:center;padding:0 .85rem;border:1px solid var(--line);border-radius:.65rem;background:white;color:inherit;text-decoration:none;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer}.search button{background:var(--ink);color:white;border-color:var(--ink)}
 	.result-count{padding:.8rem 0;color:var(--muted);font-size:.7rem}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:.9rem;background:white}table{width:100%;border-collapse:collapse;min-width:780px}th,td{text-align:left;padding:.8rem .9rem;border-bottom:1px solid var(--line)}th{background:#faf9f7;color:var(--muted);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em}td{font-size:.76rem}tbody tr:last-child td{border-bottom:0}td strong,td span{display:block}td>span:not(.role){margin-top:.12rem;color:var(--muted);font-size:.67rem}.role{display:inline-block;padding:.23rem .4rem;border-radius:999px;background:#f0efed;font-size:.58rem;font-weight:900}.role.admin{background:rgba(64,121,140,.12);color:var(--blue)}.empty{text-align:center;color:var(--muted);padding:2rem}
 	@media(max-width:700px){.stats{grid-template-columns:1fr}.search{align-items:stretch;flex-direction:column}.search label{min-width:0}}
+
+.breaker-toggle{padding:.42rem .65rem;background:white;color:var(--ink);border:1px solid var(--line-strong);border-radius:.5rem;font:inherit;font-weight:700;font-size:.7rem;cursor:pointer;white-space:nowrap}.role-message{padding:.7rem;color:var(--muted);font-size:.8rem}
 </style>

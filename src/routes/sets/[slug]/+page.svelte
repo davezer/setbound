@@ -1,5 +1,6 @@
 <script>
 	import { getOwned, setOwned } from '$lib/client/collection.js';
+  import BreakerNameExport from '$lib/components/BreakerNameExport.svelte';
 
 	let { data } = $props();
 	const websiteSchema = JSON.stringify({
@@ -279,7 +280,10 @@
       </div>
     </details>
   {/if}
-	<section class="browser">
+	{#if data.canExport && !data.preview}
+    <BreakerNameExport slugs={[data.product.slug]} />
+  {/if}
+  <section class="browser">
 		<div class="browser-headline">
 			<div>
 				<div class="eyebrow">Checklist</div>

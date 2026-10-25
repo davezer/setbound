@@ -150,6 +150,7 @@ export async function load({ platform, params, locals, url }) {
 	}
 
 	return {
+        canExport: Boolean(locals.isAdmin || locals.user?.is_admin || locals.user?.is_breaker),
 		preview,
 		product,
 		formats: formats.results || [],

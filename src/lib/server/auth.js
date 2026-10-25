@@ -85,7 +85,8 @@ export async function getSessionUser(event) {
         u.email,
         u.display_name,
         u.created_at,
-        COALESCE(u.is_admin, 0) AS is_admin
+        COALESCE(u.is_admin, 0) AS is_admin,
+        COALESCE(u.is_breaker, 0) AS is_breaker
       FROM user_sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.token_hash = ?
@@ -95,7 +96,7 @@ export async function getSessionUser(event) {
     if (!user) event.cookies.delete(SESSION_COOKIE, { path: '/' });
 
     return user
-      ? { ...user, is_admin: Boolean(user.is_admin) }
+      ? { ...user, is_admin: Boolean(user.is_admin), is_breaker: Boolean(user.is_breaker) }
       : null;
   } catch {
     return null;

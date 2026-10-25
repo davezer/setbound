@@ -1,4 +1,5 @@
 import { db } from '$lib/server/db';
+import { fail } from '@sveltejs/kit';
 
 export async function load({ platform, url }) {
 	const database = db(platform);
@@ -24,6 +25,7 @@ export async function load({ platform, url }) {
 				u.display_name,
 				u.created_at,
 				u.is_admin,
+				u.is_breaker,
 				SUM(CASE WHEN cc.status = 'owned' THEN 1 ELSE 0 END) AS owned_count,
 				SUM(CASE WHEN cc.status = 'wanted' THEN 1 ELSE 0 END) AS wanted_count,
 				COUNT(cc.card_id) AS tracked_count
@@ -51,3 +53,17 @@ export async function load({ platform, url }) {
 		}))
 	};
 }
+
+export const actions = {
+  breaker: async ({request,platform,locals}) => {
+    if (!locals.isAdmin) return fail(403,{message:'Admin access required.'});
+    const form=await request.formData();
+    const id=Number(form.get('user_id'));
+    const enabled=String(form.get('enabled'))==='1';
+    if (!Number.isSafeInteger(id)||id<=0) return fail(400,{message:'Invalid user.'});
+    const database=db(platform);
+    const result=await database.prepare('UPDATE users SET is_breaker=? WHERE id=?').bind(enabled?1:0,id).run();
+    if (!Number(result.meta?.changes||0)) return fail(404,{message:'User not found.'});
+    return {message:enabled?'Breaker access granted.':'Breaker access revoked.'};
+  }
+};
