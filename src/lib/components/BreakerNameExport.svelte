@@ -25,8 +25,7 @@
       if (!response.ok) throw new Error(result.message || 'Unable to export names.');
       if (!result.names?.length) throw new Error('No names found for these products.');
       const names = shuffle ? shuffled(result.names) : result.names;
-      await navigator.clipboard.writeText(names.join('
-'));
+      await navigator.clipboard.writeText(names.join('\n'));
       feedback = `${names.length} unique names copied${shuffle ? ' (shuffled)' : ''}.`;
     } catch (error) {
       feedback = error.message || 'Copy failed. Check browser clipboard permissions.';
