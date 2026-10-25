@@ -375,7 +375,7 @@
 
 	function imageUrl(product) {
 		if (!product.image_key) return '';
-		return `/media/set/${product.slug}?v=${encodeURIComponent(product.image_key)}`;
+		return `/api/admin/products/artwork/${encodeURIComponent(product.slug)}?v=${encodeURIComponent(product.image_key)}`;
 	}
 
 	function resetFilters() {
