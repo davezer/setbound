@@ -1,4 +1,5 @@
 <script>
+  import PhotoBulkReview from '$lib/components/PhotoBulkReview.svelte';
 	import ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';
   import PhotoFinder from '$lib/components/PhotoFinder.svelte'; // SETBOUND_PHOTO_FINDER_V1
   import { parseSourceCsv } from '$lib/client/source-csv.js';
@@ -617,7 +618,9 @@
 	<div class="filter-summary backfill-summary"><div><strong>{visible.length.toLocaleString()}</strong> <span>of {products.length.toLocaleString()} sets</span></div><span class="topps-ready-summary">Filter, select and manage your imported checklists.</span></div>
 
 
-	<div class="bulk-workspace">
+	<PhotoBulkReview products={products} onSaved={(result)=>{products=products.map(p=>Number(p.id)===Number(result.productId)?{...p,image_key:result.imageKey}:p);}} />
+
+  <div class="bulk-workspace">
 		<details class="batch-panel">
 			<summary><span><strong>Publish drafts</strong><small>{selectedDraftIds.length} selected</small></span><span class="batch-chevron">⌄</span></summary>
 			<div class="batch-content">
