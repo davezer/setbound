@@ -107,7 +107,7 @@
 
   // SETBOUND_PARALLEL_BACKFILL_V1 — browser-resumable 25-set review batches.
   const PB_KEY = 'setbound.parallel-backfill.v1';
-  const PB_SIZE = 25;
+  let pbBatchSize = $state(50);
   let pbHistory = $state({});
   let pbShow = $state(false);
   let pbRunning = $state(false);
@@ -144,7 +144,7 @@
   }
   async function pbScan() {
     if(pbRunning)return;
-    const targets = (pbRunFailures ? pbEligible : pbPending).slice(0,PB_SIZE);
+    const targets = (pbRunFailures ? pbEligible : pbPending).slice(0,pbBatchSize);
     if(!targets.length){pbMessage='No eligible sets left to scan with these filters.';return;}
     if(pbRows.some(r=>r.state==='ready')){pbMessage='Review and save the current ready results before starting another batch.';return;}
     pbRows=[];pbStop=false;pbRunning=true;pbMessage='';
@@ -668,14 +668,24 @@
 
 	<!-- SETBOUND_PARALLEL_BACKFILL_V1: review batches; nothing is saved automatically. -->
 	<section class="pb-manager" aria-label="Parallel backfill manager">
-	 <div class="pb-manager-title"><div><div class="eyebrow">Data completeness</div><h2>Parallel backfill</h2><p>Scan 25 sets at a time, review matches, then save. Your progress is kept in this browser.</p></div><button type="button" onclick={()=>pbShow=!pbShow}>{pbShow?'Hide manager':'Open manager'} {pbShow?'↑':'↓'}</button></div>
+	 <div class="pb-manager-title"><div><div class="eyebrow">Data completeness</div><h2>Parallel backfill</h2><p>Scan sets in configurable batches, review matches, then save. Your progress is kept in this browser.</p></div><button type="button" onclick={()=>pbShow=!pbShow}>{pbShow?'Hide manager':'Open manager'} {pbShow?'↑':'↓'}</button></div>
 	 <div class="pb-pulse"><span><strong>{pbStats.already}</strong> sets with parallels</span><span><strong>{pbStats.saved}</strong> saved in this workflow</span><span><strong>{pbStats.failed}</strong> needs retry</span><span><strong>{pbPending.length}</strong> pending</span></div>
 	 {#if pbShow}
 	  <div class="pb-controls"><label><input type="checkbox" bind:checked={pbOnlyLive} disabled={pbRunning}/> Live sets only</label><label><input type="checkbox" bind:checked={pbShowCompleted} disabled={pbRunning}/> Include sets already containing parallels</label><label><input type="checkbox" bind:checked={pbRunFailures} disabled={pbRunning}/> Retry failed sets</label></div>
-	  <div class="pb-actions"><button type="button" onclick={pbScan} disabled={pbRunning || (!pbRunFailures&&!pbPending.length) || (pbRunFailures&&!pbEligible.length)}>Scan next 25</button><button type="button" onclick={pbSelectReady.bind(null,true)} disabled={pbRunning||!pbRows.some(r=>r.state==='ready')}>Approve ready</button><button type="button" onclick={pbSelectReady.bind(null,false)} disabled={pbRunning}>Deselect</button><button type="button" onclick={pbSave} disabled={pbRunning||!pbReady.length}>Save {pbReady.length} approved</button>{#if pbRunning}<button type="button" onclick={()=>pbStop=true} disabled={pbStop}>Stop after current</button>{/if}{#if pbStats.failed}<button type="button" onclick={pbForgetFailures} disabled={pbRunning}>Reset failed to pending</button>{/if}</div>
+	  <div class="pb-batch-size"><label for="pb-batch-count">Sets per scan</label><select id="pb-batch-count" bind:value={pbBatchSize} disabled={pbRunning || pbRows.some(r => r.state === 'ready')}><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select><span>Runs one at a time · Review before saving</span></div>
+  <div class="pb-actions"><button type="button" onclick={pbScan} disabled={pbRunning || (!pbRunFailures&&!pbPending.length) || (pbRunFailures&&!pbEligible.length)}>Scan next {pbBatchSize}</button><button type="button" onclick={pbSelectReady.bind(null,true)} disabled={pbRunning||!pbRows.some(r=>r.state==='ready')}>Approve ready</button><button type="button" onclick={pbSelectReady.bind(null,false)} disabled={pbRunning}>Deselect</button><button type="button" onclick={pbSave} disabled={pbRunning||!pbReady.length}>Save {pbReady.length} approved</button>{#if pbRunning}<button type="button" onclick={()=>pbStop=true} disabled={pbStop}>Stop after current</button>{/if}{#if pbStats.failed}<button type="button" onclick={pbForgetFailures} disabled={pbRunning}>Reset failed to pending</button>{/if}</div>
 	  {#if pbMessage}<p class="pb-message" role="status">{pbMessage}</p>{/if}
 	  {#if pbProgress}<p class="pb-message" role="status">{pbProgress}</p>{/if}
-	  <div class="pb-results">
+	  <div class="pb-approval-bar">
+    <label><input type="checkbox"
+      checked={pbRows.some(r => r.state === 'ready') && pbRows.filter(r => r.state === 'ready').every(r => r.approved)}
+      disabled={pbRunning || !pbRows.some(r => r.state === 'ready')}
+      onchange={event => pbSelectReady(event.currentTarget.checked)} />
+      Select all ready ({pbRows.filter(r => r.state === 'ready').length})
+    </label>
+    <span>{pbReady.length} approved for saving</span>
+  </div>
+  <div class="pb-results">
 	   {#each pbRows as row (row.id)}
 	    <article class="pb-result">
 	     <div class="pb-result-heading"><div><strong>{row.name}</strong><small>{row.state==='saved'?'Saved '+(row.saved||0)+' sections':row.state==='ready'?'Ready · '+row.proposals.length+' matched sections'+(row.unmatchedCount?' · '+row.unmatchedCount+' unmatched':''):row.error||'No safe matches found'}</small></div>{#if row.state==='ready'}<label><input type="checkbox" checked={row.approved} onchange={e=>pbRows=pbRows.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve</label>{/if}</div>
@@ -1105,4 +1115,13 @@
 .pb-unmatched-list>div{display:flex;flex-wrap:wrap;gap:.3rem .8rem;padding:.35rem 0}
 .pb-unmatched-list strong{font-size:.75rem}
 .pb-unmatched-list span,.pb-unmatched-list p{color:var(--muted);font-size:.72rem}
+
+.pb-batch-size{display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;margin:.7rem 0}
+.pb-batch-size label{font-size:.75rem;font-weight:750}
+.pb-batch-size select{border:1px solid var(--line-strong);border-radius:.4rem;background:white;color:var(--ink);padding:.35rem .55rem;font:inherit;font-size:.8rem}
+.pb-batch-size span{color:var(--muted);font-size:.72rem}
+.pb-approval-bar{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.65rem .45rem;border-block:1px solid var(--line);font-size:.78rem;margin-top:.7rem}
+.pb-approval-bar label{display:flex;align-items:center;gap:.5rem;font-weight:800;cursor:pointer}
+.pb-approval-bar input{width:16px;height:16px;accent-color:var(--ink)}
+.pb-approval-bar span{color:var(--muted)}
 </style>
