@@ -146,6 +146,7 @@
     if(pbRunning)return;
     const targets = (pbRunFailures ? pbEligible : pbPending).slice(0,PB_SIZE);
     if(!targets.length){pbMessage='No eligible sets left to scan with these filters.';return;}
+    if(pbRows.some(r=>r.state==='ready')){pbMessage='Review and save the current ready results before starting another batch.';return;}
     pbRows=[];pbStop=false;pbRunning=true;pbMessage='';
     for(let i=0;i<targets.length;i++) {
       if(pbStop)break;
@@ -665,6 +666,27 @@
 	</div>
 	<p class="selection-hint">Row checkboxes: publish · metadata · delete · offline. Open a bulk tool above to select visible sets or act on your selection.</p>
 
+	<!-- SETBOUND_PARALLEL_BACKFILL_V1: review batches; nothing is saved automatically. -->
+	<section class="pb-manager" aria-label="Parallel backfill manager">
+	 <div class="pb-manager-title"><div><div class="eyebrow">Data completeness</div><h2>Parallel backfill</h2><p>Scan 25 sets at a time, review matches, then save. Your progress is kept in this browser.</p></div><button type="button" onclick={()=>pbShow=!pbShow}>{pbShow?'Hide manager':'Open manager'} {pbShow?'↑':'↓'}</button></div>
+	 <div class="pb-pulse"><span><strong>{pbStats.already}</strong> sets with parallels</span><span><strong>{pbStats.saved}</strong> saved in this workflow</span><span><strong>{pbStats.failed}</strong> needs retry</span><span><strong>{pbPending.length}</strong> pending</span></div>
+	 {#if pbShow}
+	  <div class="pb-controls"><label><input type="checkbox" bind:checked={pbOnlyLive} disabled={pbRunning}/> Live sets only</label><label><input type="checkbox" bind:checked={pbShowCompleted} disabled={pbRunning}/> Include sets already containing parallels</label><label><input type="checkbox" bind:checked={pbRunFailures} disabled={pbRunning}/> Retry failed sets</label></div>
+	  <div class="pb-actions"><button type="button" onclick={pbScan} disabled={pbRunning || (!pbRunFailures&&!pbPending.length) || (pbRunFailures&&!pbEligible.length)}>Scan next 25</button><button type="button" onclick={pbSelectReady.bind(null,true)} disabled={pbRunning||!pbRows.some(r=>r.state==='ready')}>Approve ready</button><button type="button" onclick={pbSelectReady.bind(null,false)} disabled={pbRunning}>Deselect</button><button type="button" onclick={pbSave} disabled={pbRunning||!pbReady.length}>Save {pbReady.length} approved</button>{#if pbRunning}<button type="button" onclick={()=>pbStop=true} disabled={pbStop}>Stop after current</button>{/if}{#if pbStats.failed}<button type="button" onclick={pbForgetFailures} disabled={pbRunning}>Reset failed to pending</button>{/if}</div>
+	  {#if pbMessage}<p class="pb-message" role="status">{pbMessage}</p>{/if}
+	  {#if pbProgress}<p class="pb-message" role="status">{pbProgress}</p>{/if}
+	  <div class="pb-results">
+	   {#each pbRows as row (row.id)}
+	    <article class="pb-result">
+	     <div class="pb-result-heading"><div><strong>{row.name}</strong><small>{row.state==='saved'?'Saved '+(row.saved||0)+' sections':row.state==='ready'?'Ready · '+row.proposals.length+' matched sections'+(row.unmatchedCount?' · '+row.unmatchedCount+' unmatched':''):row.error||'No safe matches found'}</small></div>{#if row.state==='ready'}<label><input type="checkbox" checked={row.approved} onchange={e=>pbRows=pbRows.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve</label>{/if}</div>
+	     {#if row.state==='ready'}<details><summary>Review extracted sections</summary><div class="pb-section-list">{#each row.proposals as proposal}<div><strong>{proposal.checklistName}</strong><span>{proposal.parallels.length} parallels</span></div>{/each}{#if row.unmatchedCount}<p>{row.unmatchedCount} unmatched sections will be skipped.</p>{/if}</div></details>{/if}
+	    </article>
+	   {/each}
+	  </div>
+	  <p class="pb-note">Progress is local to this browser. Scanned but unapproved results must be reviewed and saved before refreshing. Failed sets remain retryable; existing data is never overwritten.</p>
+	 {/if}
+	</section>
+
 	<div class="list">
 		{#each visible as product (product.id)}
 			<article class="row">
@@ -786,27 +808,6 @@
   </div>
 </div>
 {/if}
-
-<!-- SETBOUND_PARALLEL_BACKFILL_V1: review batches; nothing is saved automatically. -->
-<section class="pb-manager" aria-label="Parallel backfill manager">
- <div class="pb-manager-title"><div><div class="eyebrow">Data completeness</div><h2>Parallel backfill</h2><p>Scan 25 sets at a time, review matches, then save. Your progress is kept in this browser.</p></div><button type="button" onclick={()=>pbShow=!pbShow}>{pbShow?'Hide manager':'Open manager'} {pbShow?'↑':'↓'}</button></div>
- <div class="pb-pulse"><span><strong>{pbStats.already}</strong> sets with parallels</span><span><strong>{pbStats.saved}</strong> saved in this workflow</span><span><strong>{pbStats.failed}</strong> needs retry</span><span><strong>{pbPending.length}</strong> pending</span></div>
- {#if pbShow}
-  <div class="pb-controls"><label><input type="checkbox" bind:checked={pbOnlyLive} disabled={pbRunning}/> Live sets only</label><label><input type="checkbox" bind:checked={pbShowCompleted} disabled={pbRunning}/> Include sets already containing parallels</label><label><input type="checkbox" bind:checked={pbRunFailures} disabled={pbRunning}/> Retry failed sets</label></div>
-  <div class="pb-actions"><button type="button" onclick={pbScan} disabled={pbRunning || (!pbRunFailures&&!pbPending.length) || (pbRunFailures&&!pbEligible.length)}>Scan next 25</button><button type="button" onclick={pbSelectReady.bind(null,true)} disabled={pbRunning||!pbRows.some(r=>r.state==='ready')}>Approve ready</button><button type="button" onclick={pbSelectReady.bind(null,false)} disabled={pbRunning}>Deselect</button><button type="button" onclick={pbSave} disabled={pbRunning||!pbReady.length}>Save {pbReady.length} approved</button>{#if pbRunning}<button type="button" onclick={()=>pbStop=true} disabled={pbStop}>Stop after current</button>{/if}{#if pbStats.failed}<button type="button" onclick={pbForgetFailures} disabled={pbRunning}>Reset failed to pending</button>{/if}</div>
-  {#if pbMessage}<p class="pb-message" role="status">{pbMessage}</p>{/if}
-  {#if pbProgress}<p class="pb-message" role="status">{pbProgress}</p>{/if}
-  <div class="pb-results">
-   {#each pbRows as row (row.id)}
-    <article class="pb-result">
-     <div class="pb-result-heading"><div><strong>{row.name}</strong><small>{row.state==='saved'?'Saved '+(row.saved||0)+' sections':row.state==='ready'?'Ready · '+row.proposals.length+' matched sections'+(row.unmatchedCount?' · '+row.unmatchedCount+' unmatched':''):row.error||'No safe matches found'}</small></div>{#if row.state==='ready'}<label><input type="checkbox" checked={row.approved} onchange={e=>pbRows=pbRows.map(x=>x.id===row.id?{...x,approved:e.currentTarget.checked}:x)}/> Approve</label>{/if}</div>
-     {#if row.state==='ready'}<details><summary>Review extracted sections</summary><div class="pb-section-list">{#each row.proposals as proposal}<div><strong>{proposal.checklistName}</strong><span>{proposal.parallels.length} parallels</span></div>{/each}{#if row.unmatchedCount}<p>{row.unmatchedCount} unmatched sections will be skipped.</p>{/if}</div></details>{/if}
-    </article>
-   {/each}
-  </div>
-  <p class="pb-note">Progress is local to this browser. Scanned but unapproved results must be reviewed and saved before refreshing. Failed sets remain retryable; existing data is never overwritten.</p>
- {/if}
-</section>
 
 <div style="margin:1rem auto;max-width:1420px;padding:0 1.25rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
   <strong style="font-size:.8rem">Parallel metadata:</strong>

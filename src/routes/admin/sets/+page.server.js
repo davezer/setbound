@@ -7,42 +7,30 @@ const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/a
 export async function load({ platform }) {
 	const database = db(platform);
 	const result = await database.prepare(`
-		SELECT
-			p.id,
-			p.slug,
-			p.year,
-			p.name,
-			p.image_key,
-			p.release_date,
-			p.product_notes,
-			p.published,
-			CASE WHEN NULLIF(TRIM(COALESCE(p.product_notes, '')), '') IS NOT NULL THEN 1 ELSE 0 END AS has_product_details,
-			CASE WHEN length(trim(COALESCE(p.product_notes, ''))) > 0 OR EXISTS (
-				SELECT 1 FROM product_formats pf
-				WHERE pf.product_id = p.id
-				  AND length(trim(COALESCE(pf.details, ''))) > 0
-				  AND substr(pf.details, 1, 12) <> 'Listed as a '
-			) THEN 1 ELSE 0 END AS has_enrichment,
-			m.name AS manufacturer_name,
-			s.name AS sport_name,
-			CASE WHEN EXISTS (
-				SELECT 1
-				FROM source_harvester_cache shc
-				WHERE shc.source = 'topps-launch-metadata'
-				  AND CAST(json_extract(shc.entry_json, '$.productId') AS INTEGER) = p.id
-			) THEN 1 ELSE 0 END AS has_topps_backfill,
-			COUNT(DISTINCT c.id) AS card_count,
-			COUNT(DISTINCT cl.id) AS checklist_count,
-            COUNT(DISTINCT CASE WHEN cd.parallels_json IS NOT NULL AND TRIM(cd.parallels_json) NOT IN ('', '[]', 'null') THEN cl.id END) AS parallel_section_count
-		FROM products p
-		JOIN manufacturers m ON m.id = p.manufacturer_id
-		JOIN sports s ON s.id = p.sport_id
-		LEFT JOIN cards c ON c.product_id = p.id
-		LEFT JOIN checklists cl ON cl.product_id = p.id
-        LEFT JOIN checklist_details cd ON cd.checklist_id = cl.id
-		GROUP BY p.id
-		ORDER BY p.year DESC, p.name
-	`).all();
+    SELECT p.id, p.slug, p.year, p.name, p.image_key, p.release_date,
+           p.product_notes, p.published,
+           CASE WHEN NULLIF(TRIM(COALESCE(p.product_notes,'')),'') IS NOT NULL THEN 1 ELSE 0 END AS has_product_details,
+           CASE WHEN LENGTH(TRIM(COALESCE(p.product_notes,''))) > 0 OR EXISTS (
+             SELECT 1 FROM product_formats pf WHERE pf.product_id=p.id
+               AND LENGTH(TRIM(COALESCE(pf.details,''))) > 0
+               AND SUBSTR(pf.details,1,12) <> 'Listed as a '
+           ) THEN 1 ELSE 0 END AS has_enrichment,
+           m.name AS manufacturer_name, s.name AS sport_name,
+           CASE WHEN EXISTS (
+             SELECT 1 FROM source_harvester_cache shc
+             WHERE shc.source='topps-launch-metadata'
+               AND CAST(json_extract(shc.entry_json,'$.productId') AS INTEGER)=p.id
+           ) THEN 1 ELSE 0 END AS has_topps_backfill,
+           (SELECT COUNT(*) FROM cards c WHERE c.product_id=p.id) AS card_count,
+           (SELECT COUNT(*) FROM checklists cl WHERE cl.product_id=p.id) AS checklist_count,
+           (SELECT COUNT(*) FROM checklists cl JOIN checklist_details cd ON cd.checklist_id=cl.id
+            WHERE cl.product_id=p.id AND cd.parallels_json IS NOT NULL
+            AND TRIM(cd.parallels_json) NOT IN ('','[]','null')) AS parallel_section_count
+    FROM products p
+    JOIN manufacturers m ON m.id=p.manufacturer_id
+    JOIN sports s ON s.id=p.sport_id
+    ORDER BY p.year DESC,p.name
+  `).all();
 
 	return { products: result.results || [] };
 }
