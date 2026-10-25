@@ -15,7 +15,7 @@
   ];
   function searchLink(domain){return 'https://www.google.com/search?tbm=isch&q='+encodeURIComponent((domain?'site:'+domain+' ':'')+q);}
   function setUrl(next){url=next;checked=false;imageError=false;error='';}
-  const recognized = $derived(/^https://[^s]+/i.test(url));
+  const recognized = $derived(/^https:\/\/\S+$/i.test(url));
   async function save(){
     if(busy || !checked || !recognized)return;
     busy=true;error='';
