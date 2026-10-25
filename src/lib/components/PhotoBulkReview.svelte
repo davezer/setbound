@@ -64,7 +64,7 @@
     <div class="photo-results">
     {#each rows as row (row.id)}
       <article class="photo-result">
-        <div class="photo-row-head"><div><strong>{row.product.year} {row.product.name}</strong><small>{row.candidates.length} candidates {row.saved?'· Saved':''}</small></div><button class="light" onclick={()=>removeRow(row.id)} disabled={running||saving===row.id}>Dismiss</button></div>
+        <div class="photo-row-head"><div><strong>{String(row.product.name).startsWith(String(row.product.year) + ' ') ? row.product.name : row.product.year + ' ' + row.product.name}</strong><small>{row.candidates.length} candidates {row.saved?'· Saved':''}</small></div><button class="light" onclick={()=>removeRow(row.id)} disabled={running||saving===row.id}>Dismiss</button></div>
         {#if row.error}<p class="photo-warning">{row.error}</p>{/if}
         {#if !row.candidates.length}<a href={search(row.product)} target="_blank" rel="noopener noreferrer">Search images manually ↗</a>{/if}
         {#if row.candidates.length}
