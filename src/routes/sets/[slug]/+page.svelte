@@ -25,8 +25,10 @@
 	const socialImage = $derived(data.product.image_key ? 'https://setbound.app/media/set/' + data.product.slug : null);
 
 	let active = $state('All');
-  let parallelSection = $state(String(data.checklists.find(c=>c.parallels?.length)?.id ?? ''));
-  const currentParallelSection = $derived(data.checklists.find(c=>String(c.id)===parallelSection && c.parallels?.length) || data.checklists.find(c=>c.parallels?.length));
+  let parallelSection = $state('all');
+  const parallelSections = $derived(data.checklists.filter(c => c.parallels?.length));
+  const visibleParallelSections = $derived(parallelSection === 'all' ? parallelSections : parallelSections.filter(c => String(c.id) === parallelSection));
+  const parallelCount = $derived(visibleParallelSections.reduce((sum, c) => sum + c.parallels.length, 0));
 	let query = $state(data.initialQuery || '');
 	let team = $state('All teams');
 	let statusFilter = $state('All cards');
@@ -245,25 +247,31 @@
       </summary>
       <div class="parallel-ref-panel">
         <div class="parallel-ref-toolbar">
-          <div class="parallel-ref-context"><span class="parallel-ref-eyebrow">CHECKLIST SECTION</span><strong>{currentParallelSection?.name || 'Select a checklist'}</strong></div>
+          <div class="parallel-ref-context"><span class="parallel-ref-eyebrow">CHECKLIST SECTION</span><strong>{parallelSection === 'all' ? 'All checklists' : (visibleParallelSections[0]?.name || 'Choose a checklist')}</strong></div>
           <div class="parallel-ref-select-wrap">
             <label for="parallel-set-choice" class="sr-only">Choose checklist section</label>
             <select id="parallel-set-choice" bind:value={parallelSection} aria-label="Choose checklist section">
-              {#each data.checklists.filter(c=>c.parallels?.length) as c (c.id)}
+              <option value="all">All checklists ({parallelCount})</option>
+              {#each parallelSections as c (c.id)}
                 <option value={String(c.id)}>{c.name} ({c.parallels.length})</option>
               {/each}
             </select>
           </div>
         </div>
-        {#if currentParallelSection}
-          <div class="parallel-ref-heading"><span>PRINT RUN</span><span>PARALLEL</span><span class="parallel-ref-total">{currentParallelSection.parallels.length} total</span></div>
+        {#if visibleParallelSections.length}
+          <div class="parallel-ref-heading"><span>PRINT RUN</span><span>PARALLEL</span><span class="parallel-ref-total">{parallelCount} total</span></div>
           <div class="parallel-ref-scroll">
             <div class="parallel-ref-rows">
-              {#each currentParallelSection.parallels as item,i (i)}
-                <div class="parallel-ref-row">
-                  <strong class="parallel-ref-run">{typeof item==='string'?'—':((item.number||item.serial_number||item.print_run||'Unnumbered')==='Unnumbered'?'—':(item.number||item.serial_number||item.print_run))}</strong>
-                  <span class="parallel-ref-name">{typeof item==='string'?item:(item.name||item.label||'Parallel')}{#if typeof item==='object'&&item.availability}<small class="parallel-ref-exclusive">{item.availability}</small>{/if}</span>
-                </div>
+              {#each visibleParallelSections as section (section.id)}
+                {#if parallelSection === 'all'}
+                  <div class="parallel-all-group"><strong>{section.name}</strong><small>{section.parallels.length} parallels</small></div>
+                {/if}
+                {#each section.parallels as item,i (i)}
+                  <div class="parallel-ref-row">
+                    <strong class="parallel-ref-run">{typeof item==='string'?'—':((item.number||item.serial_number||item.print_run||'Unnumbered')==='Unnumbered'?'—':(item.number||item.serial_number||item.print_run))}</strong>
+                    <span class="parallel-ref-name">{typeof item==='string'?item:(item.name||item.label||'Parallel')}{#if typeof item==='object'&&item.availability}<small class="parallel-ref-exclusive">{item.availability}</small>{/if}</span>
+                  </div>
+                {/each}
               {/each}
             </div>
           </div>
@@ -623,4 +631,8 @@
 .parallel-ref-exclusive{display:inline-block;margin-left:.65rem;padding:.1rem .42rem;border-radius:999px;border:1px solid var(--line-strong);font-size:.62rem;font-weight:750;color:var(--muted);white-space:nowrap}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:640px){.parallel-ref-toolbar{align-items:stretch;flex-direction:column;gap:.6rem}.parallel-ref-select-wrap{width:100%}.parallel-ref-heading{grid-template-columns:88px minmax(0,1fr) auto;padding:.55rem .8rem}.parallel-ref-row{grid-template-columns:88px minmax(0,1fr);padding:.6rem .8rem}.parallel-ref-scroll{max-height:300px}}
+/* All-checklist view: section headings inside the existing fixed-height viewer. */
+.parallel-all-group{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.65rem .9rem;background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:.78rem}
+.parallel-all-group strong{font-weight:800}
+.parallel-all-group small{color:var(--muted);font-size:.7rem;white-space:nowrap}
 </style>
