@@ -1,11 +1,13 @@
 <script>
 	import ChecklistCleanupModal from '$lib/components/ChecklistCleanupModal.svelte';
+  import PhotoFinder from '$lib/components/PhotoFinder.svelte'; // SETBOUND_PHOTO_FINDER_V1
   import { parseSourceCsv } from '$lib/client/source-csv.js';
   import { extractSpreadsheetChecklist } from '$lib/client/spreadsheet.js';
 	import CardsmithsMetadataModal from '$lib/components/CardsmithsMetadataModal.svelte'; // SETBOUND_CARDSMITHS_METADATA_V1
 	let { data, form } = $props();
 
 	let products = $state([...data.products]);
+  let photoProduct = $state(null);
 	let sportFilter = $state('All sports');
 	let yearFilter = $state('All years');
 	let manufacturerFilter = $state('All manufacturers');
@@ -740,9 +742,16 @@
 						{#if product.has_topps_backfill}
 							<span class="status topps-ready" title="Cached first-party Topps launch metadata is ready for enrichment">Topps ready</span>
 						{/if}
-						{#if product.has_product_details}
-							<span class="status enriched">Enriched ✓</span>
-						{/if}
+						{#if product.has_enrichment}
+              <span class="status enriched">Enriched ✓</span>
+            {:else}
+              <span class="status photo-missing">Needs details</span>
+            {/if}
+            {#if product.image_key}
+              <span class="status photo-ready">Photo ✓</span>
+            {:else}
+              <span class="status photo-missing">Needs photo</span>
+            {/if}
 					</div>
 
 					<div class="details">
@@ -767,6 +776,7 @@
 								: 'Go live'}
 					</button>
 
+					<button class="edit" type="button" onclick={() => photoProduct = product}>Find photo</button>
 					<button class="edit" type="button" onclick={() => cleanupProduct = product}>Clean checklist data</button>
           <button class="edit" type="button" onclick={() => {replacementProduct=product;replacementPreview=null;replacementCards=[];replacementError='';replacementFileName='';}}>Replace checklist</button>
 					<button class="edit" type="button" onclick={() => {parallelSelectedIds=[Number(product.id)];scanParallels();}}>Parallels</button>
@@ -812,6 +822,14 @@
 	</div>
 </section>
 
+
+{#if photoProduct}
+  <PhotoFinder product={photoProduct} onclose={() => photoProduct = null} onapplied={(value) => {
+    products = products.map(p => Number(p.id) === Number(value.productId) ? {...p,image_key:value.imageKey} : p);
+    photoProduct = null;
+    message = 'Product photo saved.';
+  }} />
+{/if}
 
 {#if replacementProduct}
 <div class="setbound-replace-scrim" role="presentation" onclick={e=>{if(e.target===e.currentTarget)closeReplacement()}}>
@@ -926,6 +944,8 @@
 {/if}
 
 <style>
+  .status.photo-ready{background:#e7f5ec;color:#21653c;border:1px solid #a9d9b9}
+  .status.photo-missing{background:#fff0ed;color:#ad342a;border:1px solid #efb9b1}
 	.page{padding-top:3rem;padding-bottom:5rem}
 	.offline-tools{display:grid;gap:.65rem;border:1px solid var(--line-strong);border-radius:.85rem;padding:1rem;margin:1rem 0 1.25rem;background:#faf9f7}
 	.offline-tools-heading,.offline-tools-actions{display:flex;align-items:center;flex-wrap:wrap;gap:.55rem}
