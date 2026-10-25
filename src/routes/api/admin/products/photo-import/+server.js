@@ -1,17 +1,27 @@
 import {json} from '@sveltejs/kit';
 import {db} from '$lib/server/db';
 const MAX_BYTES=5*1024*1024;
-const hosts=['topps.com','checklistinsider.com','cardsmithsbreaks.com','paniniamerica.net','upperdeck.com','beckett.com'];
-function allowedHost(host){return hosts.some(h=>host===h||host.endsWith('.'+h));}
-function safeUrl(value){
-  try {const u=new URL(value);if(u.protocol!=='https:'||u.port||u.username||u.password||!allowedHost(u.hostname.toLowerCase()))return null;return u;}
-  catch{return null;}
+// SETBOUND_PUBLIC_IMAGE_HOSTS_V2
+// Reviewable remote images may use any publicly hosted HTTPS domain.
+// Keep public-network validation and existing file type/size/magic checks.
+function safeUrl(value) {
+  try {
+    const u = new URL(String(value || ''));
+    if (u.protocol !== 'https:' || u.port || u.username || u.password || u.href.length > 4096) return null;
+    const host = u.hostname.toLowerCase().replace(/\.$/, '');
+    if (!host || !host.includes('.') || host.length > 253) return null;
+    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.test') || host.endsWith('.invalid')) return null;
+    // Reject IP literals altogether (including IPv4, IPv6 and their alternative encodings).
+    if (/^[\d.]+$/.test(host) || host.startsWith('[') || host.includes(':')) return null;
+    if (host === 'metadata.google.internal' || host === 'metadata.azure.internal') return null;
+    return u;
+  } catch { return null; }
 }
 export async function POST({request,platform,locals}){
   if(!locals.isAdmin)return json({message:'Admin access required.'},{status:403});
   const body=await request.json().catch(()=>({}));
   const id=Number(body.productId),u=safeUrl(body.imageUrl);
-  if(!Number.isSafeInteger(id)||id<1||!u)return json({message:'Use a direct HTTPS image URL from an approved source (Topps, Panini, Upper Deck, Checklist Insider, Cardsmiths, Beckett). For other hosts use manual upload.'},{status:400});
+  if(!Number.isSafeInteger(id)||id<1||!u)return json({message:'Use a direct HTTPS image URL from a public image host.'},{status:400});
   const database=db(platform);
   const product=await database.prepare('SELECT id, slug, image_key FROM products WHERE id=?').bind(id).first();
   if(!product)return json({message:'Set not found.'},{status:404});
