@@ -13,7 +13,7 @@
   const remaining = $derived(pending.filter(p => !rows.some(r => Number(r.id) === Number(p.id))));
   const found = $derived(rows.filter(r => r.candidates?.length).length);
   const approved = $derived(rows.filter(r => r.saved).length);
-  function query(p) { return [p.year, p.manufacturer_name, p.name, 'trading card box product photo'].filter(Boolean).join(' '); }
+  function query(p) { const name=String(p.name||'').trim();return /^20\d{2}\b/.test(name)?name:[p.year,name].filter(Boolean).join(' '); }
   function search(p) { return 'https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(query(p)); }
   function select(id,url) { chosen = {...chosen,[id]:url}; }
   async function scan() {

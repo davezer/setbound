@@ -85,8 +85,9 @@ export async function POST({request,platform,locals,fetch}) {
   const database=db(platform);
   const p=await database.prepare(`SELECT p.id,p.name,p.year,m.name manufacturer_name,s.source_url FROM products p JOIN manufacturers m ON m.id=p.manufacturer_id LEFT JOIN sources s ON s.id=p.primary_source_id WHERE p.id=?`).bind(id).first();
   if(!p)return json({message:'Set not found.'},{status:404});
-  const title=String(p.name||'').replace(/^20\d{2}\s+/,'').trim();
-  const query='"'+p.year+' '+title+'" '+p.manufacturer_name+' trading cards hobby box';
+  // Use the product title itself: no forced format, manufacturer or exact phrase.
+  const rawName = String(p.name || '').trim();
+  const query = /^20\d{2}\b/.test(rawName) ? rawName : [p.year, rawName].filter(Boolean).join(' ');
   const pages=[];
   const source=urlOf(p.source_url,undefined,true);
   if(source)pages.push(source);
