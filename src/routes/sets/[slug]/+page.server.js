@@ -1,5 +1,6 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit'; // SETBOUND_SEO_RECOVERY_V1
 import { db } from '$lib/server/db';
+import { lookupLegacyRedirect } from '$lib/server/seo-redirects.js';
 import { productDisplayName } from '$lib/product-display.js';
 
 export async function load({ platform, params, locals, url }) {
@@ -23,7 +24,11 @@ export async function load({ platform, params, locals, url }) {
 		  AND (p.published = 1 OR ? = 1)
 	`).bind(params.slug, preview ? 1 : 0).first();
 
-	if (!product) throw error(404, 'Set not found');
+	if (!product) {
+    const to = await lookupLegacyRedirect(database, url.pathname);
+    if (to) throw redirect(308, to);
+    throw error(404, 'Set not found');
+  }
 
 	// Keep the canonical DB value intact, but expose the collector-facing
 	// name to the public page without a duplicated year prefix.

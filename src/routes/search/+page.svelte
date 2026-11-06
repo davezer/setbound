@@ -1,4 +1,5 @@
 <script>
+  // SETBOUND_SEO_RECOVERY_V1
 	import SearchBox from '$lib/components/SearchBox.svelte';
 
 	let { data } = $props();
@@ -91,7 +92,7 @@
 				<div class="group-head"><h2>Cards</h2><span>{data.cards.length}</span></div>
 				<div class="cards">
 					{#each data.cards as card}
-						<a href={`/sets/${card.slug}?q=${encodeURIComponent(card.card_number)}`}>
+						<a href={`/sets/${card.slug}#q=${encodeURIComponent(card.card_number)}`}>
 							<div class="number">{card.card_number}</div>
 							<div><strong>{card.subject_name}</strong><span>{card.affiliation_name}</span></div>
 							<div class="where"><strong>{cardProductLabel(card)}</strong><span>{card.checklist_name}</span></div>

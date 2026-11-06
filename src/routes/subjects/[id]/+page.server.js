@@ -1,7 +1,8 @@
-import { error } from '@sveltejs/kit';
+import { error, redirect } from '@sveltejs/kit'; // SETBOUND_SEO_RECOVERY_V1
 import { db } from '$lib/server/db';
+import { lookupLegacyRedirect } from '$lib/server/seo-redirects.js';
 
-export async function load({ platform, params, locals }) {
+export async function load({ platform, params, locals, url }) {
 	const database = db(platform);
 	const subjectId = Number(params.id);
 
@@ -13,7 +14,11 @@ export async function load({ platform, params, locals }) {
 		WHERE id = ?
 	`).bind(subjectId).first();
 
-	if (!subject) throw error(404, 'Subject not found');
+	if (!subject) {
+    const to = await lookupLegacyRedirect(database, url.pathname);
+    if (to) throw redirect(308, to);
+    throw error(404, 'Subject not found');
+  }
 
 	const collectionSelect = locals.user
 		? ', uc.status AS collection_status'

@@ -18,6 +18,7 @@
     { href: '/admin/source-harvester', title: 'Source Harvester', detail: 'Manufacturer archives and source discovery' },
     { href: '/admin/affiliations', title: 'Teams & affiliations', detail: 'Aliases and reference data' },
     { href: '/admin/subjects', title: 'Subjects', detail: 'Merge or rename subjects' },
+    { href: '/admin/seo', title: 'SEO health', detail: 'Preview indexing candidates and register legacy URL redirects' }, // SETBOUND_SEO_RECOVERY_V1
     { href: '/admin/import-studio', title: 'Import Studio', detail: 'Review and edit product facts' }
   ];
 </script>

@@ -1,4 +1,5 @@
 <script>
+  import { onMount } from 'svelte'; // SETBOUND_SEO_RECOVERY_V1
 	import { getOwned, setOwned } from '$lib/client/collection.js';
   import BreakerNameExport from '$lib/components/BreakerNameExport.svelte';
 
@@ -31,6 +32,18 @@
   const visibleParallelSections = $derived(parallelSection === 'all' ? parallelSections : parallelSections.filter(c => String(c.id) === parallelSection));
   const parallelCount = $derived(visibleParallelSections.reduce((sum, c) => sum + c.parallels.length, 0));
 	let query = $state(data.initialQuery || '');
+  // Retain old ?q= links, but use non-crawlable fragments for NEW card links.
+  onMount(() => {
+    const syncHash = () => {
+      const raw = window.location.hash;
+      if (!raw.startsWith('#q=')) return;
+      try { query = decodeURIComponent(raw.slice(3)); }
+      catch { query = raw.slice(3); }
+    };
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  });
 	let team = $state('All teams');
 	let statusFilter = $state('All cards');
 	let checklistBrowserOpen = $state(false);
@@ -161,7 +174,7 @@
 <svelte:head>
 	<title>{data.preview ? 'Draft preview | ' + seoTitle : seoTitle}</title>
 	<meta name="description" content={seoDescription} />
-	<meta name="robots" content={data.preview ? "noindex,nofollow,noarchive" : "index,follow"} />
+	<meta name="robots" content={data.preview ? "noindex,nofollow,noarchive" : (data.cards.length ? "index,follow" : "noindex,follow")} />
 	{#if !data.preview}<link rel="canonical" href={canonicalUrl} />{/if}
 	<meta property="og:type" content="website" />
 	<meta property="og:site_name" content="Setbound" />

@@ -291,9 +291,17 @@ export const actions = {
 			}
 		}
 
-		await database.prepare(
-			'DELETE FROM subjects WHERE id = ?'
-		).bind(sourceId).run();
+		// SETBOUND_SEO_RECOVERY_V1: preserve previous URLs after an ADMIN-APPROVED merge.
+		await database.batch([
+			database.prepare(`
+			  INSERT INTO seo_redirects (old_path, new_path, reason)
+			  VALUES (?, ?, 'subject-merge')
+			  ON CONFLICT(old_path) DO UPDATE SET
+			    new_path=excluded.new_path, reason=excluded.reason, updated_at=datetime('now')
+			`)
+			  .bind('/subjects/' + sourceId, '/subjects/' + target.id),
+			database.prepare('DELETE FROM subjects WHERE id = ?').bind(sourceId)
+		]);
 
 		throw redirect(
 			303,

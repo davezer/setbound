@@ -1,4 +1,5 @@
 <script>
+  import { shouldIndexProfile } from '$lib/seo-policy.js'; // SETBOUND_SEO_RECOVERY_V1
 	let { data } = $props();
 
 	// SEO-PASS:setbound
@@ -16,7 +17,7 @@
 	const seoTitle = $derived(data.subject.name + ' Sports Cards & Checklists | Setbound');
 	const seoDescription = $derived('Browse ' + data.stats.cards.toLocaleString() + ' ' + data.subject.name + ' cards across ' + data.stats.sets + ' sets, with card numbers, checklists and affiliations.');
 	const canonicalUrl = $derived('https://setbound.app/subjects/' + data.subject.id);
-	const shouldIndex = $derived(data.stats.cards >= 2);
+	const shouldIndex = $derived(shouldIndexProfile(data.stats.cards, data.stats.sets));
 
 	let query = $state('');
 	let year = $state('All years');
@@ -87,7 +88,7 @@
 
 	<div class="cards">
 		{#each visible as card}
-			<a href={`/sets/${card.slug}?q=${encodeURIComponent(card.card_number)}`}>
+			<a href={`/sets/${card.slug}#q=${encodeURIComponent(card.card_number)}`}>
 				<div class="number">{card.card_number}</div>
 				<div class="identity">
 					<strong>{card.year} {card.manufacturer_name} {card.product_name}</strong>
